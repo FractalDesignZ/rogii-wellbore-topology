@@ -11,12 +11,16 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold
 
-from rwt.baselines import rmse
+from rwt.baselines import rmse, smooth_residual_along_well
 from rwt.features import build_station_frame, feature_matrix
 from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
 from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
 from rwt.priors import DEFAULT_PRIOR_COL, MAX_TVT_DEV, resolve_prior_column
 from rwt.spatial import SpatialIndex, build_spatial_index
+
+# Residual MD smooth window (odd). 0/1 = off.
+# 12w measure: w=21 → residual 11.09 vs hold 11.06 (rejected). Keep hook for re-A/B.
+RESIDUAL_SMOOTH_WINDOW = 0
 
 
 def _typewell_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:
@@ -267,6 +271,12 @@ def train_lgbm_residual(
             # drop fold booster after OOF predict — only best_iteration needed for refit
         pred_res = np.mean(np.vstack(preds_bag), axis=0)
         pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
+        # Well-local MD smooth (GroupKFold holds out whole wells → contiguous)
+        if RESIDUAL_SMOOTH_WINDOW > 1:
+            pred_res = smooth_residual_along_well(
+                pred_res, groups[va], window=RESIDUAL_SMOOTH_WINDOW
+            )
+            pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
         oof[va] = pred_res
         fold_scores.append(rmse(y[va], prior[va] + pred_res))
 
@@ -432,8 +442,10 @@ def train_lgbm_residual(
         "lgb_threads": int(lgb_threads),
         "n_rounds_cap": int(n_rounds),
         "n_refit": int(n_refit) if use_residual and n_refit is not None else None,
+        "fold_best_iters": [int(x) for x in fold_best_iters],
         "n_seed_bag": int(n_seed_bag),
         "residual_max_dev": float(residual_max_dev),
+        "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
         "feature_medians": {k: float(v) for k, v in feature_medians.items()},
         "baseline_rmse": baseline_rmse,
         "beats_baselines": beats,
@@ -472,6 +484,7 @@ def train_lgbm_residual(
         "use_residual": use_residual,
         "feature_medians": feature_medians,
         "residual_max_dev": residual_max_dev,
+        "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
     }
 
 
@@ -552,6 +565,9 @@ def main(argv: list[str] | None = None) -> int:
                     "use_residual": result.get("use_residual", True),
                     "residual_max_dev": float(
                         result.get("residual_max_dev", MAX_TVT_DEV)
+                    ),
+                    "residual_smooth_window": int(
+                        result.get("residual_smooth_window") or 0
                     ),
                     "feature_medians": result.get("feature_medians") or {},
                 },

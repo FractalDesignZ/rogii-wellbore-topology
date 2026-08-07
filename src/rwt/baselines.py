@@ -69,6 +69,67 @@ def rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.sqrt(np.mean((y_true[m] - y_pred[m]) ** 2)))
 
 
+def smooth_residual_along_well(
+    residual: np.ndarray,
+    well_ids: np.ndarray | None = None,
+    *,
+    window: int = 21,
+) -> np.ndarray:
+    """
+    Station-order rolling mean of residual ΔTVT within each well.
+
+    Reduces high-frequency LGBM chatter along MD without changing the
+    per-well mean residual. ``window`` is odd (even values round up).
+    When ``well_ids`` is None, treats the full array as one well.
+    """
+    res = np.asarray(residual, dtype=float).copy()
+    n = len(res)
+    if n == 0:
+        return res
+    w = max(1, int(window))
+    if w % 2 == 0:
+        w += 1
+    if w <= 1:
+        return res
+    half = w // 2
+    if well_ids is None:
+        groups = [np.arange(n, dtype=int)]
+    else:
+        wids = np.asarray(well_ids)
+        groups = []
+        # preserve first-seen well order; rows already station-sorted within well
+        seen: dict[str, list[int]] = {}
+        order: list[str] = []
+        for i, wid in enumerate(wids):
+            key = str(wid)
+            if key not in seen:
+                seen[key] = []
+                order.append(key)
+            seen[key].append(i)
+        groups = [np.asarray(seen[k], dtype=int) for k in order]
+    out = res.copy()
+    for idx in groups:
+        if len(idx) < 3:
+            continue
+        seg = res[idx]
+        # nan-safe: interpolate finite for smooth, restore non-finite
+        finite = np.isfinite(seg)
+        if finite.sum() < 3:
+            continue
+        work = seg.copy()
+        if not finite.all():
+            ii = np.arange(len(seg), dtype=float)
+            work[~finite] = np.interp(ii[~finite], ii[finite], seg[finite])
+        # smooth then re-center to original finite mean (preserve residual bias)
+        mu = float(np.mean(work[finite]))
+        kernel = np.ones(w, dtype=float) / float(w)
+        pad = np.pad(work, (half, half), mode="edge")
+        sm = np.convolve(pad, kernel, mode="valid")
+        sm = sm - float(np.mean(sm[finite])) + mu
+        out[idx] = np.where(finite, sm, seg)
+    return out
+
+
 def evaluate_baselines_on_known_holdout(
     df: pd.DataFrame,
     split: MiddleOutSplit,

@@ -308,7 +308,7 @@ class TestCrownPath(unittest.TestCase):
             """Non-idempotent: increments sentinel so double-seal would double-count."""
 
             def __init__(self) -> None:
-                PublicKernel.__init__(self)
+                super().__init__()
                 self.augment_calls = 0
 
             def augment_station_frame(self, stations, lateral, typewell):
@@ -374,6 +374,52 @@ class TestCrownPath(unittest.TestCase):
         self.assertEqual(select_n_refit([900, 1000, 1100, 1500], 1000, floor=200), 1000)
         # empty → n_rounds
         self.assertEqual(select_n_refit([], 800, floor=200), 800)
+
+    def test_smooth_residual_along_well_preserves_mean(self) -> None:
+        """MD smooth damps high-freq noise; well means unchanged."""
+        from rwt.baselines import smooth_residual_along_well
+
+        rng = np.random.default_rng(0)
+        noise = rng.normal(0, 3.0, size=80)
+        trend = np.linspace(-2, 2, 80)
+        res = trend + noise
+        wids = np.array(["a"] * 40 + ["b"] * 40)
+        sm = smooth_residual_along_well(res, wids, window=11)
+        self.assertEqual(len(sm), len(res))
+        # less high-frequency energy than raw
+        self.assertLess(float(np.std(np.diff(sm[:40]))), float(np.std(np.diff(res[:40]))))
+        self.assertAlmostEqual(float(np.mean(sm[:40])), float(np.mean(res[:40])), places=5)
+        self.assertAlmostEqual(float(np.mean(sm[40:])), float(np.mean(res[40:])), places=5)
+
+    def test_serve_applies_residual_smooth_window(self) -> None:
+        """predict_stations smooths residual when blob residual_smooth_window > 1."""
+        from rwt.submit import predict_stations
+
+        class _M:
+            def predict(self, X):
+                # alternating residual → smooth must reduce edge-to-edge swing
+                return np.array([10.0, -10.0, 10.0, -10.0, 10.0, -10.0])
+
+        st = pd.DataFrame(
+            {
+                "prior_stack": np.full(6, 100.0),
+                "well_id": ["w"] * 6,
+                "relative_md": np.arange(6, dtype=float),
+            }
+        )
+        blob = {
+            "models": [_M()],
+            "feature_cols": ["relative_md"],
+            "prior_column": "prior_stack",
+            "use_residual": True,
+            "residual_max_dev": 18.0,
+            "residual_smooth_window": 5,
+            "feature_medians": {"relative_md": 0.0},
+        }
+        y = predict_stations(blob, st)
+        # without smooth extremes would be 110 / 90; with w=5 extremes compress
+        self.assertTrue(np.all(y > 90.0 + 1e-6))
+        self.assertTrue(np.all(y < 110.0 - 1e-6))
 
     def test_compute_prior_disagreement_pure(self) -> None:
         """Unit: four-way nanstd matches helper (CR P2 contract)."""
@@ -652,7 +698,7 @@ class TestCrownPath(unittest.TestCase):
                 return np.zeros(len(X))
 
         m = _M()
-        # keys the train.py blob writer / predict_stations consumer share
+        # consumer contract: predict_stations must honor these blob keys
         blob = {
             "models": [m],
             "feature_cols": ["a"],
@@ -661,8 +707,6 @@ class TestCrownPath(unittest.TestCase):
             "use_residual": True,
             "prior_column": "prior_stack",
         }
-        for key in ("feature_medians", "residual_max_dev", "prior_column", "use_residual"):
-            self.assertIn(key, blob)
         batch = pd.DataFrame(
             {
                 "a": [np.nan, 99.0],

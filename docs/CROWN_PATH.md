@@ -16,7 +16,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset; train/serve seal after attach; **stack soft-nb weight 0** (measure); neighbors in prior_best + features |
-| **Residual** | Default base **`prior_stack`**; toe-weighted L2; dual seed bag; **GR mismatch@stalk** features; Δ clip vs base ±18; fold-safe medians; Gate3 |
+| **Residual** | Default base **`prior_stack`**; toe-weighted L2; dual seed bag; **GR mismatch@stalk**; Δ clip vs base ±18; fold-safe medians; MD-smooth hook (default **off**); Gate3 |
 | **Clamp** | Published stack/prior_best/NCC/PF ≤ last±18 (`MAX_TVT_DEV`); residual Δ ≤ base±18 (may leave last band when G3 wins). Raw neighbor_tvt feature may still show ±40 offset before blend. |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
@@ -26,19 +26,22 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-11 — parity + measure-tuned soft-nb)
+## Measure (12w crown set-13 — CR polish; MD-smooth rejected)
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
 | residual on **prior_stack** (Gate3 ACCEPT) | **11.06** |
+| residual MD-smooth w=21 (set-13 A/B) | 11.09 (rejected) |
 | residual set-10 soft-nb w=0.12 into stack | 11.48 (rejected for residual base) |
-| residual set-4/7 | 11.08 |
+| residual set-4/7 honest fold-safe | 11.08 |
+| residual set-4 pre-P1 (leaky median; **not Gate3**) | 11.03 hist |
 | prior_stack (best pure) | **12.33** |
 | prior_stack w/ soft-nb 0.12 | 12.62 |
 | last_known | 13.41 |
 
 Set-10: train/serve spatial seal parity. Set-11: `STACK_SOFT_NB_WEIGHT=0` (neighbors via
-`prior_best` + features only; residual base stays PF/NCC stack).
+`prior_best` + features only; residual base stays PF/NCC stack). Set-12: `select_n_refit`
+floor 200 + p75. Set-13: MD residual smooth train/serve hook **default off** (w=21 regressed).
 
 ### Rejected A/B (set-5 / set-7)
 
@@ -55,8 +58,9 @@ Set-10: train/serve spatial seal parity. Set-11: `STACK_SOFT_NB_WEIGHT=0` (neigh
 | max-precision LGBM on 12w set-8 | 11.21 | overfit small cohort |
 | stack soft-nb weight 0.12 | 11.48 | residual base pollution |
 | well-inverse residual weights | 11.39 | hurts easy long wells |
+| residual MD-smooth w=21 | 11.09 | over-smooths stalk steps |
 
-### Kept (set-5–12 coherence)
+### Kept (set-5–13 coherence)
 
 Soft neighbor → stack **before** `prior_best` **only when** `STACK_SOFT_NB_WEIGHT>0`
 (default **0** by measure — neighbors still enter via `prior_best` + `neighbor_*` feats);

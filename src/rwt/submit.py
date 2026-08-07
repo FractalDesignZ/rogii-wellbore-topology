@@ -85,6 +85,18 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     # last_known: Gate3 residual may leave the pure-prior band when it wins OOF.
     max_dev = float(model_blob.get("residual_max_dev", MAX_TVT_DEV))
     res = np.clip(res, -max_dev, max_dev)
+    # Train/serve parity: well-local MD residual smooth (same window as OOF)
+    smooth_w = int(model_blob.get("residual_smooth_window") or 0)
+    if smooth_w > 1:
+        from rwt.baselines import smooth_residual_along_well
+
+        wids = (
+            stations["well_id"].to_numpy()
+            if "well_id" in stations.columns
+            else None
+        )
+        res = smooth_residual_along_well(res, wids, window=smooth_w)
+        res = np.clip(res, -max_dev, max_dev)
     out = prior + res
     if not np.isfinite(out).all():
         n_bad = int((~np.isfinite(out)).sum())
