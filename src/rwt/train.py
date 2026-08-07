@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -97,12 +98,16 @@ def train_lgbm_residual(
     seed: int = 42,
     prior_col: str | None = None,
     gate2_meta: dict[str, Any] | None = None,
+    max_precision: bool = False,
 ) -> dict[str, Any]:
     """
     Residual learner on labeled *toe* (is_predict).
 
     Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (pf_blend).
     Explicit prior_col is strict (must exist); omitted uses DEFAULT with fallbacks.
+
+    max_precision=True: deeper trees, more rounds, more leaves — for 24c/32GB kits
+    hunting sub-5ft RMSE (still Gate3 gated).
     """
     if "is_predict" in stations.columns:
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
@@ -137,30 +142,58 @@ def train_lgbm_residual(
     oof = np.zeros(len(train_df))
     models = []
     fold_scores: list[float] = []
-    # Residual head: shallow, regularized — target is small ΔTVT, not absolute map
-    import os as _os
+    # Residual head: shallow default; max_precision deepens trees for score war.
+    # Thread count from RWT_LGBM_THREADS / OMP (dashboard parallel train sets these).
+    def _env_threads(*keys: str, default: int | None = None) -> int:
+        for k in keys:
+            v = os.environ.get(k)
+            if v is None or not str(v).strip():
+                continue
+            try:
+                return max(1, int(v))
+            except ValueError:
+                continue
+        return max(1, default if default is not None else (os.cpu_count() or 4))
 
-    lgb_threads = int(
-        _os.environ.get("RWT_LGBM_THREADS")
-        or _os.environ.get("OMP_NUM_THREADS")
-        or max(1, (_os.cpu_count() or 4))
+    lgb_threads = _env_threads(
+        "RWT_LGBM_THREADS", "OMP_NUM_THREADS", "RWT_NUM_THREADS"
     )
-    # Residual head: regularized for small ΔTVT; slightly more capacity for crown stalk features
-    params = {
-        "objective": "regression",
-        "metric": "rmse",
-        "learning_rate": 0.04,
-        "num_leaves": 47,
-        "min_data_in_leaf": 120,
-        "feature_fraction": 0.75,
-        "bagging_fraction": 0.85,
-        "bagging_freq": 1,
-        "lambda_l2": 3.0,
-        "lambda_l1": 0.1,
-        "num_threads": lgb_threads,
-        "verbosity": -1,
-        "seed": seed,
-    }
+    # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
+    if max_precision:
+        params = {
+            "objective": "regression",
+            "metric": "rmse",
+            "learning_rate": 0.02,
+            "num_leaves": 127,
+            "min_data_in_leaf": 40,
+            "feature_fraction": 0.85,
+            "bagging_fraction": 0.9,
+            "bagging_freq": 1,
+            "lambda_l2": 1.0,
+            "lambda_l1": 0.05,
+            "max_bin": 511,
+            "num_threads": lgb_threads,
+            "verbosity": -1,
+            "seed": seed,
+        }
+        n_rounds, early = 2500, 120
+    else:
+        params = {
+            "objective": "regression",
+            "metric": "rmse",
+            "learning_rate": 0.04,
+            "num_leaves": 47,
+            "min_data_in_leaf": 120,
+            "feature_fraction": 0.75,
+            "bagging_fraction": 0.85,
+            "bagging_freq": 1,
+            "lambda_l2": 3.0,
+            "lambda_l1": 0.1,
+            "num_threads": lgb_threads,
+            "verbosity": -1,
+            "seed": seed,
+        }
+        n_rounds, early = 800, 60
 
     def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int) -> None:
         dtr = lgb.Dataset(X[tr], label=y_res[tr], feature_name=cols)
@@ -170,9 +203,9 @@ def train_lgbm_residual(
         model = lgb.train(
             p,
             dtr,
-            num_boost_round=800,
+            num_boost_round=n_rounds,
             valid_sets=[dva],
-            callbacks=[lgb.early_stopping(60, verbose=False)],
+            callbacks=[lgb.early_stopping(early, verbose=False)],
         )
         pred_res = model.predict(X[va])
         oof[va] = pred_res
@@ -368,6 +401,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"residual base prior column (default: {DEFAULT_PRIOR_COL})",
     )
+    ap.add_argument(
+        "--max-precision",
+        action="store_true",
+        help="deeper LGBM residual (still Gate3; RESTRICT: no Kaggle submit)",
+    )
     args = ap.parse_args(argv)
 
     out = Path(args.out)
@@ -407,6 +445,7 @@ def main(argv: list[str] | None = None) -> int:
             n_splits=args.folds,
             prior_col=args.prior_col,
             gate2_meta=gate2_meta,
+            max_precision=bool(args.max_precision),
         )
         report = result["report"]
         (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
