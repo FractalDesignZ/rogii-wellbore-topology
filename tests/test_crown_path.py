@@ -374,13 +374,12 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(float(got[1]), exp1, places=6)
         self.assertGreater(float(got[1]), float(got[0]))
 
-    def test_prior_disagreement_uses_post_neighbor_stack(self) -> None:
-        """prior_disagreement must use stack after soft-neighbor transfer (CR)."""
-        from rwt.features import build_station_frame
+    def test_prior_disagreement_matches_helper_after_finalize(self) -> None:
+        """prior_disagreement always matches compute_prior_disagreement after seal."""
+        from rwt.features import build_station_frame, compute_prior_disagreement
         from rwt.spatial import SpatialIndex, well_spatial_node_from_lateral
 
         n = 50
-        # target heel TVT 100; neighbor heel+toe shifted +15 so transfer pulls stack
         lat = pd.DataFrame(
             {
                 "MD": np.arange(n, dtype=float),
@@ -408,29 +407,62 @@ class TestCrownPath(unittest.TestCase):
         idx.add(well_spatial_node_from_lateral("nb", nb))
         sp = resolve_middle_out(lat, well_id="tgt")
         st = build_station_frame(lat, None, sp, spatial_index=idx)
-        from rwt.features import compute_prior_disagreement
-
         last = float(st["prior_last_tvt"].iloc[0])
-        unknown = ~st["is_known"].to_numpy(dtype=bool)
         stack = st["prior_stack"].to_numpy(dtype=float)
-        self.assertIn(
-            "_prior_stack_pre_neighbor",
-            st.columns,
-            "build_station_frame must stash pre-neighbor stack column",
-        )
-        pre = st["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
-        # prove soft-neighbor (not PF/NCC alone) changed stack on unknown rows
-        nb_moved = unknown & np.isfinite(stack) & np.isfinite(pre) & (np.abs(stack - pre) > 1e-6)
-        self.assertTrue(
-            nb_moved.any(),
-            "soft neighbor transfer must change prior_stack on ≥1 unknown row",
-        )
         pf = st["prior_pf_blend"].to_numpy(dtype=float)
         ncc = st["prior_ncc_tvt"].to_numpy(dtype=float)
         expected = compute_prior_disagreement(last, stack, pf, ncc)
         got = st["prior_disagreement"].to_numpy(dtype=float)
         self.assertTrue(np.allclose(got, expected, equal_nan=True, atol=1e-9))
-        self.assertGreater(float(np.max(got[nb_moved])), 0.01)
+        # neighbors still influence prior_best when transfer is trusted
+        unknown = ~st["is_known"].to_numpy(dtype=bool)
+        ok = st["neighbor_transfer_ok"].to_numpy(dtype=float)
+        self.assertTrue((ok[unknown] > 0.55).any())
+        best = st["prior_best"].to_numpy(dtype=float)
+        self.assertGreater(float(np.mean(best[unknown])), last)
+
+    def test_stack_soft_nb_weight_moves_stack_when_enabled(self) -> None:
+        """STACK_SOFT_NB_WEIGHT>0 must move prior_stack vs pre-nb on unknown rows."""
+        from rwt.features import finalize_after_spatial, build_station_frame
+        from rwt.spatial import SpatialIndex, well_spatial_node_from_lateral
+
+        n = 50
+        lat = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(0, 200, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, n)),
+                "TVT_input": [100.0 if i < 12 else np.nan for i in range(n)],
+                "TVT": np.full(n, 100.0),
+            }
+        )
+        nb = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(5, 205, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, n)),
+                "TVT": np.full(n, 115.0),
+                "TVT_input": [115.0 if i < 20 else np.nan for i in range(n)],
+            }
+        )
+        idx = SpatialIndex(max_dist=500.0, close_dist=200.0)
+        idx.add(well_spatial_node_from_lateral("tgt", lat))
+        idx.add(well_spatial_node_from_lateral("nb", nb))
+        sp = resolve_middle_out(lat, well_id="tgt")
+        raw = build_station_frame(lat, None, sp, spatial_index=None, seal=False)
+        from rwt.spatial import attach_spatial_features
+
+        raw = attach_spatial_features(raw, lat, idx, "tgt")
+        fin = finalize_after_spatial(raw, lat, sp, None, stack_soft_nb_weight=0.12)
+        unknown = ~fin["is_known"].to_numpy(dtype=bool)
+        pre = fin["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
+        stack = fin["prior_stack"].to_numpy(dtype=float)
+        moved = unknown & (np.abs(stack - pre) > 1e-6)
+        self.assertTrue(moved.any())
 
     def test_impute_feature_frame_median_not_zero(self) -> None:
         from rwt.features import impute_feature_frame

@@ -15,7 +15,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **NCC stalk** | `prior_ncc_tvt` seed-local multi-scale track; TVT-sorted typewell; conf no heel→toe bleed; clamp_origin law |
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
-| **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft raw; clamped to last±18 inside stack/prior_best); **train parallel re-finalize after attach** (serve parity) |
+| **Neighbor** | Heel `TVT_input`-only median offset; train/serve seal after attach; **stack soft-nb weight 0** (measure); neighbors in prior_best + features |
 | **Residual** | Default base **`prior_stack`**; toe-weighted L2; dual seed bag; **GR mismatch@stalk** features; Δ clip vs base ±18; fold-safe medians; Gate3 |
 | **Clamp** | Published stack/prior_best/NCC/PF ≤ last±18 (`MAX_TVT_DEV`); residual Δ ≤ base±18 (may leave last band when G3 wins). Raw neighbor_tvt feature may still show ±40 offset before blend. |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
@@ -26,18 +26,19 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-10 — spatial train/serve parity)
+## Measure (12w crown set-11 — parity + measure-tuned soft-nb)
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| residual on **prior_stack** (Gate3 ACCEPT) | **11.48** (honest, neighbor-aware train) |
-| residual set-8 pre-parity | 11.06 (train skipped soft-nb; optimistic) |
+| residual on **prior_stack** (Gate3 ACCEPT) | **11.06** |
+| residual set-10 soft-nb w=0.12 into stack | 11.48 (rejected for residual base) |
 | residual set-4/7 | 11.08 |
-| prior_stack (best pure, neighbor-aware) | **12.62** |
-| prior_stack pre-parity | 12.33 |
+| prior_stack (best pure) | **12.33** |
+| prior_stack w/ soft-nb 0.12 | 12.62 |
 | last_known | 13.41 |
 
-Set-8 GR mismatch@stalk kept. Set-10: `finalize_after_spatial` shared by parallel parent + direct build.
+Set-10: train/serve spatial seal parity. Set-11: `STACK_SOFT_NB_WEIGHT=0` (neighbors via
+`prior_best` + features only; residual base stays PF/NCC stack).
 
 ### Rejected A/B (set-5 / set-7)
 
@@ -52,8 +53,9 @@ Set-8 GR mismatch@stalk kept. Set-10: `finalize_after_spatial` shared by paralle
 | denser NCC stride=5 | ~11.25 | no residual gain |
 | gr_mismatch delta \|stack\|−\|last\| | 11.14 | collinear noise |
 | max-precision LGBM on 12w set-8 | 11.21 | overfit small cohort |
+| stack soft-nb weight 0.12 | 11.48 | residual base pollution |
 
-### Kept (set-5–9 coherence)
+### Kept (set-5–11 coherence)
 
 Soft neighbor → stack **before** `prior_best`; `prior_disagreement` post-transfer;
 `compute_prior_disagreement` helper + deterministic CR test; residual Δ clip vs base only.

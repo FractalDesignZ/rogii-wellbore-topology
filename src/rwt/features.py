@@ -53,21 +53,35 @@ def compute_prior_disagreement(
     return np.where(np.isfinite(dd), dd, 0.0).astype(float)
 
 
+# Soft-neighbor into residual *base* (prior_stack). Measure (12w honest):
+# weight 0.12 → pure stack 12.62 / residual 11.48; weight 0.0 keeps PF/NCC stack
+# floor ~12.33 and residual base coherent. Neighbors still enter via prior_best
+# blend + neighbor_* features. Override with STACK_SOFT_NB_WEIGHT > 0 if needed.
+STACK_SOFT_NB_WEIGHT = 0.0
+
+
 def finalize_after_spatial(
     stations: pd.DataFrame,
     lateral: pd.DataFrame,
     split: MiddleOutSplit,
     typewell: pd.DataFrame | None = None,
+    *,
+    stack_soft_nb_weight: float | None = None,
 ) -> pd.DataFrame:
     """
     Neighbor-dependent crown fields only — must run **after** spatial attach.
 
-    Soft-neighbor → ``prior_stack``, then ``prior_disagreement``, GR mismatch@stalk,
-    and ``prior_best``. Does **not** call kernel.augment or watermark (those run
-    once via ``seal_station_frame`` after the final spatial step — CR P1.1).
+    Optional soft-neighbor → ``prior_stack`` (default off by measure), then
+    ``prior_disagreement``, GR mismatch@stalk, and ``prior_best``. Does **not**
+    call kernel.augment or watermark (those run once via ``seal_station_frame``).
     """
     df = lateral.reset_index(drop=True)
     n = len(df)
+    w_nb = (
+        float(STACK_SOFT_NB_WEIGHT)
+        if stack_soft_nb_weight is None
+        else float(stack_soft_nb_weight)
+    )
 
     last_col = stations["prior_last_tvt"].to_numpy(dtype=float)
     last_f = float(last_col[0]) if len(last_col) and np.isfinite(last_col[0]) else float("nan")
@@ -86,7 +100,8 @@ def finalize_after_spatial(
     # Soft neighbor into residual base (stack) *before* prior_best
     stack_pre_nb = stations["prior_stack"].to_numpy(dtype=float).copy()
     if (
-        "prior_stack" in stations.columns
+        w_nb > 1e-9
+        and "prior_stack" in stations.columns
         and nb is not None
         and nb_ok is not None
         and np.isfinite(last_f)
@@ -102,7 +117,7 @@ def finalize_after_spatial(
         m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st) & ~known
         if m.any():
             nb_c = last_f + np.clip(nbt - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
-            w = 0.12 * np.clip(ok, 0.0, 1.0)
+            w = w_nb * np.clip(ok, 0.0, 1.0)
             st = np.where(m, (1.0 - w) * st + w * nb_c, st)
             st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
             stations["prior_stack"] = st
