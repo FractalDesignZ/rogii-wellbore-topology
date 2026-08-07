@@ -366,11 +366,12 @@ def blend_prior_best(
     blend, fin_b = _finite_or_last(blend)
     local, fin_l = _finite_or_last(local)
 
-    # last_known dominates; NCC/PF only with conf (full-cohort law)
-    w_last = 0.48 + 0.22 * (1.0 - conf)
-    w_stack = (0.18 + 0.08 * conf) * fin_s.astype(float)
-    w_pf = (0.06 + 0.18 * conf) * fin_b.astype(float)
-    w_loc = (0.04 * (1.0 - conf)) * fin_l.astype(float)
+    # Measure-driven weights (12w crown): prior_stack best pure (~12.35) vs
+    # last (~13.4). Stack-led ensemble; last anchors; PF/NCC conf-gated only.
+    w_last = 0.24 + 0.14 * (1.0 - conf)
+    w_stack = (0.42 + 0.10 * conf) * fin_s.astype(float)
+    w_pf = (0.06 + 0.16 * conf) * fin_b.astype(float)
+    w_loc = (0.02 * (1.0 - conf)) * fin_l.astype(float)
     w_nb = np.zeros(n, dtype=float)
     w_ncc = np.zeros(n, dtype=float)
     nb = last_arr
@@ -382,7 +383,7 @@ def blend_prior_best(
         if m.any():
             nb = _clamp(np.where(m, nb_raw, last))
             nb, fin_n = _finite_or_last(nb)
-            w_nb = np.where(m & fin_n, 0.10 * ok * conf, 0.0)
+            w_nb = np.where(m & fin_n, 0.08 * ok * conf, 0.0)
     if prior_ncc is not None:
         ncc_raw = np.asarray(prior_ncc, dtype=float)
         nc = (
@@ -391,8 +392,8 @@ def blend_prior_best(
             else np.zeros(n)
         )
         ncc_arr, fin_c = _finite_or_last(_clamp(ncc_raw))
-        # zero conf → zero weight (do not soft-pull with flat 0.08 when stalk is cold)
-        w_ncc = (0.28 * nc) * fin_c.astype(float)
+        # zero conf → zero weight; seed-local NCC only when peak is trusted
+        w_ncc = (0.22 * nc) * fin_c.astype(float)
 
     w_sum = w_last + w_stack + w_pf + w_loc + w_nb + w_ncc
     w_sum = np.where(w_sum < 1e-9, 1.0, w_sum)

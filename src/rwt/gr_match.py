@@ -57,17 +57,50 @@ def multi_scale_ncc(
     typewell_tvt: np.ndarray | None = None,
     scales: tuple[int, ...] = (16, 32, 64),
     center: int | None = None,
+    *,
+    seed_tvt: float | None = None,
+    tvt_search_radius: float | None = None,
 ) -> dict[str, float]:
     """
     At station `center`, extract lateral windows of each scale and match typewell.
     Returns features + optional TVT hint from best lag.
+
+    When ``seed_tvt`` + ``tvt_search_radius`` are set, lag search is restricted to
+    typewell indices whose TVT lies in [seed−r, seed+r] (plus a half-window
+    pad). Full-well lag search aliases on cyclic GR and produced pure NCC RMSE
+    ~22 on 12w; seed-local search keeps the stalk on-formation.
     """
     gr = np.asarray(lateral_gr, float)
     tw = np.asarray(typewell_gr, float)
+    tw_tvt_arr = np.asarray(typewell_tvt, float) if typewell_tvt is not None else None
     tw_finite = tw[np.isfinite(tw)]
     center = int(center if center is not None else len(gr) // 2)
     out: dict[str, float] = {}
     tvt_hints = []
+    peaks: list[float] = []
+    med = float(np.median(tw_finite)) if len(tw_finite) else 0.0
+    tw_f = np.where(np.isfinite(tw), tw, med)
+
+    # Optional seed-local template band (indices into full typewell)
+    band_lo, band_hi = 0, len(tw_f)
+    if (
+        tw_tvt_arr is not None
+        and seed_tvt is not None
+        and np.isfinite(seed_tvt)
+        and tvt_search_radius is not None
+        and float(tvt_search_radius) > 0
+        and len(tw_tvt_arr) == len(tw_f)
+    ):
+        r_tvt = float(tvt_search_radius)
+        in_band = np.flatnonzero(
+            np.isfinite(tw_tvt_arr)
+            & (tw_tvt_arr >= float(seed_tvt) - r_tvt)
+            & (tw_tvt_arr <= float(seed_tvt) + r_tvt)
+        )
+        if in_band.size >= 4:
+            band_lo = int(in_band[0])
+            band_hi = int(in_band[-1]) + 1
+
     for s in scales:
         half = s // 2
         lo = max(0, center - half)
@@ -88,24 +121,31 @@ def multi_scale_ncc(
             xp = np.linspace(0, 1, len(win))
             xq = np.linspace(0, 1, s)
             win = np.interp(xq, xp, win)
-        # Template: median-fill internal NaNs so lag search stays defined without zero-impute of lateral
-        med = float(np.median(tw_finite))
-        tw_f = np.where(np.isfinite(tw), tw, med)
-        r = best_ncc_lag(win, tw_f)
+        # pad band so lag search has room for window length s
+        t_lo = max(0, band_lo - half)
+        t_hi = min(len(tw_f), max(band_hi + half, t_lo + s))
+        tw_slice = tw_f[t_lo:t_hi]
+        if len(tw_slice) < s:
+            tw_slice = tw_f
+            t_lo = 0
+        r = best_ncc_lag(win, tw_slice)
+        lag_global = int(t_lo + r["lag"])
         out[f"ncc_{s}"] = r["ncc"]
-        out[f"ncc_{s}_lag"] = float(r["lag"])
-        if typewell_tvt is not None and len(typewell_tvt) > r["lag"]:
-            tvt_hints.append(float(typewell_tvt[min(r["lag"] + s // 2, len(typewell_tvt) - 1)]))
+        out[f"ncc_{s}_lag"] = float(lag_global)
+        peaks.append(float(r["ncc"]))
+        if tw_tvt_arr is not None and len(tw_tvt_arr) > lag_global:
+            tip = min(lag_global + half, len(tw_tvt_arr) - 1)
+            h = float(tw_tvt_arr[tip])
+            if np.isfinite(h):
+                tvt_hints.append(h)
     if tvt_hints:
         out["tvt_hint_median"] = float(np.median(tvt_hints))
         out["tvt_hint_std"] = float(np.std(tvt_hints))
-        out["ncc_peak"] = float(
-            np.nanmax([out.get(f"ncc_{s}", 0.0) for s in scales])
-        )
+        out["ncc_peak"] = float(np.nanmax(peaks)) if peaks else 0.0
     else:
         out["tvt_hint_median"] = 0.0
         out["tvt_hint_std"] = 0.0
-        out["ncc_peak"] = 0.0
+        out["ncc_peak"] = float(np.nanmax(peaks)) if peaks else 0.0
     return out
 
 
@@ -168,7 +208,16 @@ def ncc_tvt_track(
             track[i] = float(known_tvt[i])
             conf[i] = 1.0
             continue
-        m = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=i)
+        # seed-local lag search (± max_dev·1.25) — full-well lag aliases on cyclic GR
+        m = multi_scale_ncc(
+            gr,
+            tw_gr,
+            tw_tvt,
+            scales=scales,
+            center=i,
+            seed_tvt=last,
+            tvt_search_radius=float(max_dev) * 1.25,
+        )
         peak = float(m.get("ncc_peak") or 0.0)
         hint = m.get("tvt_hint_median")
         if hint is None or not np.isfinite(hint) or peak < float(min_peak):

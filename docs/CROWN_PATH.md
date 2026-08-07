@@ -25,6 +25,18 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
+## Measure (12w, seed-local NCC + stack-led prior_best)
+
+| Floor / head | OOF RMSE |
+| --- | ---: |
+| residual (Gate3 ACCEPT) | **12.30** |
+| prior_stack (best pure) | 12.35 |
+| prior_best (stack-led) | **12.62** (was 13.21) |
+| pf_blend_last_known | 12.92 |
+| last_known | 13.41 |
+| prior_ncc (seed-local) | **16.26** (was 21.81 full-lag) |
+| pf_bag (median) | 17.44 |
+
 ## Measure protocol
 
 ```bash

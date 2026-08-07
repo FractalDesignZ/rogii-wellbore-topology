@@ -166,6 +166,20 @@ class TestCrownPath(unittest.TestCase):
         self.assertGreater(float(np.mean(hot)), last + 0.5)
         self.assertTrue(np.all(hot <= last + 18.0 + 1e-9))
 
+    def test_blend_stack_pull_when_pf_cold(self) -> None:
+        """Stack-dominated weights: cold PF should still follow a good stack."""
+        n = 20
+        last = 100.0
+        stack = np.full(n, 108.0)
+        blend = np.full(n, 100.0)
+        local = np.full(n, 100.0)
+        conf = np.zeros(n)
+        out = blend_prior_best(last, stack, blend, local, conf, max_dev=18.0)
+        # stack weight high when conf=0 → mean between last and stack
+        self.assertGreater(float(np.mean(out)), last + 2.0)
+        self.assertLess(float(np.mean(out)), 108.0)
+        self.assertTrue(np.all(np.abs(out - last) <= 18.0 + 1e-9))
+
     def test_process_bias_near_ps_clipped(self) -> None:
         """Build-section large dTVT must not set toe process_bias outside ±0.05."""
         tw_tvt = np.linspace(100, 200, 200)
