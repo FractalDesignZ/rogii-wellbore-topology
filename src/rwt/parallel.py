@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from rwt.features import build_station_frame
+from rwt.features import build_station_frame, finalize_after_spatial
 from rwt.gates import gate_middle_out_mask
 from rwt.middle_out import MiddleOutSplit
 from rwt.spatial import SpatialIndex, attach_spatial_features
@@ -197,7 +197,10 @@ def assemble_wells_parallel(
                     progress.tick(item=wid, ok=False, message="no_frame")
                 continue
             frame = pd.read_pickle(path)
+            # Parent attach + finalize (soft-nb stack, disagreement, GR mismatch,
+            # prior_best) so train OOF matches serve build_station_frame path (CR P1)
             frame = attach_spatial_features(frame, df, spatial, wid)
+            frame = finalize_after_spatial(frame, df, sp, tw)
             frames.append(frame)
             passed_wells.append(wid)
             if progress is not None:

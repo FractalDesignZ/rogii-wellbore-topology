@@ -26,6 +26,7 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **7** (crown CR) | #11 | `compute_prior_disagreement` helper; deterministic post-neighbor test (no skip); reject bag-std/3-seed/NCC-dense A/B. Score hold **11.08** |
 | **8** (crown) | #11 | GR mismatch@stack/last/ncc (heel-cal typewell); `_prior_stack_pre_neighbor` col (no attrs concat break). 12w residual **11.06** |
 | **9** (crown) | #11 | shared `fit_heel_gr_affine` once per well; reject mismatch-delta feat + maxp-12w. Score hold **11.06** |
+| **10** (crown CR) | #11 | **P1 spatial parity**: `finalize_after_spatial` shared; parallel parent re-finalize after attach. Honest 12w residual **11.48** / stack **12.62** (pre-parity 11.06 was optimistic train path) |
 
 ## CodeRabbit
 

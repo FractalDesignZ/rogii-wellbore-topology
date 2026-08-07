@@ -53,6 +53,175 @@ def compute_prior_disagreement(
     return np.where(np.isfinite(dd), dd, 0.0).astype(float)
 
 
+def finalize_after_spatial(
+    stations: pd.DataFrame,
+    lateral: pd.DataFrame,
+    split: MiddleOutSplit,
+    typewell: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """
+    Neighbor-dependent crown fields — must run **after** spatial attach.
+
+    Applies soft-neighbor → ``prior_stack``, then recomputes ``prior_disagreement``,
+    GR mismatch@stalk, and ``prior_best`` (+ kernel/watermark).
+
+    Used by:
+      - ``build_station_frame`` (direct path, after attach with optional index)
+      - ``parallel.assemble_wells_parallel`` (parent attach after disk workers)
+    so train OOF and serve share the same neighbor-aware residual base.
+    """
+    df = lateral.reset_index(drop=True)
+    n = len(df)
+    kernel = resolve_kernel()
+
+    last_col = stations["prior_last_tvt"].to_numpy(dtype=float)
+    last_f = float(last_col[0]) if len(last_col) and np.isfinite(last_col[0]) else float("nan")
+    if not np.isfinite(last_f):
+        last_f = float(np.nanmedian(last_col)) if np.isfinite(last_col).any() else 0.0
+    nb = (
+        stations["neighbor_tvt"].to_numpy(dtype=float)
+        if "neighbor_tvt" in stations.columns
+        else None
+    )
+    nb_ok = (
+        stations["neighbor_transfer_ok"].to_numpy(dtype=float)
+        if "neighbor_transfer_ok" in stations.columns
+        else None
+    )
+    # Soft neighbor into residual base (stack) *before* prior_best
+    stack_pre_nb = stations["prior_stack"].to_numpy(dtype=float).copy()
+    if (
+        "prior_stack" in stations.columns
+        and nb is not None
+        and nb_ok is not None
+        and np.isfinite(last_f)
+    ):
+        st = stack_pre_nb.copy()
+        ok = np.asarray(nb_ok, dtype=float)
+        nbt = np.asarray(nb, dtype=float)
+        known = (
+            stations["is_known"].to_numpy(dtype=bool)
+            if "is_known" in stations.columns
+            else np.zeros(len(st), dtype=bool)
+        )
+        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st) & ~known
+        if m.any():
+            nb_c = last_f + np.clip(nbt - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
+            w = 0.12 * np.clip(ok, 0.0, 1.0)
+            st = np.where(m, (1.0 - w) * st + w * nb_c, st)
+            st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
+            stations["prior_stack"] = st
+
+    stations["prior_disagreement"] = compute_prior_disagreement(
+        last_f,
+        stations["prior_stack"].to_numpy(dtype=float),
+        stations["prior_pf_blend"].to_numpy(dtype=float),
+        stations["prior_ncc_tvt"].to_numpy(dtype=float)
+        if "prior_ncc_tvt" in stations.columns
+        else None,
+    )
+    stations["_prior_stack_pre_neighbor"] = stack_pre_nb
+
+    # Heel-known mask for GR affine (TVT_input first)
+    known_full = np.full(n, np.nan, dtype=float)
+    if "TVT_input" in df.columns:
+        known_full = np.asarray(df["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
+    if len(split.known_idx) and "TVT" in df.columns:
+        kidx = np.asarray(split.known_idx, dtype=int)
+        tcol = np.asarray(df["TVT"].to_numpy(dtype=float), dtype=float)
+        miss = ~np.isfinite(known_full[kidx]) & np.isfinite(tcol[kidx])
+        known_full[kidx[miss]] = tcol[kidx[miss]]
+
+    n_st = len(stations)
+    if (
+        typewell is not None
+        and "GR" in typewell.columns
+        and "TVT" in typewell.columns
+        and "GR" in stations.columns
+    ):
+        tw_gr_arr = typewell["GR"].to_numpy(dtype=float)
+        tw_tvt_arr = typewell["TVT"].to_numpy(dtype=float)
+        lat_gr = stations["GR"].to_numpy(dtype=float)
+        if "station" in stations.columns:
+            st_idx = stations["station"].to_numpy(dtype=int)
+            kn = np.full(n_st, np.nan, dtype=float)
+            valid = (st_idx >= 0) & (st_idx < len(known_full))
+            kn[valid] = known_full[st_idx[valid]]
+        else:
+            kn = known_full[:n_st] if len(known_full) >= n_st else np.full(n_st, np.nan)
+        a_cal, b_cal = fit_heel_gr_affine(tw_gr_arr, tw_tvt_arr, lat_gr, kn)
+        stack_tvt = stations["prior_stack"].to_numpy(dtype=float)
+        last_arr = stations["prior_last_tvt"].to_numpy(dtype=float)
+        ncc_tvt = (
+            stations["prior_ncc_tvt"].to_numpy(dtype=float)
+            if "prior_ncc_tvt" in stations.columns
+            else last_arr
+        )
+        mm_kw = dict(a_cal=a_cal, b_cal=b_cal, known_tvt=kn)
+        stations["gr_mismatch_stack"] = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, stack_tvt, **mm_kw
+        )
+        stations["gr_mismatch_last"] = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, last_arr, **mm_kw
+        )
+        stations["gr_mismatch_ncc"] = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, ncc_tvt, **mm_kw
+        )
+        mm_s = stations["gr_mismatch_stack"].to_numpy(dtype=float)
+        stations["gr_mismatch_abs_stack"] = np.where(
+            np.isfinite(mm_s), np.abs(mm_s), np.nan
+        )
+    else:
+        stations["gr_mismatch_stack"] = 0.0
+        stations["gr_mismatch_last"] = 0.0
+        stations["gr_mismatch_ncc"] = 0.0
+        stations["gr_mismatch_abs_stack"] = 0.0
+
+    nb = (
+        stations["neighbor_tvt"].to_numpy(dtype=float)
+        if "neighbor_tvt" in stations.columns
+        else None
+    )
+    nb_ok = (
+        stations["neighbor_transfer_ok"].to_numpy(dtype=float)
+        if "neighbor_transfer_ok" in stations.columns
+        else None
+    )
+    best = blend_prior_best(
+        last_f,
+        stations["prior_stack"].to_numpy(dtype=float),
+        stations["prior_pf_blend"].to_numpy(dtype=float),
+        stations["prior_local_dip"].to_numpy(dtype=float),
+        stations["pf_confidence"].to_numpy(dtype=float),
+        neighbor_tvt=nb,
+        neighbor_ok=nb_ok,
+        prior_ncc=stations["prior_ncc_tvt"].to_numpy(dtype=float)
+        if "prior_ncc_tvt" in stations.columns
+        else None,
+        ncc_conf=stations["ncc_track_conf"].to_numpy(dtype=float)
+        if "ncc_track_conf" in stations.columns
+        else None,
+    )
+    if len(split.known_idx):
+        k = np.asarray(split.known_idx, dtype=int)
+        heel_vals = _heel_tvt_values(df, k)
+        best = np.asarray(best, dtype=float).copy()
+        if "station" in stations.columns:
+            st = stations["station"].to_numpy(dtype=int)
+            k_to_h = {int(ki): float(hv) for ki, hv in zip(k, heel_vals) if np.isfinite(hv)}
+            for j, s in enumerate(st):
+                if int(s) in k_to_h:
+                    best[j] = k_to_h[int(s)]
+        else:
+            for j, (ki, hv) in enumerate(zip(k, heel_vals)):
+                if 0 <= int(ki) < len(best) and np.isfinite(hv):
+                    best[int(ki)] = float(hv)
+    stations["prior_best"] = best
+    stations = kernel.augment_station_frame(stations, df, typewell)
+    stations = embed_column(stations)
+    return stations
+
+
 def build_station_frame(
     lateral: pd.DataFrame,
     typewell: pd.DataFrame | None,
@@ -322,136 +491,8 @@ def build_station_frame(
     stations = attach_spatial_features(
         stations, df, spatial_index, split.well_id
     )
-    # Crown pure prior after neighbor attach (uses transfer_ok + heel offset)
-    last_col = stations["prior_last_tvt"].to_numpy(dtype=float)
-    last_f = float(last_col[0]) if len(last_col) and np.isfinite(last_col[0]) else float("nan")
-    if not np.isfinite(last_f):
-        last_f = float(np.nanmedian(last_col)) if np.isfinite(last_col).any() else 0.0
-    nb = (
-        stations["neighbor_tvt"].to_numpy(dtype=float)
-        if "neighbor_tvt" in stations.columns
-        else None
-    )
-    nb_ok = (
-        stations["neighbor_transfer_ok"].to_numpy(dtype=float)
-        if "neighbor_transfer_ok" in stations.columns
-        else None
-    )
-    # Soft neighbor into residual base (stack) *before* prior_best so ensemble sees it.
-    # Exclude known heel: stack was already locked to observed TVT (lines above).
-    stack_pre_nb = stations["prior_stack"].to_numpy(dtype=float).copy()
-    if (
-        "prior_stack" in stations.columns
-        and nb is not None
-        and nb_ok is not None
-        and np.isfinite(last_f)
-    ):
-        st = stack_pre_nb.copy()
-        ok = np.asarray(nb_ok, dtype=float)
-        nbt = np.asarray(nb, dtype=float)
-        known = (
-            stations["is_known"].to_numpy(dtype=bool)
-            if "is_known" in stations.columns
-            else np.zeros(len(st), dtype=bool)
-        )
-        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st) & ~known
-        if m.any():
-            nb_c = last_f + np.clip(nbt - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
-            w = 0.12 * np.clip(ok, 0.0, 1.0)
-            st = np.where(m, (1.0 - w) * st + w * nb_c, st)
-            st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
-            stations["prior_stack"] = st
-
-    # Disagreement vs final residual base (post soft-neighbor) — single helper
-    stations["prior_disagreement"] = compute_prior_disagreement(
-        last_f,
-        stations["prior_stack"].to_numpy(dtype=float),
-        stations["prior_pf_blend"].to_numpy(dtype=float),
-        stations["prior_ncc_tvt"].to_numpy(dtype=float)
-        if "prior_ncc_tvt" in stations.columns
-        else None,
-    )
-    # pre-nb stack for CR tests / diagnostics (not in FEATURE_COLS; safe for concat)
-    stations["_prior_stack_pre_neighbor"] = stack_pre_nb
-
-    # GR↔typewell mismatch at final stalk TVTs (residual head signal; set-8/9)
-    n_st = len(stations)
-    if tw_gr_arr is not None and tw_tvt_arr is not None and "GR" in stations.columns:
-        lat_gr = stations["GR"].to_numpy(dtype=float)
-        # align known_full to station rows if station index present
-        if "station" in stations.columns:
-            st_idx = stations["station"].to_numpy(dtype=int)
-            kn = np.full(n_st, np.nan, dtype=float)
-            valid = (st_idx >= 0) & (st_idx < len(known_full))
-            kn[valid] = known_full[st_idx[valid]]
-        else:
-            kn = known_full[:n_st] if len(known_full) >= n_st else np.full(n_st, np.nan)
-        # single heel affine for all stalks (consistency + cost)
-        a_cal, b_cal = fit_heel_gr_affine(tw_gr_arr, tw_tvt_arr, lat_gr, kn)
-        stack_tvt = stations["prior_stack"].to_numpy(dtype=float)
-        last_arr = stations["prior_last_tvt"].to_numpy(dtype=float)
-        ncc_tvt = (
-            stations["prior_ncc_tvt"].to_numpy(dtype=float)
-            if "prior_ncc_tvt" in stations.columns
-            else last_arr
-        )
-        mm_kw = dict(a_cal=a_cal, b_cal=b_cal, known_tvt=kn)
-        stations["gr_mismatch_stack"] = gr_mismatch_at_tvt(
-            lat_gr, tw_gr_arr, tw_tvt_arr, stack_tvt, **mm_kw
-        )
-        stations["gr_mismatch_last"] = gr_mismatch_at_tvt(
-            lat_gr, tw_gr_arr, tw_tvt_arr, last_arr, **mm_kw
-        )
-        stations["gr_mismatch_ncc"] = gr_mismatch_at_tvt(
-            lat_gr, tw_gr_arr, tw_tvt_arr, ncc_tvt, **mm_kw
-        )
-        mm_s = stations["gr_mismatch_stack"].to_numpy(dtype=float)
-        stations["gr_mismatch_abs_stack"] = np.where(
-            np.isfinite(mm_s), np.abs(mm_s), np.nan
-        )
-        # Note: |stack|-|last| delta feature regressed 12w residual 11.06→11.14
-    else:
-        stations["gr_mismatch_stack"] = 0.0
-        stations["gr_mismatch_last"] = 0.0
-        stations["gr_mismatch_ncc"] = 0.0
-        stations["gr_mismatch_abs_stack"] = 0.0
-
-    best = blend_prior_best(
-        last_f,
-        stations["prior_stack"].to_numpy(dtype=float),
-        stations["prior_pf_blend"].to_numpy(dtype=float),
-        stations["prior_local_dip"].to_numpy(dtype=float),
-        stations["pf_confidence"].to_numpy(dtype=float),
-        neighbor_tvt=nb,
-        neighbor_ok=nb_ok,
-        prior_ncc=stations["prior_ncc_tvt"].to_numpy(dtype=float)
-        if "prior_ncc_tvt" in stations.columns
-        else None,
-        ncc_conf=stations["ncc_track_conf"].to_numpy(dtype=float)
-        if "ncc_track_conf" in stations.columns
-        else None,
-    )
-    # Heel lock: TVT_input-first (competition-safe), same helper as stack / dip.
-    # Do not require form-label TVT column — test wells may only have TVT_input.
-    if len(split.known_idx):
-        k = np.asarray(split.known_idx, dtype=int)
-        heel_vals = _heel_tvt_values(df, k)
-        best = np.asarray(best, dtype=float).copy()
-        if "station" in stations.columns:
-            st = stations["station"].to_numpy(dtype=int)
-            k_to_h = {int(ki): float(hv) for ki, hv in zip(k, heel_vals) if np.isfinite(hv)}
-            for j, s in enumerate(st):
-                if int(s) in k_to_h:
-                    best[j] = k_to_h[int(s)]
-        else:
-            # stations rows align with full lateral 0..n-1
-            for j, (ki, hv) in enumerate(zip(k, heel_vals)):
-                if 0 <= int(ki) < len(best) and np.isfinite(hv):
-                    best[int(ki)] = float(hv)
-    stations["prior_best"] = best
-    stations = kernel.augment_station_frame(stations, df, typewell)
-    stations = embed_column(stations)
-    return stations
+    # Neighbor-dependent crown fields (shared with parallel parent path)
+    return finalize_after_spatial(stations, df, split, typewell)
 
 
 # Tight residual X: relative kinematics + signal + strong priors only.

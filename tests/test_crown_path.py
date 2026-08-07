@@ -261,6 +261,73 @@ class TestCrownPath(unittest.TestCase):
         # after heel affine cal, residual at true TVT should be small on toe
         self.assertLess(float(np.nanmean(np.abs(mm[15:]))), 5.0)
 
+    def test_finalize_after_spatial_parity_with_index(self) -> None:
+        """Parallel path (None → attach → finalize) == direct spatial_index path."""
+        from rwt.features import build_station_frame, finalize_after_spatial
+        from rwt.middle_out import resolve_middle_out
+        from rwt.spatial import SpatialIndex, attach_spatial_features, well_spatial_node_from_lateral
+
+        n = 50
+        lat = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(0, 200, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, n)),
+                "TVT_input": [100.0 if i < 12 else np.nan for i in range(n)],
+                "TVT": [100.0 if i < 12 else 100.0 + 0.05 * (i - 11) for i in range(n)],
+            }
+        )
+        nb = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(5, 205, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, n)),
+                "TVT": np.full(n, 115.0),
+                "TVT_input": [115.0 if i < 20 else np.nan for i in range(n)],
+            }
+        )
+        idx = SpatialIndex(max_dist=500.0, close_dist=200.0)
+        idx.add(well_spatial_node_from_lateral("tgt", lat))
+        idx.add(well_spatial_node_from_lateral("nb", nb))
+        sp = resolve_middle_out(lat, well_id="tgt")
+        tw = pd.DataFrame(
+            {
+                "TVT": np.linspace(90, 120, 80),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, 80)),
+            }
+        )
+        direct = build_station_frame(lat, tw, sp, spatial_index=idx)
+        # parallel-style: no index in build, parent attach + finalize
+        raw = build_station_frame(lat, tw, sp, spatial_index=None)
+        # strip neighbor-dependent final cols then re-attach (simulate worker output)
+        raw = attach_spatial_features(raw, lat, idx, "tgt")
+        # re-run finalize as parent would (worker already finalized once with empty nb)
+        # reset stack to pre-neighbor if present so finalize applies transfer cleanly
+        if "_prior_stack_pre_neighbor" in raw.columns:
+            raw = raw.copy()
+            raw["prior_stack"] = raw["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
+        fixed = finalize_after_spatial(raw, lat, sp, tw)
+        cols = [
+            "prior_stack",
+            "prior_disagreement",
+            "gr_mismatch_stack",
+            "gr_mismatch_abs_stack",
+            "prior_best",
+        ]
+        for c in cols:
+            self.assertIn(c, direct.columns)
+            self.assertIn(c, fixed.columns)
+            a = direct[c].to_numpy(dtype=float)
+            b = fixed[c].to_numpy(dtype=float)
+            self.assertTrue(
+                np.allclose(a, b, equal_nan=True, atol=1e-6),
+                f"parity fail on {c}: max|Δ|={np.nanmax(np.abs(a - b))}",
+            )
+
     def test_compute_prior_disagreement_pure(self) -> None:
         """Unit: four-way nanstd matches helper (CR P2 contract)."""
         from rwt.features import compute_prior_disagreement
