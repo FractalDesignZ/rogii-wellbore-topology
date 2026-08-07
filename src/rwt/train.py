@@ -164,14 +164,17 @@ def train_lgbm_residual(
     oof = np.zeros(len(train_df))
     models = []
     fold_scores: list[float] = []
+    # Residual head: shallow, regularized — target is small ΔTVT, not absolute map
     params = {
         "objective": "regression",
         "metric": "rmse",
-        "learning_rate": 0.05,
-        "num_leaves": 63,
-        "feature_fraction": 0.8,
+        "learning_rate": 0.03,
+        "num_leaves": 31,
+        "min_data_in_leaf": 80,
+        "feature_fraction": 0.7,
         "bagging_fraction": 0.8,
         "bagging_freq": 1,
+        "lambda_l2": 2.0,
         "verbosity": -1,
         "seed": seed,
     }
@@ -184,9 +187,9 @@ def train_lgbm_residual(
         model = lgb.train(
             p,
             dtr,
-            num_boost_round=400,
+            num_boost_round=800,
             valid_sets=[dva],
-            callbacks=[lgb.early_stopping(40, verbose=False)],
+            callbacks=[lgb.early_stopping(60, verbose=False)],
         )
         pred_res = model.predict(X[va])
         oof[va] = pred_res
@@ -226,6 +229,7 @@ def train_lgbm_residual(
     baseline_rmse: dict[str, float] = {}
     for name, col in (
         ("last_known", "prior_last_tvt"),
+        ("local_dip_ps", "prior_local_dip"),
         ("flat_formation", "prior_flat_tvt"),
         ("linear_md_extrap", "prior_extrap_tvt"),
         ("dual_transport_mid", "prior_mid"),
@@ -255,40 +259,60 @@ def train_lgbm_residual(
         lk_full = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
         if np.isfinite(lk_full[shared]).all():
             lk_m = lk_full[shared]
+    # single map: every scored pure prior → station column (Gate3 floors + fallback)
+    _floor_col = {
+        "last_known": "prior_last_tvt",
+        "local_dip_ps": "prior_local_dip",
+        "flat_formation": "prior_flat_tvt",
+        "linear_md_extrap": "prior_extrap_tvt",
+        "dual_transport_mid": "prior_mid",
+        "heel_dip_stack": "prior_dip_stack",
+        "particle_filter": "prior_pf_tvt",
+        "pf_blend_last_known": "prior_pf_blend",
+        "pf_bag": "prior_pf_bag",
+        "prior_stack": "prior_stack",
+    }
+    floor_rmses = {
+        n: baseline_rmse[n]
+        for n in _floor_col
+        if n in baseline_rmse and np.isfinite(baseline_rmse[n])
+    }
     gate3 = gate_residual_acceptance(
         y_s,
         oof_s,
         prior_m,
         prior_name=prior_col,
         last_known_pred=lk_m,
+        floor_rmses=floor_rmses,
     )
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
-    # On reject: choose pure prior with best OOF among prior_col and last_known
     serve_prior_col = prior_col
     if use_residual:
         print(
             f"[GATE PASS] Residual head accepted: OOF {gate3.detail['oof_rmse_residual']:.3f} "
-            f"<= prior({prior_col}) {gate3.detail['oof_rmse_prior']:.3f}",
+            f"<= best_floor({gate3.detail.get('best_floor_name')}) "
+            f"{gate3.detail.get('oof_rmse_best_floor'):.3f}",
             flush=True,
         )
         final_models = models
         final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
     else:
-        cand = {prior_col: float(gate3.detail["oof_rmse_prior"])}
-        # exact 0.0 is finite and valid — never use truthiness on the score
-        lk_rmse = gate3.detail.get("oof_rmse_last_known")
-        if lk_m is not None and lk_rmse is not None and np.isfinite(lk_rmse):
-            cand["prior_last_tvt"] = float(lk_rmse)
+        cand: dict[str, float] = {prior_col: float(gate3.detail["oof_rmse_prior"])}
+        for n, s in floor_rmses.items():
+            col = _floor_col.get(n, n)
+            if col in train_df.columns:
+                cand[col] = float(s)
         serve_prior_col = min(cand, key=cand.get)
         final_oof = cand[serve_prior_col]
         final_models = []
         final_prior_type = f"pure_{serve_prior_col}"
         print(
-            f"[GATE REJECT] Residual overfitted "
-            f"(OOF {gate3.detail['oof_rmse_residual']:.3f}). "
-            f"Falling back to pure prior '{serve_prior_col}' (OOF {final_oof:.3f}).",
+            f"[GATE REJECT] Residual OOF {gate3.detail['oof_rmse_residual']:.3f} "
+            f"loses best floor {gate3.detail.get('best_floor_name')}="
+            f"{gate3.detail.get('oof_rmse_best_floor')}. "
+            f"Serve pure '{serve_prior_col}' (OOF {final_oof:.3f}).",
             flush=True,
         )
 

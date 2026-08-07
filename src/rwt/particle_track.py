@@ -177,20 +177,25 @@ def blend_pf_last_known(
     last_known: float,
     confidence: np.ndarray,
     *,
-    conf_floor: float = 0.15,
-    conf_ceil: float = 0.55,
+    conf_floor: float = 0.20,
+    conf_ceil: float = 0.65,
+    max_dev: float = 18.0,
 ) -> np.ndarray:
     """
     Confidence-weighted blend: low PF confidence → last-known; high → PF.
 
-    Guarantees we never fully abandon the strong public floor.
+    Hard-clamps PF deviation from last_known to ±max_dev so a bad GR track
+    cannot destroy the public floor (real-well diag: unclamped blend +6–10 ft).
     """
+    last = float(last_known)
+    pf = np.asarray(prior_pf, float)
     c = np.clip(
         (np.asarray(confidence, float) - conf_floor) / max(conf_ceil - conf_floor, 1e-6),
         0.0,
         1.0,
     )
-    return (1.0 - c) * float(last_known) + c * np.asarray(prior_pf, float)
+    delta = np.clip(pf - last, -float(max_dev), float(max_dev))
+    return last + c * delta
 
 
 # Diverse PF hyperconfigs inspired by top private LB multi-PF bagging
@@ -315,7 +320,14 @@ def particle_prior_for_well(
         n_bag = 1
 
     fill = last_f if np.isfinite(last_f) else seed_tvt
-    blend = blend_pf_last_known(bag_arr if bag else pf_tvt, fill, conf, conf_floor=0.25, conf_ceil=0.70)
+    blend = blend_pf_last_known(
+        bag_arr if bag else pf_tvt,
+        fill,
+        conf,
+        conf_floor=0.20,
+        conf_ceil=0.65,
+        max_dev=18.0,
+    )
     is_known = np.zeros(n, dtype=bool)
     if len(split.known_idx):
         is_known[np.asarray(split.known_idx, dtype=int)] = True
