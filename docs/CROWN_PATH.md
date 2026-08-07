@@ -54,8 +54,9 @@ Set-10: train/serve spatial seal parity. Set-11: `STACK_SOFT_NB_WEIGHT=0` (neigh
 | gr_mismatch delta \|stack\|−\|last\| | 11.14 | collinear noise |
 | max-precision LGBM on 12w set-8 | 11.21 | overfit small cohort |
 | stack soft-nb weight 0.12 | 11.48 | residual base pollution |
+| well-inverse residual weights | 11.39 | hurts easy long wells |
 
-### Kept (set-5–11 coherence)
+### Kept (set-5–12 coherence)
 
 Soft neighbor → stack **before** `prior_best` **only when** `STACK_SOFT_NB_WEIGHT>0`
 (default **0** by measure — neighbors still enter via `prior_best` + `neighbor_*` feats);
