@@ -13,7 +13,22 @@ from sklearn.model_selection import GroupKFold
 from rwt.baselines import rmse
 from rwt.features import FEATURE_COLS_DEFAULT, build_station_frame, feature_matrix
 from rwt.load import iter_well_frames, load_typewell, synthetic_well
-from rwt.middle_out import split_by_mask, split_by_tvt_nan
+from rwt.middle_out import resolve_middle_out, split_by_mask
+
+
+def _typewell_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:
+    """Resolve ROGII ``{well_id}__typewell.csv`` (and a few aliases)."""
+    base = root / split
+    candidates = [
+        base / f"{well_id}__typewell.csv",
+        base / f"{well_id}_typewell.csv",
+        base / f"{well_id}__type_well.csv",
+        root / f"{well_id}__typewell.csv",
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+    return None
 
 
 def _assemble_dataset(
@@ -25,35 +40,40 @@ def _assemble_dataset(
     frames = []
     if synthetic or data_root is None:
         lat, tw = synthetic_well()
-        from rwt.middle_out import split_by_mask
-
         sp = split_by_mask(lat, well_id="SYN01")
         frames.append(build_station_frame(lat, tw, sp))
         return pd.concat(frames, ignore_index=True)
 
     root = Path(data_root)
-    # optional shared typewell
-    tw_path = None
-    for cand in root.rglob("*typewell*.csv"):
-        tw_path = cand
-        break
-    typewell = load_typewell(tw_path) if tw_path else None
 
     n = 0
     for wid, df in iter_well_frames(root, "train"):
-        if "is_predict" in df.columns:
-            sp = split_by_mask(df, well_id=wid)
-        else:
-            sp = split_by_tvt_nan(df, well_id=wid)
-        # per-well typewell if present
-        tw = typewell
-        tw_w = root / "train" / f"{wid}_typewell.csv"
-        if tw_w.is_file():
-            tw = load_typewell(tw_w)
-        frames.append(build_station_frame(df, tw, sp))
+        sp = resolve_middle_out(df, well_id=wid)
+        tw_path = _typewell_for_well(root, wid, "train")
+        tw = load_typewell(tw_path) if tw_path else None
+        # Prior from known heel (inside build_station_frame); residual trains on labeled toe
+        if not sp.n_predict:
+            continue
+        if "TVT" not in df.columns and "TVT_true" not in df.columns:
+            continue
+        tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
+        labeled_pred = [
+            int(i)
+            for i in sp.predict_idx
+            if pd.notna(df.iloc[int(i)][tvt_col])
+        ]
+        if not labeled_pred:
+            continue
+        frames.append(
+            build_station_frame(
+                df, tw, sp, station_idx=np.asarray(labeled_pred, dtype=int)
+            )
+        )
         n += 1
         if max_wells and n >= max_wells:
             break
+        if n % 10 == 0:
+            print(f"assembled {n} wells…", flush=True)
     if not frames:
         raise FileNotFoundError(f"No wells under {root}")
     return pd.concat(frames, ignore_index=True)
@@ -65,10 +85,16 @@ def train_lgbm_residual(
     n_splits: int = 5,
     seed: int = 42,
 ) -> dict[str, Any]:
-    # train only on known stations with TVT
-    train_df = stations[stations["is_known"] & stations["TVT"].notna()].copy()
-    if len(train_df) < 50:
+    # Residual on prediction zone with labels (middle-out law); prior already heel-only
+    if "is_predict" in stations.columns:
+        train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
+    else:
         train_df = stations[stations["TVT"].notna()].copy()
+    if len(train_df) < 50:
+        raise ValueError(
+            f"Insufficient labeled prediction-zone rows for residual train "
+            f"(n={len(train_df)}). Need is_predict & TVT labels."
+        )
     X, cols = feature_matrix(train_df)
     y = train_df["TVT"].to_numpy(dtype=float)
     # residual vs flat prior
