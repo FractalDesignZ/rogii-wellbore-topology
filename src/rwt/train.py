@@ -259,16 +259,22 @@ def train_lgbm_residual(
         lk_full = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
         if np.isfinite(lk_full[shared]).all():
             lk_m = lk_full[shared]
-    # pure floors residual must beat (never ship worse than best clamped prior)
+    # single map: every scored pure prior → station column (Gate3 floors + fallback)
+    _floor_col = {
+        "last_known": "prior_last_tvt",
+        "local_dip_ps": "prior_local_dip",
+        "flat_formation": "prior_flat_tvt",
+        "linear_md_extrap": "prior_extrap_tvt",
+        "dual_transport_mid": "prior_mid",
+        "heel_dip_stack": "prior_dip_stack",
+        "particle_filter": "prior_pf_tvt",
+        "pf_blend_last_known": "prior_pf_blend",
+        "pf_bag": "prior_pf_bag",
+        "prior_stack": "prior_stack",
+    }
     floor_rmses = {
         n: baseline_rmse[n]
-        for n in (
-            "last_known",
-            "pf_blend_last_known",
-            "prior_stack",
-            "pf_bag",
-            "local_dip_ps",
-        )
+        for n in _floor_col
         if n in baseline_rmse and np.isfinite(baseline_rmse[n])
     }
     gate3 = gate_residual_acceptance(
@@ -281,14 +287,6 @@ def train_lgbm_residual(
     )
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
-    # map floor baseline names → station columns for pure fallback serve
-    _floor_col = {
-        "last_known": "prior_last_tvt",
-        "pf_blend_last_known": "prior_pf_blend",
-        "prior_stack": "prior_stack",
-        "pf_bag": "prior_pf_bag",
-        "local_dip_ps": "prior_local_dip",
-    }
     serve_prior_col = prior_col
     if use_residual:
         print(

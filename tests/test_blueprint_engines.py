@@ -58,15 +58,16 @@ class TestBlueprintEngines(unittest.TestCase):
         self.assertIn("prior_last_tvt", FEATURE_COLS_DEFAULT)
 
     def test_feature_matrix_rejects_form_leak(self) -> None:
-        st = pd.DataFrame(
-            {
-                "relative_md": [0.0, 1.0],
-                "GR": [80.0, 81.0],
-                "form_ANCC": [-9100.0, -9100.0],
-            }
-        )
-        with self.assertRaises(ValueError):
-            feature_matrix(st, cols=["relative_md", "GR", "form_ANCC"])
+        for leaked in FORM_SURFACE_LEAK_COLS:
+            st = pd.DataFrame(
+                {
+                    "relative_md": [0.0, 1.0],
+                    "GR": [80.0, 81.0],
+                    f"form_{leaked}": [-9100.0, -9100.0],
+                }
+            )
+            with self.assertRaises(ValueError):
+                feature_matrix(st, cols=["relative_md", "GR", f"form_{leaked}"])
 
     def test_local_dip_prior_locks_heel_and_projects(self) -> None:
         df, sp = self._synthetic_well()
@@ -82,13 +83,12 @@ class TestBlueprintEngines(unittest.TestCase):
                 atol=1e-6,
             )
         )
-        # tiny MD slope only (≤0.008); never Z blow-up; heel locked
+        # tiny MD slope only (<=0.008); never Z blow-up; heel locked
         self.assertLessEqual(abs(out["md_slope"]), 0.008 + 1e-9)
         self.assertEqual(out["local_dip"], 0.0)
-        last = float(df.iloc[k]["TVT_input"].to_numpy(float)[-1])
         err = float(np.nanmean(np.abs(prior[toe] - df.iloc[toe]["TVT"].to_numpy(float))))
-        # near last-known floor (soft MD trend), not 50–150 ft poison
-        self.assertLess(err, abs(last) * 0.05 + 20.0, msg=f"local dip toe err={err}")
+        # scale-independent: reject 50-150 ft poisoned projections
+        self.assertLess(err, 25.0, msg=f"local dip toe err={err}")
 
     def test_build_station_frame_has_relative_and_no_form(self) -> None:
         df, sp = self._synthetic_well()

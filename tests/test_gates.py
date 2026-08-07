@@ -41,6 +41,8 @@ class TestGates(unittest.TestCase):
             floor_rmses={"strong_floor": 0.01},
         )
         self.assertFalse(g3.passed)
+        self.assertTrue(g3.detail["beat_prior"])
+        self.assertFalse(g3.detail["beat_all_floors"])
         self.assertEqual(g3.detail["best_floor_name"], "strong_floor")
 
     def test_entry_gates(self) -> None:

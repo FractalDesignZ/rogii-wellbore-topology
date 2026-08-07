@@ -76,35 +76,41 @@ def build_station_frame(
         lock = np.isfinite(full)
         stack = np.where(lock, full, stack)
 
-    # M1 kinematics: inclination from dZ/dMD; dogleg from 3D tangent angle / dMD
+    # M1 kinematics: real segments only (no synthetic prepend zero-step)
     md_arr = df["MD"].to_numpy(dtype=float) if "MD" in df.columns else np.arange(n, dtype=float)
     z_arr = df["Z"].to_numpy(dtype=float) if "Z" in df.columns else np.zeros(n)
     x_arr = df["X"].to_numpy(dtype=float) if "X" in df.columns else np.zeros(n)
     y_arr = df["Y"].to_numpy(dtype=float) if "Y" in df.columns else np.zeros(n)
-    d_z = np.diff(z_arr, prepend=z_arr[0] if n else 0.0)
-    d_md = np.diff(md_arr, prepend=1.0 if n else 1.0)
-    d_md = np.where(np.abs(d_md) < 1e-9, 1e-9, d_md)
-    incl = np.degrees(np.arccos(np.clip(d_z / d_md, -1.0, 1.0)))
-    # 3D segment tangents → dogleg severity (°/100ft), non-negative
-    dxyz = np.column_stack(
-        [
-            np.diff(x_arr, prepend=x_arr[0] if n else 0.0),
-            np.diff(y_arr, prepend=y_arr[0] if n else 0.0),
-            d_z,
-        ]
-    )
-    seg_len = np.linalg.norm(dxyz, axis=1)
-    seg_len = np.where(seg_len < 1e-12, 1e-12, seg_len)
-    tang = dxyz / seg_len[:, None]
+    incl = np.zeros(n, dtype=float)
     dls = np.zeros(n, dtype=float)
     if n >= 2:
-        dots = np.sum(tang[1:] * tang[:-1], axis=1)
-        dots = np.clip(dots, -1.0, 1.0)
-        ang = np.degrees(np.arccos(dots))
-        ds = 0.5 * (seg_len[1:] + seg_len[:-1])
-        ds = np.where(ds < 1e-9, 1e-9, ds)
-        dls[1:] = ang / ds * 100.0
-        dls[0] = dls[1]
+        d_md = np.diff(md_arr)
+        d_z = np.diff(z_arr)
+        d_x = np.diff(x_arr)
+        d_y = np.diff(y_arr)
+        d_md_safe = np.where(np.abs(d_md) < 1e-9, 1e-9, d_md)
+        # inclination on real intervals → assign to trailing station
+        incl_seg = np.degrees(np.arccos(np.clip(d_z / d_md_safe, -1.0, 1.0)))
+        incl[1:] = incl_seg
+        incl[0] = incl[1]
+        # 3D unit tangents on real segments; DLS uses adjacent MD intervals
+        dxyz = np.column_stack([d_x, d_y, d_z])
+        seg_len = np.linalg.norm(dxyz, axis=1)
+        seg_len = np.where(seg_len < 1e-12, 1e-12, seg_len)
+        tang = dxyz / seg_len[:, None]
+        if n >= 3:
+            dots = np.sum(tang[1:] * tang[:-1], axis=1)
+            dots = np.clip(dots, -1.0, 1.0)
+            ang = np.degrees(np.arccos(dots))
+            # MD interval spanning the two adjacent segments
+            ds_md = 0.5 * (np.abs(d_md[1:]) + np.abs(d_md[:-1]))
+            ds_md = np.where(ds_md < 1e-9, 1e-9, ds_md)
+            dls_mid = ang / ds_md * 100.0
+            dls[1:-1] = dls_mid
+            dls[0] = dls[1]
+            dls[-1] = dls[-2]
+        else:
+            dls[:] = 0.0
 
     tw_gr = typewell["GR"].to_numpy(dtype=float) if typewell is not None and "GR" in typewell else None
     tw_tvt = (
