@@ -145,16 +145,18 @@ def train_lgbm_residual(
         or _os.environ.get("OMP_NUM_THREADS")
         or max(1, (_os.cpu_count() or 4))
     )
+    # Residual head: regularized for small ΔTVT; slightly more capacity for crown stalk features
     params = {
         "objective": "regression",
         "metric": "rmse",
-        "learning_rate": 0.03,
-        "num_leaves": 31,
-        "min_data_in_leaf": 80,
-        "feature_fraction": 0.7,
-        "bagging_fraction": 0.8,
+        "learning_rate": 0.04,
+        "num_leaves": 47,
+        "min_data_in_leaf": 120,
+        "feature_fraction": 0.75,
+        "bagging_fraction": 0.85,
         "bagging_freq": 1,
-        "lambda_l2": 2.0,
+        "lambda_l2": 3.0,
+        "lambda_l1": 0.1,
         "num_threads": lgb_threads,
         "verbosity": -1,
         "seed": seed,
@@ -219,6 +221,7 @@ def train_lgbm_residual(
         ("pf_blend_last_known", "prior_pf_blend"),
         ("pf_bag", "prior_pf_bag"),
         ("prior_stack", "prior_stack"),
+        ("prior_best", "prior_best"),
     ):
         if col not in train_df.columns:
             continue
@@ -252,6 +255,7 @@ def train_lgbm_residual(
         "pf_blend_last_known": "prior_pf_blend",
         "pf_bag": "prior_pf_bag",
         "prior_stack": "prior_stack",
+        "prior_best": "prior_best",
     }
     floor_rmses = {
         n: baseline_rmse[n]

@@ -179,6 +179,7 @@ def attach_spatial_features(
     out["neighbor_transfer_ok"] = 0.0
     out["neighbor_count"] = 0.0
     out["neighbor_min_dist"] = np.nan
+    out["neighbor_offset"] = 0.0
     if index is None or well_id not in index.nodes:
         return out
     max_dist = float(index.max_dist if max_dist is None else max_dist)
@@ -191,13 +192,30 @@ def attach_spatial_features(
     best_id, best_d = neigh[0]
     node = index.nodes[best_id]
     tr = neighbor_tvt_transfer(lateral, node, close_dist=close_dist)
+    # Heel affine offset: align neighbor TVT to this well's heel TVT when both finite
+    # (public crown: neighbors share structure but absolute TVT level can bias).
+    offset = 0.0
+    heel_tvt = None
+    for col in ("TVT_input", "TVT", "TVT_true"):
+        if col in lateral.columns and lateral[col].notna().any():
+            heel_tvt = lateral[col].to_numpy(dtype=float)
+            break
+    if heel_tvt is not None:
+        tr_full = tr["neighbor_tvt"]
+        m = np.isfinite(heel_tvt) & np.isfinite(tr_full) & (tr["neighbor_transfer_ok"] > 0.5)
+        if m.sum() >= 8:
+            offset = float(np.median(heel_tvt[m] - tr_full[m]))
+            # refuse runaway offsets (pad mismatch)
+            if abs(offset) > 40.0:
+                offset = 0.0
     if "station" in out.columns:
         st = out["station"].to_numpy(dtype=int)
         n_lat = len(lateral)
         st = np.clip(st, 0, max(n_lat - 1, 0))
-        out["neighbor_tvt"] = tr["neighbor_tvt"][st]
+        out["neighbor_tvt"] = tr["neighbor_tvt"][st] + offset
         out["neighbor_xy_dist"] = tr["neighbor_xy_dist"][st]
         out["neighbor_transfer_ok"] = tr["neighbor_transfer_ok"][st]
+        out["neighbor_offset"] = float(offset)
         if best_d > close_dist:
             out["neighbor_transfer_ok"] = out["neighbor_transfer_ok"] * 0.25
     return out
