@@ -17,9 +17,11 @@ venv/
 dist/
 build/
 
-# outputs
-artifacts/
-submissions/
+# outputs (keep structure; ignore bulky runs)
+artifacts/**
+!artifacts/.gitkeep
+submissions/**
+!submissions/.gitkeep
 *.joblib
 *.pkl
 .ipynb_checkpoints/

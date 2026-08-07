@@ -1,85 +1,80 @@
 # rogii-wellbore-topology
 
-**Late entry scaffold** for the [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction) Kaggle competition.
+**Late Kaggle entry** for [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction) — framed as a demonstration of **abstraction-mode compute** from [`topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence), not a generic “dump features into LGBM” bakeoff.
 
-**Lineage:** geometric / middle-out / holonomy components from  
-[`ZuluYokohama/topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence)  
-(adapted for **open wellbore curves**, not cyclic peptides).
+| Abstraction mode | Role |
+|------------------|------|
+| **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
+| **M1 GEOM** | Open-curve tangents, curvature, Bishop-style transport (TSS lineage) |
+| **M2 PRIOR** | Heel-only flat-formation / last-TVT priors (E_ref-style: prior, not forced) |
+| **M3 MATCH** | Multi-scale GR ↔ typewell NCC |
+| **M4 MIDDLE_OUT** | Known section vs masked toe |
+| **M5 RESIDUAL** | Trees learn correction to prior only |
+| **M6 CERTIFY** | CV + baselines + artifact trail |
 
-| TSS idea | Wellbore use here |
-|----------|-------------------|
-| Middle-out (known → residual) | Known heel / `TVT_input` section → predict masked toe |
-| Bishop holonomy / transport | **Open-curve** parallel transport features on XYZ trajectory |
-| E_ref as **prior** (not forced P2) | Structural / geometric prior for TVT residual; never claim OPEN |
-| Hard domain reduction | Geometry + GR match first; trees second |
-| Peptide Ramachandran / Rosetta | **Out of scope** — not cargo-culted into GR |
+Full thesis: [`docs/ABSTRACTION_MODES.md`](docs/ABSTRACTION_MODES.md) · entry blurb: [`docs/KAGGLE_ENTRY.md`](docs/KAGGLE_ENTRY.md)
 
 ## Competition law (short)
 
-- **Target:** TVT (stratigraphic position on typewell column), not Z alone  
-- **Metric:** RMSE of dTVT on prediction zone  
-- **CV:** GroupKFold by well — never random station rows  
-- **Trap:** global TVT↔Z is strong; **within-lateral** slope is ~0  
+- **Target:** TVT (stratigraphic position), not Z alone  
+- **Metric:** RMSE(dTVT)  
+- **CV:** GroupKFold by well  
+- **Trap:** global TVT↔Z ≠ within-lateral slope  
 
 ## Layout
 
 ```text
-src/rwt/           # package: load, geometry, features, baselines, train, submit
-scripts/           # download + synthetic smoke
-tests/             # geometry + middle-out unit tests
-data/              # raw/ processed/ (gitignored except README)
-docs/              # lineage + protocol
-notebooks/         # optional exploration
+src/rwt/           # executable modes + train/submit
+scripts/           # download, probe, eda, late-entry driver, smoke
+tests/
+docs/              # ABSTRACTION_MODES, LINEAGE_TSS, PROTOCOL, KAGGLE_ENTRY
+data/raw/          # Kaggle download (gitignored)
+artifacts/         # CV + certificates (gitignored contents ok to regenerate)
 ```
 
 ## Quick start
 
 ```bash
 cd rogii-wellbore-topology
-python -m venv .venv
-# Windows: .venv\Scripts\activate
+python -m venv .venv && .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-
-# synthetic smoke (no Kaggle data yet)
-python scripts/smoke_synthetic.py
+pip install -e .
 
 # unit tests
 python -m unittest discover -s tests -v
 
-# after Kaggle accept + data download into data/raw/
-# python -m rwt.train --data data/raw --out artifacts/run1
-# python -m rwt.submit --model artifacts/run1/model.joblib --out submissions/late1.csv
+# full driver (downloads if credentials exist; else synthetic demo)
+python scripts/run_late_entry.py
+
+# or step-by-step
+python scripts/download_kaggle.py          # needs kaggle.json + rules accepted
+python scripts/probe_data.py
+python scripts/eda_report.py --data data/raw
+python -m rwt.train --data data/raw --out artifacts/late_real
 ```
 
-### Download data (when ready)
+### Kaggle credentials
 
-```bash
-# requires: pip install kaggle  +  ~/.kaggle/kaggle.json  + competition rules accepted
-kaggle competitions download -c rogii-wellbore-geology-prediction -p data/raw
-# unzip into data/raw/
-```
-
-## Package install (editable)
-
-```bash
-pip install -e .
-```
+1. Accept competition rules in the browser.  
+2. Place API token at `%USERPROFILE%\.kaggle\kaggle.json` (or set `KAGGLE_USERNAME` / `KAGGLE_KEY`).  
+3. `pip install kaggle`  
+4. `python scripts/download_kaggle.py`
 
 ## Status
 
 | Phase | Status |
 |-------|--------|
-| Repo scaffold + TSS bridge geometry | **OPEN** (this tree) |
-| Kaggle data ingest | **NEED_INFO** (download) |
-| Baselines + LGBM GroupKFold | **READY** (code paths) |
-| First late submit | **pending data** |
+| Abstraction-mode stack + TSS open-curve geometry | **landed** |
+| GitHub remote | push target `ZuluYokohama/rogii-wellbore-topology` |
+| Kaggle data | **NEED_INFO** until token + rules |
+| First scored submit | after data + schema align in `submit.py` |
 
 ## Attribution
 
-- Geometry transport adapted from `topology-sees-sequence` (`holonomy_extract.bishop_holonomy` / rotation helpers)  
-- Competition context: ROGII × Kaggle  
-- Domain feature ideas (tortuosity, NCC): public competition discussion / toolkits (cite in submit notes)
+- Geometry: `topology-sees-sequence` holonomy transport (open-curve adaptation)  
+- Competition: ROGII × Kaggle  
+- Domain features (NCC, tortuosity proxies): standard geosteering practice + public discussion  
 
 ## License
 
-Research / competition entry code — use with attribution to TSS lineage.
+Research / competition entry — attribute TSS lineage.
