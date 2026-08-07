@@ -96,7 +96,8 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         res = np.mean(preds, axis=0)
         # Clamp residual Δ vs residual *base* only. Do not re-clamp to last_known.
         res = np.clip(res, -max_dev, max_dev)
-        if smooth_w > 1:
+        if smooth_w > 1 and wids is not None:
+            # Skip when well_id missing — avoid cross-well rolling blend
             from rwt.baselines import smooth_residual_along_well
 
             order_key = None

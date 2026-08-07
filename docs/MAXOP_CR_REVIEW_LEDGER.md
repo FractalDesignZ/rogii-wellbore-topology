@@ -39,6 +39,10 @@ RESTRICT: no Kaggle submit from measure drivers.
 
 Fair-usage rate limits often blocked full inline review. Local max-op review substituted; unit tests green at merge.
 
+**Open P2 (set-17 follow-ups):** GR mismatch missing-`prior_stack` edge; residual
+smoothing without `well_id`; dual-serving distinct-base stress; deep `n_refit`
+integration via full `train_lgbm_residual` path (constants unit-tested).
+
 ## Sealed MEASURE (this kit)
 
 | Cohort | Selected OOF (ft) | Notes |

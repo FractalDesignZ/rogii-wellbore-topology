@@ -417,21 +417,23 @@ def train_lgbm_residual(
     y_s = y_m[shared]
     oof_s = oof_m[shared]
     oof_r = rmse(y_s, oof_s)
+    # Single definition: baseline_rmse and Gate3 floors share this map
+    _FLOOR_COL: dict[str, str] = {
+        "last_known": "prior_last_tvt",
+        "local_dip_ps": "prior_local_dip",
+        "flat_formation": "prior_flat_tvt",
+        "linear_md_extrap": "prior_extrap_tvt",
+        "dual_transport_mid": "prior_mid",
+        "heel_dip_stack": "prior_dip_stack",
+        "particle_filter": "prior_pf_tvt",
+        "pf_blend_last_known": "prior_pf_blend",
+        "pf_bag": "prior_pf_bag",
+        "prior_stack": "prior_stack",
+        "prior_best": "prior_best",
+        "prior_ncc": "prior_ncc_tvt",
+    }
     baseline_rmse: dict[str, float] = {}
-    for name, col in (
-        ("last_known", "prior_last_tvt"),
-        ("local_dip_ps", "prior_local_dip"),
-        ("flat_formation", "prior_flat_tvt"),
-        ("linear_md_extrap", "prior_extrap_tvt"),
-        ("dual_transport_mid", "prior_mid"),
-        ("heel_dip_stack", "prior_dip_stack"),
-        ("particle_filter", "prior_pf_tvt"),
-        ("pf_blend_last_known", "prior_pf_blend"),
-        ("pf_bag", "prior_pf_bag"),
-        ("prior_stack", "prior_stack"),
-        ("prior_best", "prior_best"),
-        ("prior_ncc", "prior_ncc_tvt"),
-    ):
+    for name, col in _FLOOR_COL.items():
         if col not in train_df.columns:
             continue
         b = train_df[col].to_numpy(dtype=float)[row_m]
@@ -452,24 +454,9 @@ def train_lgbm_residual(
         lk_full = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
         if np.isfinite(lk_full[shared]).all():
             lk_m = lk_full[shared]
-    # single map: every scored pure prior → station column (Gate3 floors + fallback)
-    _floor_col = {
-        "last_known": "prior_last_tvt",
-        "local_dip_ps": "prior_local_dip",
-        "flat_formation": "prior_flat_tvt",
-        "linear_md_extrap": "prior_extrap_tvt",
-        "dual_transport_mid": "prior_mid",
-        "heel_dip_stack": "prior_dip_stack",
-        "particle_filter": "prior_pf_tvt",
-        "pf_blend_last_known": "prior_pf_blend",
-        "pf_bag": "prior_pf_bag",
-        "prior_stack": "prior_stack",
-        "prior_best": "prior_best",
-        "prior_ncc": "prior_ncc_tvt",
-    }
     floor_rmses = {
         n: baseline_rmse[n]
-        for n in _floor_col
+        for n in _FLOOR_COL
         if n in baseline_rmse and np.isfinite(baseline_rmse[n])
     }
     gate3 = gate_residual_acceptance(

@@ -19,6 +19,7 @@ from rwt.particle_track import particle_prior_for_well
 from rwt.priors import (
     FORM_SURFACE_LEAK_COLS,
     MAX_TVT_DEV,
+    NEIGHBOR_TRANSFER_OK_MIN,
     _heel_tvt_values,
     blend_prior_best,
     blend_stack_priors,
@@ -27,6 +28,29 @@ from rwt.priors import (
 )
 from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
+
+
+def heel_known_tvt_series(
+    lateral: pd.DataFrame,
+    split: MiddleOutSplit,
+) -> np.ndarray:
+    """
+    Per-station known heel TVT: prefer TVT_input, else fill known_idx from TVT.
+
+    Shared by build_station_frame (NCC seed) and finalize_after_spatial (GR affine)
+    so both paths agree on which stations are known.
+    """
+    df = lateral
+    n = len(df)
+    known_full = np.full(n, np.nan, dtype=float)
+    if "TVT_input" in df.columns:
+        known_full = np.asarray(df["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
+    if len(split.known_idx) and "TVT" in df.columns:
+        kidx = np.asarray(split.known_idx, dtype=int)
+        tcol = np.asarray(df["TVT"].to_numpy(dtype=float), dtype=float)
+        miss = ~np.isfinite(known_full[kidx]) & np.isfinite(tcol[kidx])
+        known_full[kidx[miss]] = tcol[kidx[miss]]
+    return known_full
 
 
 def compute_prior_disagreement(
@@ -115,7 +139,12 @@ def finalize_after_spatial(
                 if "is_known" in stations.columns
                 else np.zeros(len(st), dtype=bool)
             )
-            m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st) & ~known
+            m = (
+                (ok > NEIGHBOR_TRANSFER_OK_MIN)
+                & np.isfinite(nbt)
+                & np.isfinite(st)
+                & ~known
+            )
             if m.any():
                 nb_c = last_f + np.clip(nbt - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
                 w = w_nb * np.clip(ok, 0.0, 1.0)
@@ -135,15 +164,8 @@ def finalize_after_spatial(
     )
     stations["_prior_stack_pre_neighbor"] = stack_pre_nb
 
-    # Heel-known mask for GR affine (TVT_input first)
-    known_full = np.full(n, np.nan, dtype=float)
-    if "TVT_input" in df.columns:
-        known_full = np.asarray(df["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
-    if len(split.known_idx) and "TVT" in df.columns:
-        kidx = np.asarray(split.known_idx, dtype=int)
-        tcol = np.asarray(df["TVT"].to_numpy(dtype=float), dtype=float)
-        miss = ~np.isfinite(known_full[kidx]) & np.isfinite(tcol[kidx])
-        known_full[kidx[miss]] = tcol[kidx[miss]]
+    # Heel-known mask for GR affine (shared helper with build_station_frame)
+    known_full = heel_known_tvt_series(df, split)
 
     n_st = len(stations)
     if (
@@ -308,7 +330,7 @@ def build_station_frame(
         "prior_ncc_tvt": np.full(n, last_f if np.isfinite(last_f) else np.nan),
         "ncc_track_conf": np.zeros(n),
     }
-    known_full = np.full(n, np.nan, dtype=float)
+    known_full = heel_known_tvt_series(df, split)
     gr_full = (
         df["GR"].to_numpy(dtype=float)
         if "GR" in df.columns
@@ -317,14 +339,6 @@ def build_station_frame(
     tw_gr_arr: np.ndarray | None = None
     tw_tvt_arr: np.ndarray | None = None
     if typewell is not None and "GR" in typewell.columns and "TVT" in typewell.columns:
-        # Same heel lock contract as PF: TVT_input, else TVT on known stations only
-        if "TVT_input" in df.columns:
-            known_full = np.asarray(df["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
-        if len(split.known_idx) and "TVT" in df.columns:
-            kidx = np.asarray(split.known_idx, dtype=int)
-            tcol = np.asarray(df["TVT"].to_numpy(dtype=float), dtype=float)
-            miss = ~np.isfinite(known_full[kidx]) & np.isfinite(tcol[kidx])
-            known_full[kidx[miss]] = tcol[kidx[miss]]
         tw_gr_arr = typewell["GR"].to_numpy(dtype=float)
         tw_tvt_arr = typewell["TVT"].to_numpy(dtype=float)
         ncc_track = ncc_tvt_track(

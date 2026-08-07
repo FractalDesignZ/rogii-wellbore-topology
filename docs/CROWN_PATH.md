@@ -73,6 +73,10 @@ Soft neighbor → stack **before** `prior_best` **only when** `STACK_SOFT_NB_WEI
 `prior_disagreement` post-transfer; `compute_prior_disagreement` helper; residual Δ clip vs base only.
 Coverage: default-off stack identity + trusted-neighbor `prior_best` pull (set-11 tests).
 
+**Open P2 (docs / edge coverage):** missing-`prior_stack` GR mismatch path; residual
+smooth multi-well `well_id` contract; dual-serving head resolution stress; deep
+`n_refit` floor integration through `train_lgbm_residual` (unit coverage partial).
+
 ## Measure protocol
 
 ```bash

@@ -160,10 +160,13 @@ def multi_scale_ncc(
         out["tvt_hint_median"] = float(np.median(tvt_hints))
         out["tvt_hint_std"] = float(np.std(tvt_hints))
         out["ncc_peak"] = float(np.nanmax(peaks)) if peaks else 0.0
+        out["tvt_hint_count"] = int(len(tvt_hints))
     else:
+        # 0.0 is a feature-column sentinel, not a valid TVT sample for tracking
         out["tvt_hint_median"] = 0.0
         out["tvt_hint_std"] = 0.0
         out["ncc_peak"] = float(np.nanmax(peaks)) if peaks else 0.0
+        out["tvt_hint_count"] = 0
     return out
 
 
@@ -364,7 +367,14 @@ def ncc_tvt_track(
         )
         peak = float(m.get("ncc_peak") or 0.0)
         hint = m.get("tvt_hint_median")
-        if hint is None or not np.isfinite(hint) or peak < float(min_peak):
+        # tvt_hint_median 0.0 is the empty-hint feature sentinel — require real hints
+        n_hints = int(m.get("tvt_hint_count") or 0)
+        if (
+            n_hints < 1
+            or hint is None
+            or not np.isfinite(hint)
+            or peak < float(min_peak)
+        ):
             continue
         # clamp each sparse hint to progressive last ± max_dev
         track[i] = last + float(np.clip(float(hint) - last, -max_dev, max_dev))

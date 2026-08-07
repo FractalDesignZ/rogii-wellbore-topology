@@ -24,6 +24,8 @@ DEFAULT_PRIOR_COL = "prior_best"
 # Clamp law: pure prior candidates and residual Δ vs base stay within ±MAX_TVT_DEV.
 # Shared so PF bag, stack blend, NCC track, residual train/serve stay aligned.
 MAX_TVT_DEV = 18.0
+# Neighbor transfer trust gate (prior_best blend + optional stack soft-nb).
+NEIGHBOR_TRANSFER_OK_MIN = 0.55
 # Legacy blobs without stored prior_column: prefer stack (older residual base)
 # before prior_best so stack-trained models do not silently switch bases.
 PRIOR_FALLBACKS = (
@@ -403,7 +405,7 @@ def blend_prior_best(
     if neighbor_tvt is not None and neighbor_ok is not None:
         nb_raw = np.asarray(neighbor_tvt, dtype=float)
         ok = np.asarray(neighbor_ok, dtype=float)
-        m = np.isfinite(nb_raw) & (ok > 0.5)
+        m = np.isfinite(nb_raw) & (ok > NEIGHBOR_TRANSFER_OK_MIN)
         if m.any():
             nb = _clamp(np.where(m, nb_raw, last))
             nb, fin_n = _finite_or_last(nb)
