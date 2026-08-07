@@ -152,7 +152,7 @@ def main() -> int:
             "law": "precision = correct prior floors + residual only if Gate3",
         },
         "verdict": "BEATS_5FT" if beats_5 else "NEED_IMPROVE",
-        "production_open": "NO-GO until submit+domain audit; this is GO_MEASURE only",
+        "production_open": "RESTRICT: no Kaggle submit — GO_MEASURE only (OOF/Gate3/seals)",
         "full_report": rep,
     }
     (out / "measure_vs_5ft.json").write_text(
