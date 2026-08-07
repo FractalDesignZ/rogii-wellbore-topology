@@ -6,10 +6,16 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from rwt.geometry import station_local_geometry
+from rwt.geometry import station_local_geometry, trajectory_in_dip_frame
 from rwt.gr_match import multi_scale_ncc
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
+from rwt.particle_track import particle_prior_for_well
+from rwt.priors import (
+    _heel_tvt_values,
+    blend_stack_priors,
+    compute_heel_fitted_dip_prior,
+)
 from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
 
@@ -39,7 +45,30 @@ def build_station_frame(
     local = station_local_geometry(
         df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
     )
+    # Phase 1: orthogonal dip-frame parse (formation-aligned coordinates)
+    dipf = trajectory_in_dip_frame(
+        df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
+    )
     dual = dual_transport_prior(df, split)
+    # Layer 1+2: heel-only flat + XY dip plane (competition-safe)
+    dip_prior = compute_heel_fitted_dip_prior(df, split)
+    # Layer multi-PF bag (public lite of private-6th multi-PF idea)
+    pf = particle_prior_for_well(df, typewell, split, bag=True)
+    last_f = float(pf.get("prior_last_tvt", dual["prior_last_tvt"]))
+    stack = blend_stack_priors(
+        last_f,
+        dip_prior["prior_dip_stack"],
+        pf["prior_pf_bag"],
+        pf["pf_confidence"],
+    )
+    # lock heel on stack via shared heel TVT helper
+    if len(split.known_idx):
+        k = np.asarray(split.known_idx, dtype=int)
+        heel_tvt = _heel_tvt_values(df, k)
+        full = np.full(n, np.nan, dtype=float)
+        full[k] = heel_tvt
+        lock = np.isfinite(full)
+        stack = np.where(lock, full, stack)
 
     tw_gr = typewell["GR"].to_numpy(dtype=float) if typewell is not None and "GR" in typewell else None
     tw_tvt = (
@@ -55,13 +84,38 @@ def build_station_frame(
         tw_gr = np.asarray(tw_gr, dtype=float)
 
     rows = []
-    indices = range(n) if station_idx is None else [int(i) for i in station_idx]
+    idx_list = list(range(n) if station_idx is None else [int(i) for i in station_idx])
+    indices = idx_list
     is_predict_mask = np.zeros(n, dtype=bool)
     is_known_mask = np.zeros(n, dtype=bool)
     if len(split.predict_idx):
         is_predict_mask[np.asarray(split.predict_idx, dtype=int)] = True
     if len(split.known_idx):
         is_known_mask[np.asarray(split.known_idx, dtype=int)] = True
+
+    # Sparse multi-scale NCC (every 8th station) — O(n) sample + O(log n) nearest fill
+    ncc_cache: dict[int, dict[str, float]] = {}
+    if tw_gr is not None and idx_list:
+        first_i, last_i = idx_list[0], idx_list[-1]
+        sample_idx = [i for i in idx_list if (i % 8 == 0 or i == first_i or i == last_i)]
+        for i in sample_idx:
+            ncc_cache[i] = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=i)
+        if ncc_cache:
+            keys = np.asarray(sorted(ncc_cache.keys()), dtype=int)
+            for i in idx_list:
+                if i not in ncc_cache:
+                    j = int(np.searchsorted(keys, i))
+                    if j <= 0:
+                        nearest = int(keys[0])
+                    elif j >= len(keys):
+                        nearest = int(keys[-1])
+                    else:
+                        nearest = int(
+                            keys[j - 1]
+                            if abs(int(keys[j - 1]) - i) <= abs(int(keys[j]) - i)
+                            else keys[j]
+                        )
+                    ncc_cache[i] = ncc_cache[nearest]
 
     for i in indices:
         gi = float(gr[i])
@@ -84,24 +138,40 @@ def build_station_frame(
             "e_ref_roll": float(local["e_ref_roll"][i]),
             "d_z": float(local["d_z"][i]),
             "d_horiz": float(local["d_horiz"][i]),
+            "x_dip": float(dipf["x_dip"][i]),
+            "y_dip": float(dipf["y_dip"][i]),
+            "z_dip": float(dipf["z_dip"][i]),
+            "form_azimuth_deg": float(dipf["azimuth_deg"]),
+            "form_dip_deg": float(dipf["dip_deg"]),
             "prior_last_tvt": float(dual["prior_last_tvt"]),
             "prior_mean_tvt": float(dual["prior_mean_tvt"]),
             "prior_tvt_plus_z": float(dual["prior_tvt_plus_z"]),
             "prior_slope_tvt_md": float(dual["prior_slope_tvt_md"]),
-            "prior_flat_tvt": float(dual["prior_flat"][i]),
+            "prior_flat_tvt": float(dip_prior["prior_flat_tvt"][i]),
             "prior_forward_tvt": float(dual["prior_forward"][i]),
             "prior_backward_tvt": float(dual["prior_backward"][i]),
             "prior_mid": float(dual["prior_mid"][i]),
-            # Alias of prior_forward for baseline_linear_md beat-table (not a second feature)
             "prior_extrap_tvt": float(dual["prior_forward"][i]),
+            "prior_dip_trend": float(dip_prior["prior_dip_trend"][i]),
+            "prior_dip_stack": float(dip_prior["prior_dip_stack"][i]),
+            "prior_pf_tvt": float(pf["prior_pf_tvt"][i]),
+            "prior_pf_blend": float(pf["prior_pf_blend"][i]),
+            "prior_pf_bag": float(pf["prior_pf_bag"][i]),
+            "prior_stack": float(stack[i]),
+            "pf_confidence": float(pf["pf_confidence"][i]),
+            "pf_tvt_std": float(pf["pf_tvt_std"][i])
+            if np.isfinite(pf["pf_tvt_std"][i])
+            else 0.0,
+            "C_heel": float(dip_prior["C_heel"]),
+            "dip_coef_x": float(dip_prior["dip_coef_x"]),
+            "dip_coef_y": float(dip_prior["dip_coef_y"]),
         }
         for form_col in ("ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA"):
             if form_col in df.columns and pd.notna(df.loc[i, form_col]):
                 row[f"form_{form_col}"] = float(df.loc[i, form_col])
                 row[f"z_minus_{form_col}"] = row["Z"] - float(df.loc[i, form_col])
-        if tw_gr is not None:
-            m = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=i)
-            row.update(m)
+        if int(i) in ncc_cache:
+            row.update(ncc_cache[int(i)])
         if "TVT" in df.columns and pd.notna(df.loc[i, "TVT"]):
             row["TVT"] = float(df.loc[i, "TVT"])
         elif "TVT_true" in df.columns:
@@ -128,6 +198,11 @@ FEATURE_COLS_DEFAULT = [
     "e_ref_roll",
     "d_z",
     "d_horiz",
+    "x_dip",
+    "y_dip",
+    "z_dip",
+    "form_azimuth_deg",
+    "form_dip_deg",
     "well_mean_curv",
     "well_max_curv",
     "well_cum_twist",
@@ -150,7 +225,17 @@ FEATURE_COLS_DEFAULT = [
     "prior_forward_tvt",
     "prior_backward_tvt",
     "prior_mid",
-    # prior_extrap_tvt omitted from features (duplicate of prior_forward_tvt; kept on frame for baselines)
+    "prior_dip_trend",
+    "prior_dip_stack",
+    "prior_pf_tvt",
+    "prior_pf_blend",
+    "prior_pf_bag",
+    "prior_stack",
+    "pf_confidence",
+    "pf_tvt_std",
+    "C_heel",
+    "dip_coef_x",
+    "dip_coef_y",
     "ncc_16",
     "ncc_32",
     "ncc_64",

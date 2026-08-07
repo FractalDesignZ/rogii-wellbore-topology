@@ -28,13 +28,28 @@ def _assemble_dataset(
     *,
     synthetic: bool = False,
     max_wells: int = 0,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Assemble train stations + Gate 2 summary (passed/rejected well ids)."""
     frames: list[pd.DataFrame] = []
+    gate2_results: list[dict[str, Any]] = []
+    unlabeled_skips: list[str] = []
+    passed_wells: list[str] = []
     if synthetic or data_root is None:
         lat, tw = synthetic_well()
         sp = split_by_mask(lat, well_id="SYN01")
         frames.append(build_station_frame(lat, tw, sp))
-        return pd.concat(frames, ignore_index=True)
+        passed_wells = ["SYN01"]
+        gate2_meta = {
+            "name": "MIDDLE_OUT_MASK",
+            "passed": True,
+            "n_passed": 1,
+            "n_rejected": 0,
+            "passed_wells": passed_wells,
+            "rejected_wells": [],
+            "unlabeled_skips": [],
+            "results": [{"well_id": "SYN01", "passed": True, "detail": {}}],
+        }
+        return pd.concat(frames, ignore_index=True), gate2_meta
 
     root = Path(data_root)
 
@@ -54,13 +69,24 @@ def _assemble_dataset(
         raise FileNotFoundError(f"No wells under {root}")
     spatial: SpatialIndex = build_spatial_index([(w, d) for w, d, _s, _t in loaded])
 
+    from rwt.gates import gate_middle_out_mask
+
     n = 0
     for wid, df, sp, tw in loaded:
+        # Gate 2 first — record every result before label filters
+        g2 = gate_middle_out_mask(df, wid)
+        gate2_results.append(
+            {"well_id": wid, "passed": bool(g2.passed), "detail": g2.detail}
+        )
+        if not g2.passed:
+            print(f"[GATE2 SKIP] {wid}: {g2.detail}", flush=True)
+            continue
         tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
         tvt_arr = df[tvt_col].to_numpy()
         pred_idx = np.asarray(sp.predict_idx, dtype=int)
         labeled_pred = pred_idx[pd.notna(tvt_arr[pred_idx])]
         if len(labeled_pred) == 0:
+            unlabeled_skips.append(wid)
             continue
         frames.append(
             build_station_frame(
@@ -71,12 +97,24 @@ def _assemble_dataset(
                 spatial_index=spatial,
             )
         )
+        passed_wells.append(wid)
         n += 1
         if n % 10 == 0:
             print(f"assembled {n} wells…", flush=True)
     if not frames:
         raise FileNotFoundError(f"No labeled predict stations under {root}")
-    return pd.concat(frames, ignore_index=True)
+    rejected = [r for r in gate2_results if not r["passed"]]
+    gate2_meta = {
+        "name": "MIDDLE_OUT_MASK",
+        "passed": len(rejected) == 0 and len(passed_wells) > 0,
+        "n_passed": len(passed_wells),
+        "n_rejected": len(rejected),
+        "passed_wells": passed_wells,
+        "rejected_wells": rejected,
+        "unlabeled_skips": unlabeled_skips,
+        "results": gate2_results,
+    }
+    return pd.concat(frames, ignore_index=True), gate2_meta
 
 
 def train_lgbm_residual(
@@ -84,24 +122,33 @@ def train_lgbm_residual(
     *,
     n_splits: int = 5,
     seed: int = 42,
-    prior_col: str = DEFAULT_PRIOR_COL,
+    prior_col: str | None = None,
+    gate2_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Residual learner on labeled *toe* (is_predict).
 
-    Target = TVT − prior  with prior = heel last-known by default (beat-table law).
-    Dual-transport / geometry / neighbor features supply the correction signal.
+    Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (pf_blend).
+    Explicit prior_col is strict (must exist); omitted uses DEFAULT with fallbacks.
     """
     if "is_predict" in stations.columns:
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
     else:
         train_df = stations[stations["TVT"].notna()].copy()
+    if prior_col is None:
+        prior_col = resolve_prior_column(train_df, DEFAULT_PRIOR_COL, strict=False)
+    else:
+        prior_col = resolve_prior_column(train_df, prior_col, strict=True)
+    # require finite TVT and selected prior (PF returns NaN when no TVT ref)
+    fin = np.isfinite(train_df["TVT"].to_numpy(dtype=float)) & np.isfinite(
+        train_df[prior_col].to_numpy(dtype=float)
+    )
+    train_df = train_df.loc[fin].copy()
     if len(train_df) < 50:
         raise ValueError(
             f"Insufficient labeled prediction-zone rows for residual train "
-            f"(n={len(train_df)}). Need is_predict & TVT labels."
+            f"(n={len(train_df)}). Need finite TVT and {prior_col} values."
         )
-    prior_col = resolve_prior_column(train_df, prior_col)
     X, cols = feature_matrix(train_df)
     y = train_df["TVT"].to_numpy(dtype=float)
     prior = train_df[prior_col].to_numpy(dtype=float)
@@ -168,24 +215,83 @@ def train_lgbm_residual(
     from rwt.provenance import seal_artifact
 
     k = resolve_kernel()
-    # Baselines and OOF share the same row set (oof_mask) so beats_* is valid
+    # Baselines and OOF share the same finite OOF-row set so beats_* is valid
     row_m = oof_mask if oof_mask.any() else np.ones(len(train_df), dtype=bool)
     y_m = y[row_m]
+    oof_m = oof_tvt[row_m]
+    shared = np.isfinite(y_m) & np.isfinite(oof_m)
+    y_s = y_m[shared]
+    oof_s = oof_m[shared]
+    oof_r = rmse(y_s, oof_s)
     baseline_rmse: dict[str, float] = {}
     for name, col in (
         ("last_known", "prior_last_tvt"),
         ("flat_formation", "prior_flat_tvt"),
         ("linear_md_extrap", "prior_extrap_tvt"),
         ("dual_transport_mid", "prior_mid"),
+        ("heel_dip_stack", "prior_dip_stack"),
+        ("particle_filter", "prior_pf_tvt"),
+        ("pf_blend_last_known", "prior_pf_blend"),
+        ("pf_bag", "prior_pf_bag"),
+        ("prior_stack", "prior_stack"),
     ):
-        if col in train_df.columns:
-            baseline_rmse[name] = rmse(
-                y_m, train_df[col].to_numpy(dtype=float)[row_m]
-            )
-    oof_r = rmse(y_m, oof_tvt[row_m])
+        if col not in train_df.columns:
+            continue
+        b = train_df[col].to_numpy(dtype=float)[row_m]
+        if not np.isfinite(b[shared]).all():
+            continue  # skip baselines with holes on the OOF row set
+        baseline_rmse[name] = rmse(y_s, b[shared])
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
+
+    # ── Gates 1+3 (Gate 2 is structural at assemble time) ───────────────
+    from rwt.gates import gate_ip_fence, gate_residual_acceptance
+    from rwt.simd import cpu_feature_report
+
+    prior_m = prior[row_m][shared]
+    lk_m = None
+    if "prior_last_tvt" in train_df.columns:
+        lk_full = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
+        if np.isfinite(lk_full[shared]).all():
+            lk_m = lk_full[shared]
+    gate3 = gate_residual_acceptance(
+        y_s,
+        oof_s,
+        prior_m,
+        prior_name=prior_col,
+        last_known_pred=lk_m,
+    )
+    gate1 = gate_ip_fence()
+    use_residual = bool(gate3.passed)
+    # On reject: choose pure prior with best OOF among prior_col and last_known
+    serve_prior_col = prior_col
+    if use_residual:
+        print(
+            f"[GATE PASS] Residual head accepted: OOF {gate3.detail['oof_rmse_residual']:.3f} "
+            f"<= prior({prior_col}) {gate3.detail['oof_rmse_prior']:.3f}",
+            flush=True,
+        )
+        final_models = models
+        final_prior_type = f"{prior_col}_plus_lgbm_residual"
+        final_oof = oof_r
+    else:
+        cand = {prior_col: float(gate3.detail["oof_rmse_prior"])}
+        # exact 0.0 is finite and valid — never use truthiness on the score
+        lk_rmse = gate3.detail.get("oof_rmse_last_known")
+        if lk_m is not None and lk_rmse is not None and np.isfinite(lk_rmse):
+            cand["prior_last_tvt"] = float(lk_rmse)
+        serve_prior_col = min(cand, key=cand.get)
+        final_oof = cand[serve_prior_col]
+        final_models = []
+        final_prior_type = f"pure_{serve_prior_col}"
+        print(
+            f"[GATE REJECT] Residual overfitted "
+            f"(OOF {gate3.detail['oof_rmse_residual']:.3f}). "
+            f"Falling back to pure prior '{serve_prior_col}' (OOF {final_oof:.3f}).",
+            flush=True,
+        )
+
     report = {
         "ok": True,
         "n_stations": int(len(train_df)),
@@ -196,24 +302,42 @@ def train_lgbm_residual(
         "cv_rmse_mean": float(np.mean(fold_scores)),
         "cv_rmse_std": float(np.std(fold_scores)),
         "oof_rmse": oof_r,
+        "oof_rmse_selected": final_oof,
         "baseline_rmse": baseline_rmse,
         "beats_baselines": beats,
         "kernel_id": k.kernel_id(),
         "kernel_private": k.is_private(),
-        "prior_column": prior_col,
+        "prior_column": serve_prior_col if not use_residual else prior_col,
+        "train_prior_column": prior_col,
+        "final_prior_type": final_prior_type,
+        "use_residual": use_residual,
+        "gates": [
+            gate1.to_dict(),
+            gate2_meta
+            if gate2_meta is not None
+            else {
+                "name": "MIDDLE_OUT_MASK",
+                "passed": None,
+                "evaluated": False,
+                "note": "not evaluated (caller assembled stations externally)",
+            },
+            gate3.to_dict(),
+        ],
+        "cpu": cpu_feature_report(),
         "law": (
-            "GroupKFold by well; residual on heel last-known prior; "
-            "dual-transport + SE(3) E_ref + spatial neighbor as features; "
-            "toe residual zone; open-core public kernel default"
+            "GroupKFold by well; residual gated by prior OOF; "
+            "particle-filter typewell track; SO(3)/SE(3)/spatial features; "
+            "open-core public kernel fail-closed"
         ),
         "license": "AGPL-3.0-or-later",
     }
     report["provenance"] = seal_artifact(report, kind="cv_report")
     return {
         "report": report,
-        "models": models,
+        "models": final_models,
         "feature_cols": cols,
-        "prior_column": prior_col,
+        "prior_column": report["prior_column"],
+        "use_residual": use_residual,
     }
 
 
@@ -226,21 +350,24 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument(
         "--prior-col",
-        default=DEFAULT_PRIOR_COL,
-        help="residual base prior column (default: prior_last_tvt)",
+        default=None,
+        help=f"residual base prior column (default: {DEFAULT_PRIOR_COL})",
     )
     args = ap.parse_args(argv)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    stations = _assemble_dataset(
+    stations, gate2_meta = _assemble_dataset(
         Path(args.data) if args.data else None,
         synthetic=args.synthetic or not args.data,
         max_wells=args.max_wells,
     )
     stations.to_csv(out / "stations.csv", index=False)
     result = train_lgbm_residual(
-        stations, n_splits=args.folds, prior_col=args.prior_col
+        stations,
+        n_splits=args.folds,
+        prior_col=args.prior_col,
+        gate2_meta=gate2_meta,
     )
     report = result["report"]
     (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -252,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
                 "models": result["models"],
                 "feature_cols": result["feature_cols"],
                 "prior_column": result["prior_column"],
+                "use_residual": result.get("use_residual", True),
             },
             out / "model.joblib",
         )

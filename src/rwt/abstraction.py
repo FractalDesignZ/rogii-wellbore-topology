@@ -20,7 +20,10 @@ from rwt.baselines import (
 )
 from rwt.features import build_station_frame, feature_matrix
 from rwt.geometry import trajectory_geometry_features
+from rwt.gates import gate_ip_fence, gate_middle_out_mask, run_entry_gates
+from rwt.geometry import trajectory_in_dip_frame
 from rwt.middle_out import MiddleOutSplit, known_prior_tvt, resolve_middle_out
+from rwt.simd import cpu_feature_report
 
 
 class Mode(str, Enum):
@@ -55,10 +58,13 @@ class ModeTrace:
 
 
 def mode_restrict() -> dict[str, Any]:
+    gates = run_entry_gates()
     return {
         "target": "TVT",
         "metric": "RMSE(dTVT)",
         "cv": "GroupKFold by well_id",
+        "gates_boot": gates,
+        "cpu": cpu_feature_report(),
         "non_goals": [
             "peptide ramachandran",
             "closed holonomy as TVT",
@@ -74,8 +80,19 @@ def mode_geom(lateral: pd.DataFrame) -> dict[str, Any]:
         lateral["Y"].to_numpy(),
         lateral["Z"].to_numpy(),
     )
-    # JSON-safe
-    return {k: (float(v) if isinstance(v, (float, np.floating, int)) else v) for k, v in g.items()}
+    dip = trajectory_in_dip_frame(
+        lateral["X"].to_numpy(),
+        lateral["Y"].to_numpy(),
+        lateral["Z"].to_numpy(),
+    )
+    g["dip_azimuth_deg"] = dip["azimuth_deg"]
+    g["dip_deg"] = dip["dip_deg"]
+    # JSON-safe scalars only for payload
+    return {
+        k: (float(v) if isinstance(v, (float, np.floating, int)) else v)
+        for k, v in g.items()
+        if np.isscalar(v) or isinstance(v, (str, bool))
+    }
 
 
 def mode_middle_out(lateral: pd.DataFrame, well_id: str) -> MiddleOutSplit:

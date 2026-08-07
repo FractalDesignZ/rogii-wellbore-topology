@@ -54,13 +54,33 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         .fillna(0.0)
     )
     Xn = X.to_numpy()
-    # Must match residual base used at train time (stored on model)
-    preferred = model_blob.get("prior_column") or "prior_last_tvt"
-    prior_col = resolve_prior_column(stations, preferred)
+    # Train-serve contract: stored prior_column is strict (no silent swap).
+    # Legacy blobs without the key fall back through PRIOR_FALLBACKS.
+    stored_prior = model_blob.get("prior_column")
+    if stored_prior:
+        prior_col = resolve_prior_column(stations, str(stored_prior), strict=True)
+    else:
+        prior_col = resolve_prior_column(stations, "prior_last_tvt", strict=False)
     prior = stations[prior_col].to_numpy(dtype=float)
-    preds = [m.predict(Xn) for m in model_blob["models"]]
+    if not np.isfinite(prior).all():
+        n_bad = int((~np.isfinite(prior)).sum())
+        raise ValueError(
+            f"non-finite serving prior '{prior_col}' on {n_bad}/{len(prior)} rows; "
+            "refuse silent fill — fix assemble/prior before submit"
+        )
+    models = model_blob.get("models") or []
+    use_residual = bool(model_blob.get("use_residual", True)) and len(models) > 0
+    if not use_residual:
+        return prior
+    preds = [m.predict(Xn) for m in models]
     res = np.mean(np.vstack(preds), axis=0)
-    return prior + res
+    out = prior + res
+    if not np.isfinite(out).all():
+        n_bad = int((~np.isfinite(out)).sum())
+        raise ValueError(
+            f"non-finite residual predictions on {n_bad}/{len(out)} rows"
+        )
+    return out
 
 
 def assemble_split_stations(
