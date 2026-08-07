@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,8 @@ def assemble_wells_parallel(
     gate2_results: list[dict[str, Any]] = []
     unlabeled_skips: list[str] = []
     passed_wells: list[str] = []
+    seal_phase_s = 0.0
+    seal_per_well: list[dict[str, Any]] = []
 
     if progress is not None:
         progress.state["workers"] = n_workers
@@ -174,7 +177,7 @@ def assemble_wells_parallel(
             progress.set_phase(
                 "spatial_attach",
                 total=len(loaded),
-                message="neighbor features on assembled frames",
+                message="neighbor features + seal on assembled frames",
             )
         for wid, df, sp, tw in loaded:
             r = by_id.get(wid) or {
@@ -199,12 +202,20 @@ def assemble_wells_parallel(
                 continue
             frame = pd.read_pickle(path)
             # Parent: attach neighbors then seal once (finalize + kernel + watermark)
+            t0 = time.perf_counter()
             frame = attach_spatial_features(frame, df, spatial, wid)
             frame = seal_station_frame(frame, df, sp, tw)
+            dt = time.perf_counter() - t0
+            seal_phase_s += dt
+            seal_per_well.append({"well_id": wid, "seconds": round(dt, 4), "n": len(frame)})
             frames.append(frame)
             passed_wells.append(wid)
             if progress is not None:
-                progress.tick(item=wid, ok=True, message=f"spatial n={len(frame)}")
+                progress.tick(
+                    item=wid,
+                    ok=True,
+                    message=f"spatial+seal n={len(frame)} {dt:.3f}s",
+                )
     finally:
         # best-effort cleanup of temp pickles
         try:
@@ -227,5 +238,8 @@ def assemble_wells_parallel(
         "workers": n_workers,
         "compute": cfg,
         "ipc": "disk_pickle_no_spatial_in_worker",
+        # parent-side attach_spatial + seal_station_frame cost (kernel visible)
+        "seal_phase_seconds": round(seal_phase_s, 4),
+        "seal_per_well": seal_per_well,
     }
     return frames, gate2_meta

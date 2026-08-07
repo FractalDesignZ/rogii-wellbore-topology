@@ -97,34 +97,37 @@ def finalize_after_spatial(
         if "neighbor_transfer_ok" in stations.columns
         else None
     )
-    # Soft neighbor into residual base (stack) *before* prior_best
-    stack_pre_nb = stations["prior_stack"].to_numpy(dtype=float).copy()
-    if (
-        w_nb > 1e-9
-        and "prior_stack" in stations.columns
-        and nb is not None
-        and nb_ok is not None
-        and np.isfinite(last_f)
-    ):
-        st = stack_pre_nb.copy()
-        ok = np.asarray(nb_ok, dtype=float)
-        nbt = np.asarray(nb, dtype=float)
-        known = (
-            stations["is_known"].to_numpy(dtype=bool)
-            if "is_known" in stations.columns
-            else np.zeros(len(st), dtype=bool)
-        )
-        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st) & ~known
-        if m.any():
-            nb_c = last_f + np.clip(nbt - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
-            w = w_nb * np.clip(ok, 0.0, 1.0)
-            st = np.where(m, (1.0 - w) * st + w * nb_c, st)
-            st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
-            stations["prior_stack"] = st
+    # Soft neighbor into residual base (stack) *before* prior_best (when enabled)
+    stack_pre_nb = np.full(len(stations), np.nan, dtype=float)
+    if "prior_stack" in stations.columns:
+        stack_pre_nb = stations["prior_stack"].to_numpy(dtype=float).copy()
+        if (
+            w_nb > 1e-9
+            and nb is not None
+            and nb_ok is not None
+            and np.isfinite(last_f)
+        ):
+            st = stack_pre_nb.copy()
+            ok = np.asarray(nb_ok, dtype=float)
+            nbt = np.asarray(nb, dtype=float)
+            known = (
+                stations["is_known"].to_numpy(dtype=bool)
+                if "is_known" in stations.columns
+                else np.zeros(len(st), dtype=bool)
+            )
+            m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st) & ~known
+            if m.any():
+                nb_c = last_f + np.clip(nbt - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
+                w = w_nb * np.clip(ok, 0.0, 1.0)
+                st = np.where(m, (1.0 - w) * st + w * nb_c, st)
+                st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
+                stations["prior_stack"] = st
 
     stations["prior_disagreement"] = compute_prior_disagreement(
         last_f,
-        stations["prior_stack"].to_numpy(dtype=float),
+        stations["prior_stack"].to_numpy(dtype=float)
+        if "prior_stack" in stations.columns
+        else stack_pre_nb,
         stations["prior_pf_blend"].to_numpy(dtype=float),
         stations["prior_ncc_tvt"].to_numpy(dtype=float)
         if "prior_ncc_tvt" in stations.columns
@@ -187,19 +190,12 @@ def finalize_after_spatial(
         stations["gr_mismatch_ncc"] = 0.0
         stations["gr_mismatch_abs_stack"] = 0.0
 
-    nb = (
-        stations["neighbor_tvt"].to_numpy(dtype=float)
-        if "neighbor_tvt" in stations.columns
-        else None
-    )
-    nb_ok = (
-        stations["neighbor_transfer_ok"].to_numpy(dtype=float)
-        if "neighbor_transfer_ok" in stations.columns
-        else None
-    )
+    # Reuse nb / nb_ok from soft-neighbor block (no second column read)
     best = blend_prior_best(
         last_f,
-        stations["prior_stack"].to_numpy(dtype=float),
+        stations["prior_stack"].to_numpy(dtype=float)
+        if "prior_stack" in stations.columns
+        else stack_pre_nb,
         stations["prior_pf_blend"].to_numpy(dtype=float),
         stations["prior_local_dip"].to_numpy(dtype=float),
         stations["pf_confidence"].to_numpy(dtype=float),
@@ -217,13 +213,14 @@ def finalize_after_spatial(
         heel_vals = _heel_tvt_values(df, k)
         best = np.asarray(best, dtype=float).copy()
         if "station" in stations.columns:
-            st = stations["station"].to_numpy(dtype=int)
+            st_ids = stations["station"].to_numpy(dtype=int)
             k_to_h = {int(ki): float(hv) for ki, hv in zip(k, heel_vals) if np.isfinite(hv)}
-            for j, s in enumerate(st):
-                if int(s) in k_to_h:
-                    best[j] = k_to_h[int(s)]
+            for row_i, sid in enumerate(st_ids):
+                hv = k_to_h.get(int(sid))
+                if hv is not None:
+                    best[row_i] = hv
         else:
-            for j, (ki, hv) in enumerate(zip(k, heel_vals)):
+            for ki, hv in zip(k, heel_vals):
                 if 0 <= int(ki) < len(best) and np.isfinite(hv):
                     best[int(ki)] = float(hv)
     stations["prior_best"] = best

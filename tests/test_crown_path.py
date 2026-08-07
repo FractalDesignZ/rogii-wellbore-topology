@@ -308,6 +308,7 @@ class TestCrownPath(unittest.TestCase):
             """Non-idempotent: increments sentinel so double-seal would double-count."""
 
             def __init__(self) -> None:
+                PublicKernel.__init__(self)
                 self.augment_calls = 0
 
             def augment_station_frame(self, stations, lateral, typewell):
@@ -418,8 +419,24 @@ class TestCrownPath(unittest.TestCase):
         unknown = ~st["is_known"].to_numpy(dtype=bool)
         ok = st["neighbor_transfer_ok"].to_numpy(dtype=float)
         self.assertTrue((ok[unknown] > 0.55).any())
-        best = st["prior_best"].to_numpy(dtype=float)
-        self.assertGreater(float(np.mean(best[unknown])), last)
+        # Direct blend_prior_best A/B: identical flat inputs + conf; neighbor must pull mean up
+        n_u = int(unknown.sum()) if unknown.any() else len(st)
+        flat = np.full(n_u, last, dtype=float)
+        conf = np.ones(n_u, dtype=float)
+        nb_v = np.full(n_u, last + 10.0, dtype=float)
+        ok_v = np.ones(n_u, dtype=float)
+        without = blend_prior_best(last, flat, flat, flat, conf, max_dev=18.0)
+        with_nb = blend_prior_best(
+            last,
+            flat,
+            flat,
+            flat,
+            conf,
+            neighbor_tvt=nb_v,
+            neighbor_ok=ok_v,
+            max_dev=18.0,
+        )
+        self.assertGreater(float(np.mean(with_nb)), float(np.mean(without)))
 
     def test_stack_soft_nb_weight_moves_stack_when_enabled(self) -> None:
         """STACK_SOFT_NB_WEIGHT>0 must move prior_stack vs pre-nb on unknown rows."""
@@ -457,12 +474,23 @@ class TestCrownPath(unittest.TestCase):
         from rwt.spatial import attach_spatial_features
 
         raw = attach_spatial_features(raw, lat, idx, "tgt")
-        fin = finalize_after_spatial(raw, lat, sp, None, stack_soft_nb_weight=0.12)
-        unknown = ~fin["is_known"].to_numpy(dtype=bool)
-        pre = fin["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
-        stack = fin["prior_stack"].to_numpy(dtype=float)
-        moved = unknown & (np.abs(stack - pre) > 1e-6)
+        # Independent copies so weighted vs default cases do not share mutations
+        fin_w = finalize_after_spatial(
+            raw.copy(), lat, sp, None, stack_soft_nb_weight=0.12
+        )
+        unknown = ~fin_w["is_known"].to_numpy(dtype=bool)
+        pre_w = fin_w["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
+        stack_w = fin_w["prior_stack"].to_numpy(dtype=float)
+        moved = unknown & (np.abs(stack_w - pre_w) > 1e-6)
         self.assertTrue(moved.any())
+        # Production default STACK_SOFT_NB_WEIGHT=0: stack equals pre-neighbor
+        fin0 = finalize_after_spatial(raw.copy(), lat, sp, None)
+        pre0 = fin0["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
+        stack0 = fin0["prior_stack"].to_numpy(dtype=float)
+        unk0 = ~fin0["is_known"].to_numpy(dtype=bool)
+        self.assertTrue(
+            np.allclose(stack0[unk0], pre0[unk0], equal_nan=True, atol=1e-9)
+        )
 
     def test_default_soft_nb_zero_stack_neighbors_still_shift_best(self) -> None:
         """Default weight 0: stack unchanged; prior_best differs vs no-spatial control."""

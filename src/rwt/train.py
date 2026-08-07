@@ -136,6 +136,7 @@ def train_lgbm_residual(
     y_res = y - prior
     groups = train_df["well_id"].astype(str).to_numpy()
     # Toe-weighted residual: far-from-PS stations dominate public error
+    # (well-inverse-count balancing regressed 12w residual 11.06→11.39)
     if "relative_md" in train_df.columns:
         rel = np.abs(train_df["relative_md"].to_numpy(dtype=float))
         rel = np.where(np.isfinite(rel), rel, 0.0)
@@ -150,7 +151,7 @@ def train_lgbm_residual(
 
     n_groups = len(np.unique(groups))
     oof = np.zeros(len(train_df))
-    models = []
+    fold_best_iters: list[int] = []
     fold_scores: list[float] = []
     # Residual head: shallow default; max_precision deepens trees for score war.
     # Thread count from RWT_LGBM_THREADS / OMP (dashboard parallel train sets these).
@@ -236,7 +237,8 @@ def train_lgbm_residual(
                 callbacks=[lgb.early_stopping(early, verbose=False)],
             )
             preds_bag.append(np.asarray(model.predict(Xva), dtype=float))
-            models.append(model)
+            fold_best_iters.append(int(model.best_iteration or n_rounds))
+            # drop fold booster after OOF predict — only best_iteration needed for refit
         pred_res = np.mean(np.vstack(preds_bag), axis=0)
         pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
         oof[va] = pred_res
@@ -359,19 +361,13 @@ def train_lgbm_residual(
         d_full = lgb.Dataset(
             X_serve, label=y_res, weight=sample_w, feature_name=cols
         )
-        # early-stop rounds from median of fold bag models if available
+        # early-stop rounds from fold bag best_iteration only (boosters dropped).
+        # Floor 200 so serve isn't underfit (diag: median best_iteration hit 50).
         n_refit = n_rounds
-        if models:
-            try:
-                bests = [int(m.best_iteration or n_rounds) for m in models]
-                n_refit = max(50, int(np.median(bests)))
-            except (TypeError, ValueError, AttributeError) as e:
-                print(
-                    f"[WARN] n_refit from fold best_iteration failed "
-                    f"({type(e).__name__}: {e}); fallback n_rounds={n_rounds}",
-                    flush=True,
-                )
-                n_refit = n_rounds
+        if fold_best_iters:
+            bests = [int(x) for x in fold_best_iters]
+            n_refit = max(200, int(np.median(bests)), int(np.percentile(bests, 75)))
+            n_refit = min(n_refit, n_rounds)
         final_models = []
         for b in range(n_seed_bag):
             p = dict(params)

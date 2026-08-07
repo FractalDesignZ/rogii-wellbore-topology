@@ -27,7 +27,8 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **8** (crown) | #11 | GR mismatch@stack/last/ncc (heel-cal typewell); `_prior_stack_pre_neighbor` col (no attrs concat break). 12w residual **11.06** |
 | **9** (crown) | #11 | shared `fit_heel_gr_affine` once per well; reject mismatch-delta feat + maxp-12w. Score hold **11.06** |
 | **10** (crown CR) | #11 | **P1 spatial parity**: finalize/seal shared; single kernel after final spatial |
-| **11** (crown) | #11 | `STACK_SOFT_NB_WEIGHT=0` (soft-nb into residual base hurt stack 12.33→12.62 / res 11.06→11.48); neighbors remain in prior_best. Residual hold **11.06** |
+| **11** (crown) | #11 | `STACK_SOFT_NB_WEIGHT=0` (soft-nb into residual base hurt stack 12.33→12.62 / res 11.06→11.48); neighbors remain in prior_best. Residual hold **11.06**. Tests: default-off stack==pre_nb; trusted nb shifts prior_best; weight 0.12 moves stack. |
+| **12** (crown CR) | #11 | fold_best_iters only (no fold boosters); seal-phase timing; finalize guard/reuse nb; CR set-11 test polish |
 
 ## CodeRabbit
 

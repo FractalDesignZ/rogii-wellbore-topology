@@ -57,8 +57,10 @@ Set-10: train/serve spatial seal parity. Set-11: `STACK_SOFT_NB_WEIGHT=0` (neigh
 
 ### Kept (set-5–11 coherence)
 
-Soft neighbor → stack **before** `prior_best`; `prior_disagreement` post-transfer;
-`compute_prior_disagreement` helper + deterministic CR test; residual Δ clip vs base only.
+Soft neighbor → stack **before** `prior_best` **only when** `STACK_SOFT_NB_WEIGHT>0`
+(default **0** by measure — neighbors still enter via `prior_best` + `neighbor_*` feats);
+`prior_disagreement` post-transfer; `compute_prior_disagreement` helper; residual Δ clip vs base only.
+Coverage: default-off stack identity + trusted-neighbor `prior_best` pull (set-11 tests).
 
 ## Measure protocol
 
