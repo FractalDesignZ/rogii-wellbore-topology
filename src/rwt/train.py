@@ -31,20 +31,24 @@ def _assemble_dataset(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Assemble train stations + Gate 2 summary (passed/rejected well ids)."""
     frames: list[pd.DataFrame] = []
-    gate2_meta: dict[str, Any] = {
-        "name": "MIDDLE_OUT_MASK",
-        "passed_wells": [],
-        "rejected_wells": [],
-        "n_passed": 0,
-        "n_rejected": 0,
-    }
+    gate2_results: list[dict[str, Any]] = []
+    unlabeled_skips: list[str] = []
+    passed_wells: list[str] = []
     if synthetic or data_root is None:
         lat, tw = synthetic_well()
         sp = split_by_mask(lat, well_id="SYN01")
         frames.append(build_station_frame(lat, tw, sp))
-        gate2_meta["passed_wells"] = ["SYN01"]
-        gate2_meta["n_passed"] = 1
-        gate2_meta["passed"] = True
+        passed_wells = ["SYN01"]
+        gate2_meta = {
+            "name": "MIDDLE_OUT_MASK",
+            "passed": True,
+            "n_passed": 1,
+            "n_rejected": 0,
+            "passed_wells": passed_wells,
+            "rejected_wells": [],
+            "unlabeled_skips": [],
+            "results": [{"well_id": "SYN01", "passed": True, "detail": {}}],
+        }
         return pd.concat(frames, ignore_index=True), gate2_meta
 
     root = Path(data_root)
@@ -69,21 +73,20 @@ def _assemble_dataset(
 
     n = 0
     for wid, df, sp, tw in loaded:
+        # Gate 2 first — record every result before label filters
         g2 = gate_middle_out_mask(df, wid)
+        gate2_results.append(
+            {"well_id": wid, "passed": bool(g2.passed), "detail": g2.detail}
+        )
         if not g2.passed:
             print(f"[GATE2 SKIP] {wid}: {g2.detail}", flush=True)
-            gate2_meta["rejected_wells"].append(
-                {"well_id": wid, "detail": g2.detail}
-            )
             continue
         tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
         tvt_arr = df[tvt_col].to_numpy()
         pred_idx = np.asarray(sp.predict_idx, dtype=int)
         labeled_pred = pred_idx[pd.notna(tvt_arr[pred_idx])]
         if len(labeled_pred) == 0:
-            gate2_meta["rejected_wells"].append(
-                {"well_id": wid, "detail": {"reason": "no_labeled_predict"}}
-            )
+            unlabeled_skips.append(wid)
             continue
         frames.append(
             build_station_frame(
@@ -94,15 +97,23 @@ def _assemble_dataset(
                 spatial_index=spatial,
             )
         )
-        gate2_meta["passed_wells"].append(wid)
+        passed_wells.append(wid)
         n += 1
         if n % 10 == 0:
             print(f"assembled {n} wells…", flush=True)
     if not frames:
         raise FileNotFoundError(f"No labeled predict stations under {root}")
-    gate2_meta["n_passed"] = len(gate2_meta["passed_wells"])
-    gate2_meta["n_rejected"] = len(gate2_meta["rejected_wells"])
-    gate2_meta["passed"] = gate2_meta["n_passed"] > 0
+    rejected = [r for r in gate2_results if not r["passed"]]
+    gate2_meta = {
+        "name": "MIDDLE_OUT_MASK",
+        "passed": len(rejected) == 0 and len(passed_wells) > 0,
+        "n_passed": len(passed_wells),
+        "n_rejected": len(rejected),
+        "passed_wells": passed_wells,
+        "rejected_wells": rejected,
+        "unlabeled_skips": unlabeled_skips,
+        "results": gate2_results,
+    }
     return pd.concat(frames, ignore_index=True), gate2_meta
 
 
@@ -306,8 +317,9 @@ def train_lgbm_residual(
             if gate2_meta is not None
             else {
                 "name": "MIDDLE_OUT_MASK",
-                "passed": True,
-                "note": "not provided (caller assembled stations externally)",
+                "passed": None,
+                "evaluated": False,
+                "note": "not evaluated (caller assembled stations externally)",
             },
             gate3.to_dict(),
         ],
