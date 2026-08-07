@@ -19,6 +19,7 @@ class ProgressTracker:
         self.log_path = self.out_dir / "progress.log"
         self._lock = threading.Lock()
         self._t0 = time.time()
+        self._phase_t0 = self._t0
         self._heartbeat_stop = threading.Event()
         self.state: dict[str, Any] = {
             "phase": "init",
@@ -34,6 +35,7 @@ class ProgressTracker:
             "events": [],
             "metrics": {},
             "t0": self._t0,
+            "_phase_t0": self._phase_t0,
             "updated_at": self._t0,
             "elapsed_sec": 0.0,
         }
@@ -56,7 +58,9 @@ class ProgressTracker:
         self.state["updated_at"] = now
         self.state["elapsed_sec"] = now - self._t0
         done = int(self.state.get("done") or 0)
-        elapsed_min = max((now - self._t0) / 60.0, 1e-6)
+        phase_t0 = float(getattr(self, "_phase_t0", self._t0) or self._t0)
+        # rate/ETA are per-phase so set_phase resets don't double-count history
+        elapsed_min = max((now - phase_t0) / 60.0, 1e-6)
         self.state["rate_per_min"] = done / elapsed_min
         total = int(self.state.get("total") or 0)
         if total > 0 and self.state["rate_per_min"] > 0 and done < total:
@@ -72,7 +76,12 @@ class ProgressTracker:
             self.state["phase"] = phase
             if total:
                 self.state["total"] = int(total)
+                # per-phase counters (assemble vs spatial_attach must not double-count)
                 self.state["done"] = 0
+                self.state["ok"] = 0
+                self.state["failed"] = 0
+                self._phase_t0 = time.time()
+                self.state["_phase_t0"] = self._phase_t0
             if message:
                 self.state["message"] = message
             self._event(f"phase={phase} total={self.state['total']} {message}".strip())

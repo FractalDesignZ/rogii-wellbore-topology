@@ -25,10 +25,11 @@ def configure_compute_env(*, workers: int | None = None) -> dict[str, Any]:
     n = workers or int(os.environ.get("RWT_WORKERS") or 0) or max(1, (os.cpu_count() or 4) - 1)
     n = max(1, min(n, os.cpu_count() or n))
     blas = int(os.environ.get("RWT_BLAS_THREADS") or 1)
-    os.environ.setdefault("OMP_NUM_THREADS", str(blas))
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", str(blas))
-    os.environ.setdefault("MKL_NUM_THREADS", str(blas))
-    os.environ.setdefault("NUMEXPR_NUM_THREADS", str(blas))
+    # force pin — setdefault would leave inherited OPENBLAS_NUM_THREADS=32 etc.
+    os.environ["OMP_NUM_THREADS"] = str(blas)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(blas)
+    os.environ["MKL_NUM_THREADS"] = str(blas)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(blas)
     os.environ["RWT_WORKERS"] = str(n)
     return {
         "workers": n,
@@ -78,8 +79,17 @@ def _assemble_one_to_disk(
         station_idx=labeled_pred,
         spatial_index=None,
     )
-    path = str(Path(tmp_dir) / f"{wid}.pkl")
-    frame.to_pickle(path, protocol=4)
+    # secure temp path inside tmp_dir (never derive filename from well_id)
+    fd, path = tempfile.mkstemp(dir=tmp_dir, suffix=".pkl", prefix="well_")
+    os.close(fd)
+    try:
+        frame.to_pickle(path, protocol=4)
+    except Exception:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
     return {
         "well_id": wid,
         "passed_gate2": True,
