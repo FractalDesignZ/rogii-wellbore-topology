@@ -263,7 +263,10 @@ class TestCrownPath(unittest.TestCase):
 
     def test_finalize_after_spatial_parity_with_index(self) -> None:
         """Parallel path (None → attach → finalize) == direct spatial_index path."""
+        import unittest.mock as mock
+
         from rwt.features import build_station_frame, seal_station_frame
+        from rwt.kernel_public import PublicKernel
         from rwt.middle_out import resolve_middle_out
         from rwt.spatial import SpatialIndex, attach_spatial_features, well_spatial_node_from_lateral
 
@@ -300,18 +303,45 @@ class TestCrownPath(unittest.TestCase):
                 "GR": 80 + 5 * np.sin(np.linspace(0, 6, 80)),
             }
         )
-        direct = build_station_frame(lat, tw, sp, spatial_index=idx)
+
+        class CountingKernel(PublicKernel):
+            """Non-idempotent: increments sentinel so double-seal would double-count."""
+
+            def __init__(self) -> None:
+                self.augment_calls = 0
+
+            def augment_station_frame(self, stations, lateral, typewell):
+                self.augment_calls += 1
+                out = super().augment_station_frame(stations, lateral, typewell)
+                prev = (
+                    out["kernel_aug_count"].to_numpy(dtype=float)
+                    if "kernel_aug_count" in out.columns
+                    else np.zeros(len(out))
+                )
+                out = out.copy()
+                out["kernel_aug_count"] = prev + 1.0
+                return out
+
+        k_direct = CountingKernel()
+        k_parallel = CountingKernel()
+        with mock.patch("rwt.features.resolve_kernel", return_value=k_direct):
+            direct = build_station_frame(lat, tw, sp, spatial_index=idx)
         # parallel-style worker: seal=False (no spatial / no kernel yet)
-        raw = build_station_frame(lat, tw, sp, spatial_index=None, seal=False)
-        self.assertNotIn("prior_best", raw.columns)  # not sealed yet
-        raw = attach_spatial_features(raw, lat, idx, "tgt")
-        fixed = seal_station_frame(raw, lat, sp, tw)
+        with mock.patch("rwt.features.resolve_kernel", return_value=k_parallel):
+            raw = build_station_frame(lat, tw, sp, spatial_index=None, seal=False)
+            self.assertNotIn("prior_best", raw.columns)  # not sealed yet
+            self.assertEqual(k_parallel.augment_calls, 0)
+            raw = attach_spatial_features(raw, lat, idx, "tgt")
+            fixed = seal_station_frame(raw, lat, sp, tw)
+        self.assertEqual(k_direct.augment_calls, 1)
+        self.assertEqual(k_parallel.augment_calls, 1)
         cols = [
             "prior_stack",
             "prior_disagreement",
             "gr_mismatch_stack",
             "gr_mismatch_abs_stack",
             "prior_best",
+            "kernel_aug_count",
         ]
         for c in cols:
             self.assertIn(c, direct.columns)
@@ -322,6 +352,12 @@ class TestCrownPath(unittest.TestCase):
                 np.allclose(a, b, equal_nan=True, atol=1e-6),
                 f"parity fail on {c}: max|Δ|={np.nanmax(np.abs(a - b))}",
             )
+        # single seal → count is 1, not 2
+        self.assertTrue(np.allclose(direct["kernel_aug_count"].to_numpy(), 1.0))
+        self.assertIn("rwt_wm", direct.columns)
+        self.assertTrue(
+            (direct["rwt_wm"].to_numpy() == fixed["rwt_wm"].to_numpy()).all()
+        )
 
     def test_compute_prior_disagreement_pure(self) -> None:
         """Unit: four-way nanstd matches helper (CR P2 contract)."""
