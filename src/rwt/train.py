@@ -90,19 +90,22 @@ def train_lgbm_residual(
     *,
     n_splits: int = 5,
     seed: int = 42,
-    prior_col: str = DEFAULT_PRIOR_COL,
+    prior_col: str | None = None,
 ) -> dict[str, Any]:
     """
     Residual learner on labeled *toe* (is_predict).
 
-    Target = TVT − prior  with prior = heel last-known by default (beat-table law).
-    Dual-transport / geometry / neighbor features supply the correction signal.
+    Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (pf_blend).
+    Explicit prior_col is strict (must exist); omitted uses DEFAULT with fallbacks.
     """
     if "is_predict" in stations.columns:
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
     else:
         train_df = stations[stations["TVT"].notna()].copy()
-    prior_col = resolve_prior_column(train_df, prior_col, strict=False)
+    if prior_col is None:
+        prior_col = resolve_prior_column(train_df, DEFAULT_PRIOR_COL, strict=False)
+    else:
+        prior_col = resolve_prior_column(train_df, prior_col, strict=True)
     # require finite TVT and selected prior (PF returns NaN when no TVT ref)
     fin = np.isfinite(train_df["TVT"].to_numpy(dtype=float)) & np.isfinite(
         train_df[prior_col].to_numpy(dtype=float)
@@ -303,8 +306,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument(
         "--prior-col",
-        default=DEFAULT_PRIOR_COL,
-        help="residual base prior column (default: prior_last_tvt)",
+        default=None,
+        help=f"residual base prior column (default: {DEFAULT_PRIOR_COL})",
     )
     args = ap.parse_args(argv)
 
