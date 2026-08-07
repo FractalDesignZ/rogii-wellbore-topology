@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from rwt.geometry import station_local_geometry, trajectory_in_dip_frame
-from rwt.gr_match import multi_scale_ncc, ncc_tvt_track
+from rwt.gr_match import gr_mismatch_at_tvt, multi_scale_ncc, ncc_tvt_track
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
 from rwt.particle_track import particle_prior_for_well
@@ -92,9 +92,16 @@ def build_station_frame(
         "prior_ncc_tvt": np.full(n, last_f if np.isfinite(last_f) else np.nan),
         "ncc_track_conf": np.zeros(n),
     }
+    known_full = np.full(n, np.nan, dtype=float)
+    gr_full = (
+        df["GR"].to_numpy(dtype=float)
+        if "GR" in df.columns
+        else np.full(n, np.nan, dtype=float)
+    )
+    tw_gr_arr: np.ndarray | None = None
+    tw_tvt_arr: np.ndarray | None = None
     if typewell is not None and "GR" in typewell.columns and "TVT" in typewell.columns:
         # Same heel lock contract as PF: TVT_input, else TVT on known stations only
-        known_full = np.full(n, np.nan, dtype=float)
         if "TVT_input" in df.columns:
             known_full = np.asarray(df["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
         if len(split.known_idx) and "TVT" in df.columns:
@@ -102,15 +109,12 @@ def build_station_frame(
             tcol = np.asarray(df["TVT"].to_numpy(dtype=float), dtype=float)
             miss = ~np.isfinite(known_full[kidx]) & np.isfinite(tcol[kidx])
             known_full[kidx[miss]] = tcol[kidx[miss]]
-        gr_full = (
-            df["GR"].to_numpy(dtype=float)
-            if "GR" in df.columns
-            else np.full(n, np.nan, dtype=float)
-        )
+        tw_gr_arr = typewell["GR"].to_numpy(dtype=float)
+        tw_tvt_arr = typewell["TVT"].to_numpy(dtype=float)
         ncc_track = ncc_tvt_track(
             gr_full,
-            typewell["GR"].to_numpy(dtype=float),
-            typewell["TVT"].to_numpy(dtype=float),
+            tw_gr_arr,
+            tw_tvt_arr,
             known_tvt=known_full,
             seed_tvt=last_f,
             stride=8,
@@ -362,8 +366,45 @@ def build_station_frame(
         if "prior_ncc_tvt" in stations.columns
         else None,
     )
-    # stash pre-nb stack for diagnostics/tests (not a feature col)
-    stations.attrs["prior_stack_pre_neighbor"] = stack_pre_nb
+    # pre-nb stack for CR tests / diagnostics (not in FEATURE_COLS; safe for concat)
+    stations["_prior_stack_pre_neighbor"] = stack_pre_nb
+
+    # GR↔typewell mismatch at final stalk TVTs (residual head signal; set-8)
+    n_st = len(stations)
+    if tw_gr_arr is not None and tw_tvt_arr is not None and "GR" in stations.columns:
+        lat_gr = stations["GR"].to_numpy(dtype=float)
+        # align known_full to station rows if station index present
+        if "station" in stations.columns:
+            st_idx = stations["station"].to_numpy(dtype=int)
+            kn = np.full(n_st, np.nan, dtype=float)
+            valid = (st_idx >= 0) & (st_idx < len(known_full))
+            kn[valid] = known_full[st_idx[valid]]
+        else:
+            kn = known_full[:n_st] if len(known_full) >= n_st else np.full(n_st, np.nan)
+        stack_tvt = stations["prior_stack"].to_numpy(dtype=float)
+        last_arr = stations["prior_last_tvt"].to_numpy(dtype=float)
+        ncc_tvt = (
+            stations["prior_ncc_tvt"].to_numpy(dtype=float)
+            if "prior_ncc_tvt" in stations.columns
+            else last_arr
+        )
+        stations["gr_mismatch_stack"] = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, stack_tvt, known_tvt=kn
+        )
+        stations["gr_mismatch_last"] = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, last_arr, known_tvt=kn
+        )
+        stations["gr_mismatch_ncc"] = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, ncc_tvt, known_tvt=kn
+        )
+        stations["gr_mismatch_abs_stack"] = np.abs(
+            stations["gr_mismatch_stack"].to_numpy(dtype=float)
+        )
+    else:
+        stations["gr_mismatch_stack"] = 0.0
+        stations["gr_mismatch_last"] = 0.0
+        stations["gr_mismatch_ncc"] = 0.0
+        stations["gr_mismatch_abs_stack"] = 0.0
 
     best = blend_prior_best(
         last_f,
@@ -446,6 +487,10 @@ FEATURE_COLS_DEFAULT = [
     "pf_confidence",
     "pf_tvt_std",
     "prior_disagreement",
+    "gr_mismatch_stack",
+    "gr_mismatch_last",
+    "gr_mismatch_ncc",
+    "gr_mismatch_abs_stack",
     "ncc_16",
     "ncc_32",
     "ncc_64",

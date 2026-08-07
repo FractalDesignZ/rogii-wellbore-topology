@@ -244,6 +244,23 @@ class TestCrownPath(unittest.TestCase):
         # high conf + high ncc moves toward stalk within clamp
         self.assertGreater(float(np.mean(out[-8:])), last + 3.0)
 
+    def test_gr_mismatch_at_true_tvt_near_zero(self) -> None:
+        """At true TVT, heel-calibrated typewell GR should match lateral GR."""
+        from rwt.gr_match import gr_mismatch_at_tvt
+
+        tw_tvt = np.linspace(100, 200, 200)
+        tw_gr = 80 + 20 * np.sin(tw_tvt / 8)
+        n = 60
+        true = 150 + np.linspace(0, 2, n)
+        lat = 80 + 20 * np.sin(true / 8)
+        known = np.full(n, np.nan)
+        known[:15] = true[:15]
+        # affine scale: lateral slightly hotter
+        lat = 1.1 * lat + 3.0
+        mm = gr_mismatch_at_tvt(lat, tw_gr, tw_tvt, true, known_tvt=known)
+        # after heel affine cal, residual at true TVT should be small on toe
+        self.assertLess(float(np.nanmean(np.abs(mm[15:]))), 5.0)
+
     def test_compute_prior_disagreement_pure(self) -> None:
         """Unit: four-way nanstd matches helper (CR P2 contract)."""
         from rwt.features import compute_prior_disagreement
@@ -298,9 +315,12 @@ class TestCrownPath(unittest.TestCase):
         last = float(st["prior_last_tvt"].iloc[0])
         unknown = ~st["is_known"].to_numpy(dtype=bool)
         stack = st["prior_stack"].to_numpy(dtype=float)
-        pre = st.attrs.get("prior_stack_pre_neighbor")
-        self.assertIsNotNone(pre, "build_station_frame must stash pre-neighbor stack")
-        pre = np.asarray(pre, dtype=float)
+        self.assertIn(
+            "_prior_stack_pre_neighbor",
+            st.columns,
+            "build_station_frame must stash pre-neighbor stack column",
+        )
+        pre = st["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
         # prove soft-neighbor (not PF/NCC alone) changed stack on unknown rows
         nb_moved = unknown & np.isfinite(stack) & np.isfinite(pre) & (np.abs(stack - pre) > 1e-6)
         self.assertTrue(

@@ -16,7 +16,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft raw; clamped to last±18 inside stack/prior_best) |
-| **Residual** | Default base **`prior_stack`**; toe-weighted L2; dual seed bag; Δ clip vs base ±18; fold-safe medians; Gate3 |
+| **Residual** | Default base **`prior_stack`**; toe-weighted L2; dual seed bag; **GR mismatch@stalk** features; Δ clip vs base ±18; fold-safe medians; Gate3 |
 | **Clamp** | Published stack/prior_best/NCC/PF ≤ last±18 (`MAX_TVT_DEV`); residual Δ ≤ base±18 (may leave last band when G3 wins). Raw neighbor_tvt feature may still show ±40 offset before blend. |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
@@ -26,17 +26,20 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-5 / set-4 honest)
+## Measure (12w crown set-8)
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| residual on **prior_stack** (Gate3 ACCEPT) | **11.08** honest OOF |
+| residual on **prior_stack** (Gate3 ACCEPT) | **11.06** (was 11.08) |
+| residual set-4/7 honest | 11.08 |
 | residual set-3 | 11.27 |
 | residual on prior_last_tvt | 12.30 |
 | prior_stack (best pure) | **12.33** |
 | prior_best (stack-led) | **12.65** |
 | last_known | 13.41 |
 | prior_ncc (seed-local) | **16.27** |
+
+Set-8: `gr_mismatch_{stack,last,ncc}` = lateral GR − heel-calibrated typewell GR at stalk TVT.
 
 ### Rejected A/B (set-5 / set-7)
 
