@@ -376,7 +376,8 @@ FEATURE_COLS_DEFAULT = [
     "neighbor_offset",
     # multi-neighbor + interaction terms (feat/all-suggestions-integration)
     "neighbor_tvt_wmean",
-    "neighbor_n_close",
+    "neighbor_count_close",
+    "neighbor_weight_sum",
     "pf_conf_x_rel_md",
     "curv_x_pf_std",
     "ncc_peak",
