@@ -360,6 +360,21 @@ class TestCrownPath(unittest.TestCase):
             (direct["rwt_wm"].to_numpy() == fixed["rwt_wm"].to_numpy()).all()
         )
 
+    def test_select_n_refit_floor_p75_cap(self) -> None:
+        """Serve n_refit: floor 200, p75 over median, cap at n_rounds."""
+        from rwt.train import select_n_refit
+
+        # all early-stop < 200 → floor
+        self.assertEqual(select_n_refit([40, 50, 60], 1200, floor=200), 200)
+        # p75 beats median: [100, 100, 100, 400] → med 100, p75 175 → floor 200
+        self.assertEqual(select_n_refit([100, 100, 100, 400], 1200, floor=200), 200)
+        # p75 above floor: [100, 200, 300, 800] → med 250, p75 425
+        self.assertEqual(select_n_refit([100, 200, 300, 800], 1200, floor=200), 425)
+        # cap at n_rounds
+        self.assertEqual(select_n_refit([900, 1000, 1100, 1500], 1000, floor=200), 1000)
+        # empty → n_rounds
+        self.assertEqual(select_n_refit([], 800, floor=200), 800)
+
     def test_compute_prior_disagreement_pure(self) -> None:
         """Unit: four-way nanstd matches helper (CR P2 contract)."""
         from rwt.features import compute_prior_disagreement

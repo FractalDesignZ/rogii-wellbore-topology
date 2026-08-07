@@ -24,6 +24,32 @@ def _typewell_for_well(root: Path, well_id: str, split: str = "train") -> Path |
     return typewell_path_for_well(root, well_id, split)
 
 
+def select_n_refit(
+    fold_best_iters: list[int] | tuple[int, ...] | np.ndarray,
+    n_rounds: int,
+    *,
+    floor: int = 200,
+) -> int:
+    """
+    Serve refit boost rounds from OOF early-stop history.
+
+    Uses max(floor, median, p75) of fold/seed best_iteration, capped at n_rounds.
+    Empty history → n_rounds.
+    """
+    n_rounds = max(1, int(n_rounds))
+    floor = max(1, int(floor))
+    if fold_best_iters is None or len(fold_best_iters) == 0:
+        return n_rounds
+    bests = np.asarray([int(x) for x in fold_best_iters], dtype=float)
+    if not np.isfinite(bests).any():
+        return n_rounds
+    bests = bests[np.isfinite(bests)]
+    if len(bests) == 0:
+        return n_rounds
+    n_refit = max(floor, int(np.median(bests)), int(np.percentile(bests, 75)))
+    return int(min(n_refit, n_rounds))
+
+
 def _assemble_dataset(
     data_root: Path | None,
     *,
@@ -362,12 +388,7 @@ def train_lgbm_residual(
             X_serve, label=y_res, weight=sample_w, feature_name=cols
         )
         # early-stop rounds from fold bag best_iteration only (boosters dropped).
-        # Floor 200 so serve isn't underfit (diag: median best_iteration hit 50).
-        n_refit = n_rounds
-        if fold_best_iters:
-            bests = [int(x) for x in fold_best_iters]
-            n_refit = max(200, int(np.median(bests)), int(np.percentile(bests, 75)))
-            n_refit = min(n_refit, n_rounds)
+        n_refit = select_n_refit(fold_best_iters, n_rounds, floor=200)
         final_models = []
         for b in range(n_seed_bag):
             p = dict(params)
