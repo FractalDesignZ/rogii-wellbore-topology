@@ -523,6 +523,23 @@ def train_lgbm_residual(
         else:
             final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
+        # Prefer adaptive OOF when per-well fire beats global residual (still
+        # Gate3-accepted: residual head allowed only after global pass).
+        a_oof = gate3_pw.detail.get("adaptive_oof_rmse")
+        if (
+            a_oof is not None
+            and np.isfinite(float(a_oof))
+            and float(a_oof) < float(final_oof) - 1e-12
+        ):
+            final_oof = float(a_oof)
+            final_prior_type = f"{final_prior_type}_adaptive"
+            print(
+                f"[ADAPTIVE] selected OOF {final_oof:.3f} "
+                f"(global residual {oof_r:.3f}; "
+                f"fire={gate3_pw.detail.get('n_fire')} "
+                f"fallback={gate3_pw.detail.get('n_fallback')})",
+                flush=True,
+            )
     else:
         n_refit = None
         cand: dict[str, float] = {prior_col: float(gate3.detail["oof_rmse_prior"])}

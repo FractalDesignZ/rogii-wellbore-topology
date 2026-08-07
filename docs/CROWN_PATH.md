@@ -26,23 +26,26 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-18 — 4-seed deep + n_refit p90)
+## Measure (12w crown set-19 — all-suggestions reassemble)
+
+Honest **full reassemble** after merge of `feat/all-suggestions-integration` into
+crown/main (multi-neighbor + adaptive PF + interactions). Older residual-only
+smokes on pre-merge stations (**10.825**) are **not** Gate3-comparable.
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| **single deep prior_best 4-seed** (set-18) | **10.825** |
-| single deep prior_best 3-seed (set-17) | 10.830 |
-| dual deep 0.75/0.25 (set-16) | 10.836 |
-| drop base from X / drop ncc lags | 10.944 (rejected) |
-| deep lr=0.015 / leaves=95 / l2=2 | ≥10.84 (rejected) |
-| dual residual shallow 0.75/0.25 | 10.948 |
-| single deep prior_stack | 11.170 |
-| prior_stack (best pure) | **12.33** |
-| prior_best (pure) | 12.69 |
+| residual deep prior_best 4-seed (set-19 full assemble) | **11.045** |
+| adaptive residual (2/12 wells fire) | **11.040** |
+| residual-only on pre-merge stations (hist) | 10.825 |
+| pure **prior_stack** (set-19) | **12.148** |
+| pure prior_stack (set-18 hist) | 12.33 |
+| pure prior_best (set-19) | 12.64 |
 | last_known | 13.41 |
 
-Set-17: dual off + deep always. Set-18: deep seed bag **4** (mean); serve n_refit
-uses p90 when floor≥400; rejected feature-drop and other LGBM knobs.
+Set-19: pure stack **improved** (~12.33→12.15) via multi-neighbor + adaptive PF;
+global residual rose vs stale-station smoke (new feature regime). Adaptive serve
+selected when it beats global residual. Branch `feat/all-suggestions-integration`
+is **absorbed** into `main` (content behind; history only).
 
 ### Rejected A/B (set-5 / set-7)
 
@@ -97,16 +100,21 @@ python -m rwt.train --data data/raw --out artifacts/crown_12w --max-wells 12 --f
 
 Law: **restrict → measure (GroupKFold OOF + Gate3) → audit → OPEN|STOP**. Residue never force-OPEN.
 
-## Main integration (all-suggestions + crown)
+## Main integration (all-suggestions + crown) — **on main**
+
+`feat/all-suggestions-integration` was merged via #13 then absorbed into #11 merge
+(`c718b64`). Remote tip of that branch is **behind** main in content (lacks crown
+sets 14–18); do not re-land it. Product stack on `main`:
 
 | Vector | Encoding |
 | --- | --- |
 | Spatial multi-neighbor | `neighbor_tvt_wmean`, `neighbor_weight_sum`, `neighbor_count_close` |
 | Residual interactions | `pf_conf_x_rel_md`, `curv_x_pf_std`, `ncc_peak`, `ncc_lag_consistency`, `nb_offset_x_ok` |
-| Adaptive Gate3 | `gate_residual_acceptance_per_well` + serve conf gate (global Gate3 still hard law) |
+| Adaptive Gate3 | `gate_residual_acceptance_per_well` + serve conf gate (global Gate3 hard law) |
 | Adaptive PF | process noise from prior particle std; dynamic GR shape weight |
+| Crown residual | single deep `prior_best`, 4-seed, dual off, n_refit floor 400+p90 |
 | Single seal | `finalize_after_spatial` → interactions → kernel → watermark once |
 | GPU / neural | Optional `neural_residual` (CUDA TCN); main train CPU under RESTRICT |
 | Private kernel | Fail-closed stub; beam/DTW/lattice offline |
 
-Measure: same GroupKFold OOF + Gate3 seal protocol.
+Measure: `scripts/measure_adaptive_delta.py` or `python -m rwt.train …`

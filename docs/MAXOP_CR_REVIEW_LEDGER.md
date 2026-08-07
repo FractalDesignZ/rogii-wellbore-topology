@@ -35,7 +35,8 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **16** (crown CR) | #11 | named dual weights by base (not position); thread-pool seal (CR serial seal); deep LGBM under dual → **10.836**; reject `prior_delta_best_stack` feat 10.955; tests weight-by-name. |
 | **17** (crown) | #11 | dual residual **off** (dilutes best head); single deep `prior_best` **10.830**; `CROWN_DEEP_RESIDUAL=True`; n_refit floor 400 deep; dual infrastructure retained opt-in. |
 | **18** (crown) | #11 | deep **4-seed bag** → **10.825**; n_refit p90 when deep floor≥400; reject drop-base-from-X 10.944 and LGBM lr/leaves/l2 A/B. |
-| **19** (merge) | #11 | merge `main` all-suggestions (multi-neighbor, interactions, adaptive Gate3/serve, adaptive PF noise) into crown single-seal path; research architecture map in CROWN_PATH. |
+| **19** (merge) | #11 | merge all-suggestions into crown single-seal path; research architecture map in CROWN_PATH. |
+| **19b** (main) | landed | Full 12w reassemble: residual **11.045** / adaptive **11.040** (2 fire); pure stack **12.148** (↑ vs 12.33); selected prefers adaptive when better; `feat/all-suggestions-integration` content fully on main. |
 
 ## CodeRabbit
 
