@@ -177,6 +177,8 @@ def train_lgbm_residual(
         ("flat_formation", "prior_flat_tvt"),
         ("linear_md_extrap", "prior_extrap_tvt"),
         ("dual_transport_mid", "prior_mid"),
+        ("particle_filter", "prior_pf_tvt"),
+        ("pf_blend_last_known", "prior_pf_blend"),
     ):
         if col in train_df.columns:
             baseline_rmse[name] = rmse(
@@ -202,9 +204,9 @@ def train_lgbm_residual(
         "kernel_private": k.is_private(),
         "prior_column": prior_col,
         "law": (
-            "GroupKFold by well; residual on heel last-known prior; "
-            "dual-transport + SE(3) E_ref + spatial neighbor as features; "
-            "toe residual zone; open-core public kernel default"
+            "GroupKFold by well; residual on PF+last-known blend prior; "
+            "particle-filter typewell track is primary geosteering prior; "
+            "SE(3)/dual/spatial as features; toe residual zone; open-core public"
         ),
         "license": "AGPL-3.0-or-later",
     }

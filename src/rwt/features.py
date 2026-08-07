@@ -10,6 +10,7 @@ from rwt.geometry import station_local_geometry
 from rwt.gr_match import multi_scale_ncc
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
+from rwt.particle_track import particle_prior_for_well
 from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
 
@@ -40,6 +41,8 @@ def build_station_frame(
         df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
     )
     dual = dual_transport_prior(df, split)
+    # Contest-core prior: particle-filter GR↔typewell tracker blended with last-known
+    pf = particle_prior_for_well(df, typewell, split)
 
     tw_gr = typewell["GR"].to_numpy(dtype=float) if typewell is not None and "GR" in typewell else None
     tw_tvt = (
@@ -62,6 +65,21 @@ def build_station_frame(
         is_predict_mask[np.asarray(split.predict_idx, dtype=int)] = True
     if len(split.known_idx):
         is_known_mask[np.asarray(split.known_idx, dtype=int)] = True
+
+    # Sparse multi-scale NCC (every 8th station) — PF is primary correlation; NCC is auxiliary
+    ncc_cache: dict[int, dict[str, float]] = {}
+    if tw_gr is not None:
+        for i in indices:
+            if int(i) % 8 == 0 or int(i) == int(indices[0]) or int(i) == int(list(indices)[-1]):
+                ncc_cache[int(i)] = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=int(i))
+        # fill gaps by nearest cached
+        if ncc_cache:
+            keys = sorted(ncc_cache.keys())
+            for i in indices:
+                ii = int(i)
+                if ii not in ncc_cache:
+                    nearest = min(keys, key=lambda k: abs(k - ii))
+                    ncc_cache[ii] = ncc_cache[nearest]
 
     for i in indices:
         gi = float(gr[i])
@@ -92,16 +110,20 @@ def build_station_frame(
             "prior_forward_tvt": float(dual["prior_forward"][i]),
             "prior_backward_tvt": float(dual["prior_backward"][i]),
             "prior_mid": float(dual["prior_mid"][i]),
-            # Alias of prior_forward for baseline_linear_md beat-table (not a second feature)
             "prior_extrap_tvt": float(dual["prior_forward"][i]),
+            "prior_pf_tvt": float(pf["prior_pf_tvt"][i]),
+            "prior_pf_blend": float(pf["prior_pf_blend"][i]),
+            "pf_confidence": float(pf["pf_confidence"][i]),
+            "pf_tvt_std": float(pf["pf_tvt_std"][i])
+            if np.isfinite(pf["pf_tvt_std"][i])
+            else 0.0,
         }
         for form_col in ("ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA"):
             if form_col in df.columns and pd.notna(df.loc[i, form_col]):
                 row[f"form_{form_col}"] = float(df.loc[i, form_col])
                 row[f"z_minus_{form_col}"] = row["Z"] - float(df.loc[i, form_col])
-        if tw_gr is not None:
-            m = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=i)
-            row.update(m)
+        if int(i) in ncc_cache:
+            row.update(ncc_cache[int(i)])
         if "TVT" in df.columns and pd.notna(df.loc[i, "TVT"]):
             row["TVT"] = float(df.loc[i, "TVT"])
         elif "TVT_true" in df.columns:
@@ -150,7 +172,10 @@ FEATURE_COLS_DEFAULT = [
     "prior_forward_tvt",
     "prior_backward_tvt",
     "prior_mid",
-    # prior_extrap_tvt omitted from features (duplicate of prior_forward_tvt; kept on frame for baselines)
+    "prior_pf_tvt",
+    "prior_pf_blend",
+    "pf_confidence",
+    "pf_tvt_std",
     "ncc_16",
     "ncc_32",
     "ncc_64",

@@ -3,9 +3,14 @@ from __future__ import annotations
 
 import pandas as pd
 
-# Residual base prior: strongest public heel prior (CERTIFY beat-table intent).
-DEFAULT_PRIOR_COL = "prior_last_tvt"
-PRIOR_FALLBACKS = ("prior_last_tvt", "prior_mid", "prior_flat_tvt")
+# Residual base: PF+last-known blend first (crown path); never below last-known floor.
+DEFAULT_PRIOR_COL = "prior_pf_blend"
+PRIOR_FALLBACKS = (
+    "prior_pf_blend",
+    "prior_last_tvt",
+    "prior_mid",
+    "prior_flat_tvt",
+)
 
 
 def resolve_prior_column(
