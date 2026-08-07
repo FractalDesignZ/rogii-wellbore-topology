@@ -28,13 +28,24 @@ def _assemble_dataset(
     *,
     synthetic: bool = False,
     max_wells: int = 0,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Assemble train stations + Gate 2 summary (passed/rejected well ids)."""
     frames: list[pd.DataFrame] = []
+    gate2_meta: dict[str, Any] = {
+        "name": "MIDDLE_OUT_MASK",
+        "passed_wells": [],
+        "rejected_wells": [],
+        "n_passed": 0,
+        "n_rejected": 0,
+    }
     if synthetic or data_root is None:
         lat, tw = synthetic_well()
         sp = split_by_mask(lat, well_id="SYN01")
         frames.append(build_station_frame(lat, tw, sp))
-        return pd.concat(frames, ignore_index=True)
+        gate2_meta["passed_wells"] = ["SYN01"]
+        gate2_meta["n_passed"] = 1
+        gate2_meta["passed"] = True
+        return pd.concat(frames, ignore_index=True), gate2_meta
 
     root = Path(data_root)
 
@@ -61,12 +72,18 @@ def _assemble_dataset(
         g2 = gate_middle_out_mask(df, wid)
         if not g2.passed:
             print(f"[GATE2 SKIP] {wid}: {g2.detail}", flush=True)
+            gate2_meta["rejected_wells"].append(
+                {"well_id": wid, "detail": g2.detail}
+            )
             continue
         tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
         tvt_arr = df[tvt_col].to_numpy()
         pred_idx = np.asarray(sp.predict_idx, dtype=int)
         labeled_pred = pred_idx[pd.notna(tvt_arr[pred_idx])]
         if len(labeled_pred) == 0:
+            gate2_meta["rejected_wells"].append(
+                {"well_id": wid, "detail": {"reason": "no_labeled_predict"}}
+            )
             continue
         frames.append(
             build_station_frame(
@@ -77,12 +94,16 @@ def _assemble_dataset(
                 spatial_index=spatial,
             )
         )
+        gate2_meta["passed_wells"].append(wid)
         n += 1
         if n % 10 == 0:
             print(f"assembled {n} wells…", flush=True)
     if not frames:
         raise FileNotFoundError(f"No labeled predict stations under {root}")
-    return pd.concat(frames, ignore_index=True)
+    gate2_meta["n_passed"] = len(gate2_meta["passed_wells"])
+    gate2_meta["n_rejected"] = len(gate2_meta["rejected_wells"])
+    gate2_meta["passed"] = gate2_meta["n_passed"] > 0
+    return pd.concat(frames, ignore_index=True), gate2_meta
 
 
 def train_lgbm_residual(
@@ -91,6 +112,7 @@ def train_lgbm_residual(
     n_splits: int = 5,
     seed: int = 42,
     prior_col: str | None = None,
+    gate2_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Residual learner on labeled *toe* (is_predict).
@@ -278,7 +300,17 @@ def train_lgbm_residual(
         "train_prior_column": prior_col,
         "final_prior_type": final_prior_type,
         "use_residual": use_residual,
-        "gates": [gate1.to_dict(), gate3.to_dict()],
+        "gates": [
+            gate1.to_dict(),
+            gate2_meta
+            if gate2_meta is not None
+            else {
+                "name": "MIDDLE_OUT_MASK",
+                "passed": True,
+                "note": "not provided (caller assembled stations externally)",
+            },
+            gate3.to_dict(),
+        ],
         "cpu": cpu_feature_report(),
         "law": (
             "GroupKFold by well; residual gated by prior OOF; "
@@ -313,14 +345,17 @@ def main(argv: list[str] | None = None) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    stations = _assemble_dataset(
+    stations, gate2_meta = _assemble_dataset(
         Path(args.data) if args.data else None,
         synthetic=args.synthetic or not args.data,
         max_wells=args.max_wells,
     )
     stations.to_csv(out / "stations.csv", index=False)
     result = train_lgbm_residual(
-        stations, n_splits=args.folds, prior_col=args.prior_col
+        stations,
+        n_splits=args.folds,
+        prior_col=args.prior_col,
+        gate2_meta=gate2_meta,
     )
     report = result["report"]
     (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
