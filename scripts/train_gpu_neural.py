@@ -7,6 +7,7 @@ GPU neural residual MEASURE — Blackwell CUDA path under Gate 3.
   NPU  : optional ONNX export for later OpenVINO (not product accept yet)
 
 Law: residue never forced — Gate3 vs pure prior floors. Hunt target 5 ft.
+RESTRICT: no Kaggle submit — measure OOF/seals only.
 """
 from __future__ import annotations
 

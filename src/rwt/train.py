@@ -150,6 +150,7 @@ def train_lgbm_residual(
         or os.environ.get("RWT_NUM_THREADS")
         or max(1, (os.cpu_count() or 4))
     )
+    # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
     if max_precision:
         params = {
             "objective": "regression",
@@ -161,6 +162,7 @@ def train_lgbm_residual(
             "bagging_fraction": 0.9,
             "bagging_freq": 1,
             "lambda_l2": 1.0,
+            "lambda_l1": 0.05,
             "max_bin": 511,
             "num_threads": lgb_threads,
             "verbosity": -1,
@@ -171,13 +173,14 @@ def train_lgbm_residual(
         params = {
             "objective": "regression",
             "metric": "rmse",
-            "learning_rate": 0.03,
-            "num_leaves": 31,
-            "min_data_in_leaf": 80,
-            "feature_fraction": 0.7,
-            "bagging_fraction": 0.8,
+            "learning_rate": 0.04,
+            "num_leaves": 47,
+            "min_data_in_leaf": 120,
+            "feature_fraction": 0.75,
+            "bagging_fraction": 0.85,
             "bagging_freq": 1,
-            "lambda_l2": 2.0,
+            "lambda_l2": 3.0,
+            "lambda_l1": 0.1,
             "num_threads": lgb_threads,
             "verbosity": -1,
             "seed": seed,
@@ -243,6 +246,7 @@ def train_lgbm_residual(
         ("pf_blend_last_known", "prior_pf_blend"),
         ("pf_bag", "prior_pf_bag"),
         ("prior_stack", "prior_stack"),
+        ("prior_best", "prior_best"),
     ):
         if col not in train_df.columns:
             continue
@@ -276,6 +280,7 @@ def train_lgbm_residual(
         "pf_blend_last_known": "prior_pf_blend",
         "pf_bag": "prior_pf_bag",
         "prior_stack": "prior_stack",
+        "prior_best": "prior_best",
     }
     floor_rmses = {
         n: baseline_rmse[n]
@@ -388,6 +393,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"residual base prior column (default: {DEFAULT_PRIOR_COL})",
     )
+    ap.add_argument(
+        "--max-precision",
+        action="store_true",
+        help="deeper LGBM residual (still Gate3; RESTRICT: no Kaggle submit)",
+    )
     args = ap.parse_args(argv)
 
     out = Path(args.out)
@@ -427,6 +437,7 @@ def main(argv: list[str] | None = None) -> int:
             n_splits=args.folds,
             prior_col=args.prior_col,
             gate2_meta=gate2_meta,
+            max_precision=bool(args.max_precision),
         )
         report = result["report"]
         (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

@@ -6,6 +6,7 @@ report vs 5.0 ft target under Gate3 residual law.
 Harness coupling (separate process / MCP):
   restrict → this MEASURE → audit OPEN|STOP on RMSE vs 5ft + Gate3
   residue never forced: pure prior wins if residual loses floors
+RESTRICT: no Kaggle submit — measure OOF/seals only.
 """
 from __future__ import annotations
 

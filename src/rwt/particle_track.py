@@ -63,13 +63,17 @@ def particle_filter_tvt(
     tvt_span: float = 80.0,
     process_sigma: float = 0.35,
     gr_sigma: float = 22.0,
+    process_bias: float | None = None,
     rng: np.random.Generator | None = None,
 ) -> dict[str, np.ndarray]:
     """
     Run PF along the full lateral; returns arrays length n_stations.
 
-    Particles live in TVT space. On stations with known_tvt (heel), particles
-    are re-seeded around truth so the toe freerun starts calibrated.
+    Particles live in TVT space. Crown-path upgrades vs naive RW:
+      - heel-calibrated affine GR map typewell → lateral
+      - process bias = median heel ΔTVT/station (formation walk, not pure noise)
+      - likelihood: GR level × ΔGR match (shape, not only level)
+      - GR dropout: inflate process noise, no false high confidence
     """
     rng = rng or np.random.default_rng(0)
     gr = np.asarray(lateral_gr, dtype=float)
@@ -86,6 +90,7 @@ def particle_filter_tvt(
             "prior_pf_tvt": pred,
             "pf_confidence": np.zeros(n, dtype=float),
             "pf_tvt_std": np.full(n, np.nan),
+            "process_bias": 0.0,
         }
 
     # GR scale calibration on known heel (lateral vs typewell at known TVT)
@@ -93,12 +98,10 @@ def particle_filter_tvt(
     if kmask.sum() >= 8:
         tw_at_k = np.interp(known_tvt[kmask], tw_tvt, tw_gr)
         lat_k = gr[kmask]
-        # affine: lat ≈ a * tw + b
         A = np.column_stack([tw_at_k, np.ones(len(tw_at_k))])
         try:
             coef, _, _, _ = np.linalg.lstsq(A, lat_k, rcond=None)
             a_cal, b_cal = float(coef[0]), float(coef[1])
-            # reject inverted or degenerate GR calibration
             if not np.isfinite(a_cal) or a_cal <= 1e-3 or not np.isfinite(b_cal):
                 a_cal, b_cal = 1.0, 0.0
         except np.linalg.LinAlgError:
@@ -106,13 +109,37 @@ def particle_filter_tvt(
     else:
         a_cal, b_cal = 1.0, 0.0
 
+    # process bias: typical TVT step along known heel (clipped)
+    if process_bias is None:
+        k_idx = np.flatnonzero(np.isfinite(known_tvt))
+        if len(k_idx) >= 4:
+            # consecutive known stations only
+            dsteps = []
+            for a, b in zip(k_idx[:-1], k_idx[1:]):
+                if b == a + 1:
+                    dsteps.append(float(known_tvt[b] - known_tvt[a]))
+            if dsteps:
+                # conservative walk: laterals rarely move >0.08 TVT/ft station
+                process_bias = float(np.clip(np.median(dsteps), -0.08, 0.08))
+            else:
+                process_bias = 0.0
+        else:
+            process_bias = 0.0
+    else:
+        process_bias = float(np.clip(process_bias, -0.08, 0.08))
+
     t_min, t_max = float(tw_tvt[0]), float(tw_tvt[-1])
     grid = np.arange(t_min, t_max + spacing * 0.5, spacing)
     gr_grid = np.interp(grid, tw_tvt, tw_gr)
-    gr_grid = a_cal * gr_grid + b_cal  # typewell GR in lateral units
+    gr_grid = a_cal * gr_grid + b_cal
+    # derivative of typewell GR in lateral units (for shape likelihood)
+    dgr_grid = np.gradient(gr_grid, spacing)
 
     def gr_at(tvt: np.ndarray) -> np.ndarray:
         return np.interp(tvt, grid, gr_grid, left=gr_grid[0], right=gr_grid[-1])
+
+    def dgr_at(tvt: np.ndarray) -> np.ndarray:
+        return np.interp(tvt, grid, dgr_grid, left=dgr_grid[0], right=dgr_grid[-1])
 
     seed_c = float(np.clip(seed_tvt, t_min, t_max)) if np.isfinite(seed_tvt) else 0.5 * (t_min + t_max)
     lo = max(t_min, seed_c - tvt_span)
@@ -125,37 +152,56 @@ def particle_filter_tvt(
     prior = np.zeros(n, dtype=float)
     conf = np.zeros(n, dtype=float)
     stds = np.zeros(n, dtype=float)
+    prev_obs = float("nan")
+    gr_sig = max(float(gr_sigma), 1e-3)
+    dgr_sig = max(gr_sig * 0.65, 1e-3)
 
     for i in range(n):
         if np.isfinite(known_tvt[i]):
-            # lock: reseed around heel truth (process continues from calibrated state)
             particles = known_tvt[i] + rng.normal(0.0, process_sigma, size=n_particles)
             particles = np.clip(particles, t_min, t_max)
             weights = np.ones(n_particles) / n_particles
             prior[i] = float(known_tvt[i])
             conf[i] = 1.0
             stds[i] = process_sigma
+            if np.isfinite(gr[i]):
+                prev_obs = float(gr[i])
             continue
 
-        particles = particles + rng.normal(0.0, process_sigma, size=n_particles)
+        # motion: bias (formation walk) + diffusion; inflate when GR missing
+        obs = gr[i]
+        sig_proc = process_sigma * (1.75 if not np.isfinite(obs) else 1.0)
+        particles = particles + process_bias + rng.normal(0.0, sig_proc, size=n_particles)
         particles = np.clip(particles, t_min, t_max)
 
-        obs = gr[i]
         if np.isfinite(obs):
             hyp = gr_at(particles)
-            like = np.exp(-0.5 * ((obs - hyp) / max(gr_sigma, 1e-3)) ** 2)
+            like = np.exp(-0.5 * ((obs - hyp) / gr_sig) ** 2)
+            # shape term: match lateral ΔGR to typewell dGR·ΔTVT≈dGR at particle
+            if np.isfinite(prev_obs):
+                d_obs = float(obs - prev_obs)
+                # soft shape term (half weight) — level match remains primary
+                step = process_bias if abs(process_bias) > 1e-6 else spacing * 0.25
+                d_hyp = dgr_at(particles) * step
+                like = like * np.exp(-0.25 * ((d_obs - d_hyp) / dgr_sig) ** 2)
             weights = weights * like
             s = float(weights.sum())
             if s < 1e-30:
                 weights = np.ones(n_particles) / n_particles
             else:
                 weights = weights / s
+            prev_obs = float(obs)
+        else:
+            # no observation: dilute confidence, keep prev_obs for next finite
+            pass
 
         ess = 1.0 / float(np.sum(weights * weights) + 1e-15)
-        # confidence from ESS * inverse std (tight cloud → trust more)
         prior[i] = float(np.sum(weights * particles))
         stds[i] = float(np.sqrt(np.sum(weights * (particles - prior[i]) ** 2) + 1e-12))
-        conf[i] = float(np.clip((ess / n_particles) * (1.0 / (1.0 + stds[i] / 5.0)), 0.0, 1.0))
+        conf_raw = (ess / n_particles) * (1.0 / (1.0 + stds[i] / 5.0))
+        if not np.isfinite(obs):
+            conf_raw *= 0.35
+        conf[i] = float(np.clip(conf_raw, 0.0, 1.0))
 
         if ess < 0.45 * n_particles:
             cdf = np.cumsum(weights)
@@ -169,6 +215,7 @@ def particle_filter_tvt(
         "prior_pf_tvt": prior,
         "pf_confidence": conf,
         "pf_tvt_std": stds,
+        "process_bias": float(process_bias),
     }
 
 
@@ -198,12 +245,13 @@ def blend_pf_last_known(
     return last + c * delta
 
 
-# Diverse PF hyperconfigs inspired by top private LB multi-PF bagging
+# Diverse PF hyperconfigs (public multi-hypothesis bag — crown-path diversity)
 _PF_BAG_CONFIGS: list[dict[str, Any]] = [
-    {"n_particles": 450, "process_sigma": 0.22, "gr_sigma": 16.0, "tvt_span": 60.0, "seed": 0},
-    {"n_particles": 450, "process_sigma": 0.40, "gr_sigma": 24.0, "tvt_span": 90.0, "seed": 1},
-    {"n_particles": 550, "process_sigma": 0.30, "gr_sigma": 20.0, "tvt_span": 70.0, "seed": 2},
-    {"n_particles": 350, "process_sigma": 0.18, "gr_sigma": 28.0, "tvt_span": 50.0, "seed": 3},
+    {"n_particles": 500, "process_sigma": 0.18, "gr_sigma": 14.0, "tvt_span": 55.0, "seed": 0},
+    {"n_particles": 500, "process_sigma": 0.28, "gr_sigma": 20.0, "tvt_span": 75.0, "seed": 1},
+    {"n_particles": 600, "process_sigma": 0.38, "gr_sigma": 26.0, "tvt_span": 95.0, "seed": 2},
+    {"n_particles": 400, "process_sigma": 0.22, "gr_sigma": 18.0, "tvt_span": 65.0, "seed": 3},
+    {"n_particles": 550, "process_sigma": 0.32, "gr_sigma": 22.0, "tvt_span": 80.0, "seed": 4},
 ]
 
 
