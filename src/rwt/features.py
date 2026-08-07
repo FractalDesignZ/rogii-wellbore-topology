@@ -92,7 +92,7 @@ def build_station_frame(
             "prior_forward_tvt": float(dual["prior_forward"][i]),
             "prior_backward_tvt": float(dual["prior_backward"][i]),
             "prior_mid": float(dual["prior_mid"][i]),
-            # residual baseline alias used by train/submit (mid dual-transport)
+            # Alias of prior_forward for baseline_linear_md beat-table (not a second feature)
             "prior_extrap_tvt": float(dual["prior_forward"][i]),
         }
         for form_col in ("ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA"):
@@ -150,7 +150,7 @@ FEATURE_COLS_DEFAULT = [
     "prior_forward_tvt",
     "prior_backward_tvt",
     "prior_mid",
-    "prior_extrap_tvt",
+    # prior_extrap_tvt omitted from features (duplicate of prior_forward_tvt; kept on frame for baselines)
     "ncc_16",
     "ncc_32",
     "ncc_64",

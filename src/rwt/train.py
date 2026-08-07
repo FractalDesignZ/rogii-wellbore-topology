@@ -14,21 +14,8 @@ from rwt.baselines import rmse
 from rwt.features import build_station_frame, feature_matrix
 from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
 from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
+from rwt.priors import DEFAULT_PRIOR_COL, resolve_prior_column
 from rwt.spatial import SpatialIndex, build_spatial_index
-
-# Residual base prior: strongest public heel prior (CERTIFY beat-table intent).
-# Dual-transport mid / flat / NCC / E_ref remain as *features*, not residual base.
-DEFAULT_PRIOR_COL = "prior_last_tvt"
-PRIOR_FALLBACKS = ("prior_last_tvt", "prior_mid", "prior_flat_tvt")
-
-
-def _resolve_prior_column(df: pd.DataFrame, preferred: str = DEFAULT_PRIOR_COL) -> str:
-    if preferred in df.columns:
-        return preferred
-    for c in PRIOR_FALLBACKS:
-        if c in df.columns:
-            return c
-    raise KeyError(f"No residual prior column in {list(df.columns)[:20]}")
 
 
 def _typewell_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:
@@ -70,17 +57,17 @@ def _assemble_dataset(
     n = 0
     for wid, df, sp, tw in loaded:
         tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
-        labeled_pred = [
-            int(i) for i in sp.predict_idx if pd.notna(df.iloc[int(i)][tvt_col])
-        ]
-        if not labeled_pred:
+        tvt_arr = df[tvt_col].to_numpy()
+        pred_idx = np.asarray(sp.predict_idx, dtype=int)
+        labeled_pred = pred_idx[pd.notna(tvt_arr[pred_idx])]
+        if len(labeled_pred) == 0:
             continue
         frames.append(
             build_station_frame(
                 df,
                 tw,
                 sp,
-                station_idx=np.asarray(labeled_pred, dtype=int),
+                station_idx=labeled_pred,
                 spatial_index=spatial,
             )
         )
@@ -114,7 +101,7 @@ def train_lgbm_residual(
             f"Insufficient labeled prediction-zone rows for residual train "
             f"(n={len(train_df)}). Need is_predict & TVT labels."
         )
-    prior_col = _resolve_prior_column(train_df, prior_col)
+    prior_col = resolve_prior_column(train_df, prior_col)
     X, cols = feature_matrix(train_df)
     y = train_df["TVT"].to_numpy(dtype=float)
     prior = train_df[prior_col].to_numpy(dtype=float)
@@ -181,6 +168,9 @@ def train_lgbm_residual(
     from rwt.provenance import seal_artifact
 
     k = resolve_kernel()
+    # Baselines and OOF share the same row set (oof_mask) so beats_* is valid
+    row_m = oof_mask if oof_mask.any() else np.ones(len(train_df), dtype=bool)
+    y_m = y[row_m]
     baseline_rmse: dict[str, float] = {}
     for name, col in (
         ("last_known", "prior_last_tvt"),
@@ -189,10 +179,10 @@ def train_lgbm_residual(
         ("dual_transport_mid", "prior_mid"),
     ):
         if col in train_df.columns:
-            baseline_rmse[name] = rmse(y, train_df[col].to_numpy(dtype=float))
-    oof_r = (
-        rmse(y[oof_mask], oof_tvt[oof_mask]) if oof_mask.any() else rmse(y, oof_tvt)
-    )
+            baseline_rmse[name] = rmse(
+                y_m, train_df[col].to_numpy(dtype=float)[row_m]
+            )
+    oof_r = rmse(y_m, oof_tvt[row_m])
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
@@ -265,8 +255,15 @@ def main(argv: list[str] | None = None) -> int:
             },
             out / "model.joblib",
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"FAIL model.joblib: {e}", flush=True)
+        report["ok"] = False
+        report["model_error"] = str(e)[:400]
+        (out / "cv_report.json").write_text(
+            json.dumps(report, indent=2) + "\n", encoding="utf-8"
+        )
+        print(json.dumps(report, indent=2))
+        return 1
     print(json.dumps(report, indent=2))
     return 0 if report.get("ok") else 1
 

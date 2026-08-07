@@ -10,6 +10,7 @@ import pandas as pd
 from rwt.features import build_station_frame
 from rwt.load import iter_well_frames, load_typewell, typewell_path_for_well
 from rwt.middle_out import resolve_middle_out
+from rwt.priors import resolve_prior_column
 from rwt.spatial import build_spatial_index
 
 
@@ -28,8 +29,9 @@ def format_submission(
     y = np.asarray(preds, dtype=float)
     if predict_only and "is_predict" in st.columns:
         mask = st["is_predict"].astype(bool).to_numpy()
-        # only filter if mixed zones present
-        if mask.any() and not bool(mask.all()):
+        if not mask.any():
+            raise ValueError("predict_only=True but no is_predict rows")
+        if not bool(mask.all()):
             st = st.loc[mask].reset_index(drop=True)
             y = y[mask]
     if len(st) != len(y):
@@ -38,7 +40,9 @@ def format_submission(
         submission_id(str(w), int(s))
         for w, s in zip(st["well_id"].tolist(), st["station"].tolist())
     ]
-    return pd.DataFrame({"id": ids, "tvt": y})
+    # stable order for Kaggle: sort by id string (matches sample_submission sort)
+    sub = pd.DataFrame({"id": ids, "tvt": y}).sort_values("id").reset_index(drop=True)
+    return sub
 
 
 def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
@@ -51,14 +55,8 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     )
     Xn = X.to_numpy()
     # Must match residual base used at train time (stored on model)
-    prior_col = model_blob.get("prior_column") or "prior_last_tvt"
-    if prior_col not in stations.columns:
-        for c in ("prior_last_tvt", "prior_mid", "prior_flat_tvt"):
-            if c in stations.columns:
-                prior_col = c
-                break
-        else:
-            raise KeyError("stations missing residual prior column")
+    preferred = model_blob.get("prior_column") or "prior_last_tvt"
+    prior_col = resolve_prior_column(stations, preferred)
     prior = stations[prior_col].to_numpy(dtype=float)
     preds = [m.predict(Xn) for m in model_blob["models"]]
     res = np.mean(np.vstack(preds), axis=0)
@@ -71,9 +69,13 @@ def assemble_split_stations(
     *,
     max_wells: int = 0,
     predict_only: bool = True,
-    max_neighbor_wells: int = 120,
+    max_neighbor_wells: int = 0,
 ) -> pd.DataFrame:
-    """Build station frames for train/test wells (toe by default)."""
+    """Build station frames for train/test wells (toe by default).
+
+    Spatial index uses the same train laterals as training (default: all train
+    wells) so neighbor transfer matches the train-time graph contract.
+    """
     root = Path(data_root)
     train_wells = []
     for i, (wid, df) in enumerate(iter_well_frames(root, "train")):

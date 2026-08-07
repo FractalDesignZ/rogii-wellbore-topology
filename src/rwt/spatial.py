@@ -1,13 +1,12 @@
 """
 Spatial neighbor graph for public sheaf-lite TVT transfer.
 
-Public layer only: k-NN on lateral XY centroids, azimuth gate, affine MD→TVT
+Public layer only: k-NN on lateral XY centroids, azimuth gate, nearest-XY TVT
 restriction. Proprietary sheaf Laplacians stay in private_kernel.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -29,7 +28,6 @@ class WellSpatialNode:
 @dataclass
 class SpatialIndex:
     nodes: dict[str, WellSpatialNode] = field(default_factory=dict)
-    # Field-scale adaptive radii (ft); filled by build_spatial_index
     max_dist: float = 600.0
     close_dist: float = 150.0
 
@@ -49,14 +47,17 @@ class SpatialIndex:
             return []
         max_dist = float(self.max_dist if max_dist is None else max_dist)
         a = self.nodes[well_id]
+        if not (np.isfinite(a.cx) and np.isfinite(a.cy)):
+            return []
         hits: list[tuple[str, float]] = []
         for wid, b in self.nodes.items():
             if wid == well_id:
                 continue
-            d = float(np.hypot(a.cx - b.cx, a.cy - b.cy))
-            if d > max_dist:
+            if not (np.isfinite(b.cx) and np.isfinite(b.cy)):
                 continue
-            # directional partition: skip strongly opposite-azimuth laterals
+            d = float(np.hypot(a.cx - b.cx, a.cy - b.cy))
+            if not np.isfinite(d) or d > max_dist:
+                continue
             cos = float(a.azimuth_x * b.azimuth_x + a.azimuth_y * b.azimuth_y)
             na = float(np.hypot(a.azimuth_x, a.azimuth_y))
             nb = float(np.hypot(b.azimuth_x, b.azimuth_y))
@@ -79,21 +80,42 @@ def well_spatial_node_from_lateral(
     x = df["X"].to_numpy(dtype=float)
     y = df["Y"].to_numpy(dtype=float)
     md = df["MD"].to_numpy(dtype=float) if "MD" in df.columns else np.arange(len(df), dtype=float)
-    # centroid of lateral body (prefer last 60% / higher MD)
-    cut = max(1, int(0.4 * len(x)))
-    cx = float(np.nanmean(x[cut:]))
-    cy = float(np.nanmean(y[cut:]))
-    dx = float(x[-1] - x[cut]) if len(x) > cut else float(x[-1] - x[0])
-    dy = float(y[-1] - y[cut]) if len(y) > cut else float(y[-1] - y[0])
+    n = len(x)
+    if n == 0:
+        return WellSpatialNode(
+            well_id=str(well_id),
+            cx=0.0,
+            cy=0.0,
+            azimuth_x=1.0,
+            azimuth_y=0.0,
+            md=md,
+            x=x,
+            y=y,
+            tvt=np.zeros(0),
+        )
+    # centroid of lateral body (prefer last 60% / higher MD); guard empty slice
+    cut = min(max(0, int(0.4 * n)), n - 1)
+    xs, ys = x[cut:], y[cut:]
+    if len(xs) == 0 or not np.isfinite(xs).any():
+        cx = float(np.nanmean(x[np.isfinite(x)])) if np.isfinite(x).any() else 0.0
+        cy = float(np.nanmean(y[np.isfinite(y)])) if np.isfinite(y).any() else 0.0
+    else:
+        cx = float(np.nanmean(xs[np.isfinite(xs)])) if np.isfinite(xs).any() else float(x[-1])
+        cy = float(np.nanmean(ys[np.isfinite(ys)])) if np.isfinite(ys).any() else float(y[-1])
+    if not np.isfinite(cx):
+        cx = 0.0
+    if not np.isfinite(cy):
+        cy = 0.0
+    dx = float(x[-1] - x[cut]) if n > cut else float(x[-1] - x[0])
+    dy = float(y[-1] - y[cut]) if n > cut else float(y[-1] - y[0])
     hn = float(np.hypot(dx, dy)) + 1e-15
     ax, ay = dx / hn, dy / hn
-    # TVT profile for transfer: prefer full train TVT, else TVT_input
     if tvt_col in df.columns and df[tvt_col].notna().any():
         tvt = df[tvt_col].to_numpy(dtype=float)
     elif tvt_input_col in df.columns:
         tvt = df[tvt_input_col].to_numpy(dtype=float)
     else:
-        tvt = np.full(len(df), np.nan)
+        tvt = np.full(n, np.nan)
     return WellSpatialNode(
         well_id=str(well_id),
         cx=cx,
@@ -113,19 +135,14 @@ def neighbor_tvt_transfer(
     *,
     close_dist: float = 150.0,
 ) -> dict[str, np.ndarray]:
-    """
-    Restriction-map lite: for each target station, nearest neighbor XY sample's TVT.
-
-    If lateral separation of centroids exceeds close_dist, still transfers but
-    marks weak confidence. Affine MD alignment is implicit via XY nearest.
-    """
+    """Nearest neighbor XY sample's TVT (vectorized)."""
     tx = target["X"].to_numpy(dtype=float)
     ty = target["Y"].to_numpy(dtype=float)
     n = len(tx)
     out_tvt = np.full(n, np.nan)
     out_d = np.full(n, np.nan)
     nx, ny, ntvt = neighbor.x, neighbor.y, neighbor.tvt
-    finite = np.isfinite(ntvt)
+    finite = np.isfinite(ntvt) & np.isfinite(nx) & np.isfinite(ny)
     if not finite.any():
         return {
             "neighbor_tvt": out_tvt,
@@ -133,15 +150,12 @@ def neighbor_tvt_transfer(
             "neighbor_transfer_ok": np.zeros(n, dtype=float),
         }
     nx, ny, ntvt = nx[finite], ny[finite], ntvt[finite]
-    for i in range(n):
-        d2 = (nx - tx[i]) ** 2 + (ny - ty[i]) ** 2
-        j = int(np.argmin(d2))
-        out_tvt[i] = float(ntvt[j])
-        out_d[i] = float(np.sqrt(d2[j]))
+    # (n, m) distances via broadcasting in chunks if huge
+    d2 = (nx[None, :] - tx[:, None]) ** 2 + (ny[None, :] - ty[:, None]) ** 2
+    j = np.argmin(d2, axis=1)
+    out_tvt = ntvt[j].astype(float)
+    out_d = np.sqrt(d2[np.arange(n), j])
     ok = (out_d <= close_dist).astype(float)
-    # fill NaN with nanmedian of neighbor
-    med = float(np.nanmedian(ntvt))
-    out_tvt = np.where(np.isfinite(out_tvt), out_tvt, med)
     return {
         "neighbor_tvt": out_tvt,
         "neighbor_xy_dist": out_d,
@@ -202,22 +216,21 @@ def build_spatial_index(
     idx = SpatialIndex()
     for wid, df in wells:
         idx.add(well_spatial_node_from_lateral(wid, df))
-    nodes = list(idx.nodes.values())
+    nodes = [n for n in idx.nodes.values() if np.isfinite(n.cx) and np.isfinite(n.cy)]
     if len(nodes) >= 2 and (max_dist is None or close_dist is None):
         pts = np.array([[n.cx, n.cy] for n in nodes], dtype=float)
-        # sample pairwise for scale
-        dlist: list[float] = []
-        for i in range(len(pts)):
-            for j in range(i + 1, len(pts)):
-                dlist.append(float(np.hypot(pts[i, 0] - pts[j, 0], pts[i, 1] - pts[j, 1])))
-        darr = np.asarray(dlist, dtype=float)
-        # close ≈ 5th pct (strong), max ≈ 15th pct (graph) with floors
-        q05 = float(np.percentile(darr, 5))
-        q15 = float(np.percentile(darr, 15))
-        if close_dist is None:
-            close_dist = max(150.0, q05)
-        if max_dist is None:
-            max_dist = max(600.0, q15, close_dist * 1.5)
+        # vectorized pairwise upper triangle
+        d = np.sqrt(((pts[:, None, :] - pts[None, :, :]) ** 2).sum(axis=2))
+        iu = np.triu_indices(len(pts), k=1)
+        darr = d[iu]
+        darr = darr[np.isfinite(darr)]
+        if len(darr):
+            q05 = float(np.percentile(darr, 5))
+            q15 = float(np.percentile(darr, 15))
+            if close_dist is None:
+                close_dist = max(150.0, q05)
+            if max_dist is None:
+                max_dist = max(600.0, q15, close_dist * 1.5)
     idx.close_dist = float(close_dist if close_dist is not None else 150.0)
     idx.max_dist = float(max_dist if max_dist is not None else 600.0)
     return idx

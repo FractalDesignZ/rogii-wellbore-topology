@@ -238,30 +238,29 @@ def dual_transport_prior(
     else:
         md_ps, span = float(md[0]), 1.0
 
-    # known heel: lock to observed
+    # known heel: lock to observed (copy arrays for pandas CoW safety)
     known_tvt = np.full(n, np.nan)
     if tvt_input_col in df.columns:
-        known_tvt = df[tvt_input_col].to_numpy(dtype=float)
+        known_tvt = np.asarray(df[tvt_input_col].to_numpy(dtype=float), dtype=float).copy()
     if tvt_col in df.columns:
-        tcol = df[tvt_col].to_numpy(dtype=float)
-        # fill known indices where input missing but label exists (train heel)
-        for i in split.known_idx:
-            if not np.isfinite(known_tvt[int(i)]) and np.isfinite(tcol[int(i)]):
-                known_tvt[int(i)] = tcol[int(i)]
+        tcol = np.asarray(df[tvt_col].to_numpy(dtype=float), dtype=float)
+        kidx = np.asarray(split.known_idx, dtype=int)
+        if len(kidx):
+            miss = ~np.isfinite(known_tvt[kidx]) & np.isfinite(tcol[kidx])
+            known_tvt[kidx[miss]] = tcol[kidx[miss]]
 
     is_known = np.zeros(n, dtype=bool)
     if len(split.known_idx):
         is_known[np.asarray(split.known_idx, dtype=int)] = True
-    for i in range(n):
-        if is_known[i] and np.isfinite(known_tvt[i]):
-            prior_mid[i] = float(known_tvt[i])
-            continue
-        # weight: near PS → forward; near toe end → backward structural
-        t = float(np.clip((md[i] - md_ps) / span, 0.0, 1.0))
-        w_b = t
-        w_f = 1.0 - t
-        fwd = 0.5 * prior_forward[i] + 0.5 * prior_flat[i]
-        prior_mid[i] = w_f * fwd + w_b * prior_backward[i]
+
+    # Vectorized blend: at PS, 0.5·forward+0.5·flat; toward toe end → pure structural backward
+    t = np.clip((md - md_ps) / span, 0.0, 1.0)
+    w_b = t
+    w_f = 1.0 - t
+    fwd = 0.5 * prior_forward + 0.5 * prior_flat
+    prior_mid = w_f * fwd + w_b * prior_backward
+    lock = is_known & np.isfinite(known_tvt)
+    prior_mid = np.where(lock, known_tvt, prior_mid)
 
     return {
         "prior_forward": prior_forward,

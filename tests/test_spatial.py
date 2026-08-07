@@ -9,7 +9,10 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from rwt.features import build_station_frame  # noqa: E402
+from rwt.middle_out import resolve_middle_out  # noqa: E402
 from rwt.spatial import (  # noqa: E402
+    attach_spatial_features,
     build_spatial_index,
     neighbor_tvt_transfer,
     well_spatial_node_from_lateral,
@@ -44,6 +47,25 @@ class TestSpatial(unittest.TestCase):
         tr = neighbor_tvt_transfer(a, node_b, close_dist=150.0)
         self.assertEqual(len(tr["neighbor_tvt"]), len(a))
         self.assertTrue(np.isfinite(tr["neighbor_tvt"]).all())
+
+    def test_attach_defaults_when_well_absent(self) -> None:
+        """Test wells not in train index get default neighbor columns (submit path)."""
+        a = pd.DataFrame(
+            {
+                "MD": np.arange(10, dtype=float),
+                "X": np.linspace(0, 100, 10),
+                "Y": np.zeros(10),
+                "Z": -np.arange(10, dtype=float),
+                "TVT": 100 + np.arange(10, dtype=float),
+                "TVT_input": [100.0 + i if i < 4 else np.nan for i in range(10)],
+            }
+        )
+        idx = build_spatial_index([("a", a)])
+        sp = resolve_middle_out(a, well_id="test_only")
+        st = build_station_frame(a, None, sp, station_idx=sp.predict_idx)
+        st2 = attach_spatial_features(st, a, idx, "test_only")
+        self.assertEqual(float(st2["neighbor_count"].iloc[0]), 0.0)
+        self.assertTrue(st2["neighbor_tvt"].isna().all())
 
 
 if __name__ == "__main__":

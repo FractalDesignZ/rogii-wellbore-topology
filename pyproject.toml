@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+graphics = ["matplotlib>=3.7", "networkx>=3.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -153,6 +153,7 @@ def open_bishop_transport(T: np.ndarray) -> dict[str, Any]:
             "twist_std": 0.0,
             "mean_curvature": 0.0,
             "mean_abs_torsion": 0.0,
+            "final_bishop_normal": np.array([0.0, 1.0, 0.0]),
         }
     # Bishop frame tracking (reference)
     u = np.cross(T[0], np.array([0.0, 0.0, 1.0]))
@@ -283,7 +284,13 @@ def e_ref_joint_strain(
     n = len(x)
     e = np.zeros(n)
     if n < 2:
-        return {"e_ref": e, "mean_e_ref": 0.0, "max_e_ref": 0.0, "p95_e_ref": 0.0}
+        return {
+            "e_ref": e,
+            "mean_e_ref": 0.0,
+            "max_e_ref": 0.0,
+            "p95_e_ref": 0.0,
+            "length_scale": float(length_scale if length_scale is not None else 100.0),
+        }
     p = np.column_stack([x, y, z])
     segs = norm(np.diff(p, axis=0), axis=1)
     if length_scale is None:
@@ -316,6 +323,18 @@ def station_local_geometry(
     Per-station local curvature / torsion / E_ref / Δz / horiz step (n stations).
     """
     n = len(x)
+    if n < 2:
+        z0 = np.zeros(n)
+        return {
+            "local_curv": z0.copy(),
+            "local_curv_roll": z0.copy(),
+            "local_torsion": z0.copy(),
+            "local_torsion_roll": z0.copy(),
+            "e_ref": z0.copy(),
+            "e_ref_roll": z0.copy(),
+            "d_z": z0.copy(),
+            "d_horiz": z0.copy(),
+        }
     T = tangents_from_xyz(x, y, z)
     curv = discrete_curvature(T)
     tors = discrete_torsion(T)

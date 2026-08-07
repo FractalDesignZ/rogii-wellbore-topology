@@ -30,6 +30,18 @@ class TestSubmissionSchema(unittest.TestCase):
         self.assertEqual(sub["id"].tolist(), ["000d7d20_1442", "000d7d20_1443"])
         self.assertEqual(sub["tvt"].tolist(), [111.0, 112.0])
 
+    def test_format_submission_mixed_zone(self) -> None:
+        st = pd.DataFrame(
+            {
+                "well_id": ["w", "w", "w"],
+                "station": [0, 1, 2],
+                "is_predict": [False, True, True],
+            }
+        )
+        sub = format_submission(st, np.array([10.0, 20.0, 30.0]), predict_only=True)
+        self.assertEqual(sub["id"].tolist(), ["w_1", "w_2"])
+        self.assertEqual(sub["tvt"].tolist(), [20.0, 30.0])
+
 
 if __name__ == "__main__":
     unittest.main()

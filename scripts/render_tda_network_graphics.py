@@ -14,12 +14,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import networkx as nx
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    import networkx as nx
+    from matplotlib.collections import LineCollection
+except ImportError as e:
+    raise SystemExit(
+        "NEED_INFO: graphics deps missing — pip install matplotlib networkx\n" + str(e)
+    ) from e
 import numpy as np
 import pandas as pd
-from matplotlib.collections import LineCollection
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -69,9 +74,10 @@ def h0_persistence_intervals(points: np.ndarray, max_eps: float | None = None) -
     Classic Vietoris–Rips H0 skeleton — real computation, not decoration.
     """
     n = len(points)
-    if n < 2:
+    if n == 0:
         return []
-    # pairwise distances
+    if n == 1:
+        return [(0.0, float("inf"))]
     dmat = np.linalg.norm(points[:, None, :] - points[None, :, :], axis=2)
     edges = []
     for i in range(n):
@@ -110,9 +116,9 @@ def h0_persistence_intervals(points: np.ndarray, max_eps: float | None = None) -
             components -= 1
             if components == 1:
                 break
-    # one infinite bar for final component; finite bars birth 0 death merge
     intervals = [(0.0, d) for d in deaths]
-    intervals.append((0.0, float("inf")))
+    # one infinite bar per surviving H0 component
+    intervals.extend((0.0, float("inf")) for _ in range(max(components, 1)))
     return intervals
 
 
@@ -128,10 +134,11 @@ def render_neighbor_network(wells: list[tuple[str, pd.DataFrame]], path: Path) -
         ang = np.arctan2(node.azimuth_y, node.azimuth_x)
         colors.append(ang)
 
+    # Use SpatialIndex adaptive radii (same contract as train/submit)
     for wid in list(idx.nodes.keys()):
-        for nid, dist in idx.neighbors(wid, k=4, max_dist=600.0, min_cos_azimuth=-0.2):
+        for nid, dist in idx.neighbors(wid, k=4):
             if not G.has_edge(wid, nid):
-                G.add_edge(wid, nid, weight=dist, close=dist < 150.0)
+                G.add_edge(wid, nid, weight=dist, close=dist < idx.close_dist)
 
     fig, ax = plt.subplots(figsize=(12, 10), facecolor=BG)
     _style_ax(ax, "Spatial neighbor graph  ·  k-NN XY  ·  d<600 ft  ·  sheaf-lite Fᵤ→ₑ")
@@ -163,8 +170,10 @@ def render_neighbor_network(wells: list[tuple[str, pd.DataFrame]], path: Path) -
     ax.set_ylabel("Northing Y (ft)")
     ax.set_aspect("equal", adjustable="datalim")
     leg = [
-        mpatches.Patch(color=ACCENT2, label="edge d < 150 ft (strong transfer)"),
-        mpatches.Patch(color=EDGE, label="edge d < 600 ft"),
+        mpatches.Patch(
+            color=ACCENT2, label=f"edge d < {idx.close_dist:.0f} ft (strong transfer)"
+        ),
+        mpatches.Patch(color=EDGE, label=f"edge d < {idx.max_dist:.0f} ft (graph)"),
     ]
     ax.legend(handles=leg, facecolor=BG, edgecolor=GRID, labelcolor=FG, fontsize=8, loc="upper right")
     ax.text(
@@ -330,7 +339,7 @@ def render_dual_transport(wells: list[tuple[str, pd.DataFrame]], path: Path) -> 
     ax.text(
         0.01,
         0.02,
-        "prior_mid = w_f·forward + w_b·backward   ·   residual learner targets TVT − prior_mid on toe",
+        "prior_mid = dual-transport blend   ·   residual learner targets TVT − prior_last_tvt on toe",
         transform=ax.transAxes,
         color=ACCENT,
         fontsize=8,
@@ -360,7 +369,7 @@ def render_dashboard(
     pos = {w: (n.cx, n.cy) for w, n in idx.nodes.items()}
     for w in idx.nodes:
         G.add_node(w)
-        for nid, dist in idx.neighbors(w, k=3, max_dist=600.0):
+        for nid, dist in idx.neighbors(w, k=3):
             G.add_edge(w, nid, w=dist)
     nx.draw_networkx_edges(G, pos, ax=ax, edge_color=EDGE, width=0.5, alpha=0.5)
     ax.scatter([p[0] for p in pos.values()], [p[1] for p in pos.values()], c=ACCENT, s=18, zorder=3)
@@ -417,6 +426,9 @@ def main() -> int:
     print("Loading wells…", flush=True)
     wells = load_wells(120)
     print(f"n_wells={len(wells)}", flush=True)
+    if not wells:
+        print("NEED_INFO: no usable wells from iter_well_frames(data/raw/train)", file=sys.stderr)
+        return 2
 
     print("01 neighbor network", flush=True)
     render_neighbor_network(wells, OUT / "01_neighbor_network.png")
