@@ -57,6 +57,11 @@ def main() -> int:
         action="store_true",
         help="use crown-default shallow LGBM instead of deep residual head",
     )
+    ap.add_argument(
+        "--prior-col",
+        default=None,
+        help="residual base prior column (default: resolve DEFAULT_PRIOR_COL / fallbacks)",
+    )
     a = ap.parse_args()
 
     out = Path(a.out)
@@ -104,6 +109,7 @@ def main() -> int:
         stations,
         n_splits=a.folds,
         seed=a.seed,
+        prior_col=a.prior_col,
         gate2_meta=gate2,
         max_precision=not a.no_max_precision,
     )
