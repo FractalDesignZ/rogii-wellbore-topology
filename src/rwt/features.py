@@ -268,21 +268,8 @@ def build_station_frame(
             "pf_tvt_std": float(pf["pf_tvt_std"][i])
             if np.isfinite(pf["pf_tvt_std"][i])
             else 0.0,
-            # stalk disagreement → residual head trust signal
-            "prior_disagreement": float(
-                np.nanstd(
-                    [
-                        last_f if np.isfinite(last_f) else np.nan,
-                        float(stack[i]),
-                        float(pf["prior_pf_blend"][i]),
-                        float(ncc_track["prior_ncc_tvt"][i])
-                        if np.isfinite(ncc_track["prior_ncc_tvt"][i])
-                        else np.nan,
-                    ]
-                )
-            )
-            if np.isfinite(last_f)
-            else 0.0,
+            # placeholder — recomputed after soft-neighbor updates prior_stack
+            "prior_disagreement": 0.0,
             "C_heel": float(dip_prior["C_heel"]),
             "dip_coef_x": float(dip_prior["dip_coef_x"]),
             "dip_coef_y": float(dip_prior["dip_coef_y"]),
@@ -340,6 +327,22 @@ def build_station_frame(
             st = np.where(m, (1.0 - w) * st + w * nb_c, st)
             st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
             stations["prior_stack"] = st
+
+    # Disagreement vs final residual base (post soft-neighbor stack transfer)
+    stack_f = stations["prior_stack"].to_numpy(dtype=float)
+    pf_f = stations["prior_pf_blend"].to_numpy(dtype=float)
+    ncc_f = (
+        stations["prior_ncc_tvt"].to_numpy(dtype=float)
+        if "prior_ncc_tvt" in stations.columns
+        else np.full(len(stations), np.nan)
+    )
+    last_arr = np.full(len(stations), last_f if np.isfinite(last_f) else np.nan)
+    with np.errstate(all="ignore"):
+        dd = np.nanstd(
+            np.column_stack([last_arr, stack_f, pf_f, ncc_f]),
+            axis=1,
+        )
+    stations["prior_disagreement"] = np.where(np.isfinite(dd), dd, 0.0)
 
     best = blend_prior_best(
         last_f,
