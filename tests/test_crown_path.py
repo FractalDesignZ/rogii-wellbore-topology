@@ -244,6 +244,38 @@ class TestCrownPath(unittest.TestCase):
         # high conf + high ncc moves toward stalk within clamp
         self.assertGreater(float(np.mean(out[-8:])), last + 3.0)
 
+    def test_impute_feature_frame_median_not_zero(self) -> None:
+        from rwt.features import impute_feature_frame
+
+        df = pd.DataFrame({"a": [10.0, np.nan, 20.0], "b": [np.nan, np.nan, np.nan]})
+        out = impute_feature_frame(df)
+        self.assertAlmostEqual(float(out["a"].iloc[1]), 15.0)
+        self.assertTrue(np.allclose(out["b"].to_numpy(), 0.0))
+
+    def test_serve_residual_clip(self) -> None:
+        """Serve path clamps residual Δ and uses median impute."""
+        from rwt.submit import predict_stations
+
+        class _M:
+            def predict(self, X):
+                return np.full(len(X), 50.0)  # runaway residual
+
+        st = pd.DataFrame(
+            {
+                "prior_stack": [100.0, 100.0],
+                "relative_md": [0.0, np.nan],
+            }
+        )
+        blob = {
+            "models": [_M()],
+            "feature_cols": ["relative_md"],
+            "prior_column": "prior_stack",
+            "use_residual": True,
+            "residual_max_dev": 18.0,
+        }
+        y = predict_stations(blob, st)
+        self.assertTrue(np.allclose(y, 118.0))
+
     def test_process_bias_near_ps_clipped(self) -> None:
         """Build-section large dTVT must not set toe process_bias outside ±0.05."""
         tw_tvt = np.linspace(100, 200, 200)

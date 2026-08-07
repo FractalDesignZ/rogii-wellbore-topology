@@ -165,6 +165,10 @@ def train_lgbm_residual(
     lgb_threads = _env_threads(
         "RWT_LGBM_THREADS", "OMP_NUM_THREADS", "RWT_NUM_THREADS"
     )
+    # Clamp residual Δ so head cannot leave pure-prior band (clamp law parity)
+    residual_max_dev = 18.0
+    # Dual seed bag per fold (reduces fold variance on heterogeneous wells)
+    n_seed_bag = 3 if max_precision else 2
     # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
     if max_precision:
         params = {
@@ -185,7 +189,7 @@ def train_lgbm_residual(
         }
         n_rounds, early = 2500, 120
     else:
-        # slightly deeper default than pre-crown; still Gate3-gated
+        # L2 residual (Huber regressed 12w OOF 11.27→11.56); seed-bag for variance
         params = {
             "objective": "regression",
             "metric": "rmse",
@@ -211,19 +215,23 @@ def train_lgbm_residual(
         dva = lgb.Dataset(
             X[va], label=y_res[va], weight=sample_w[va], feature_name=cols, reference=dtr
         )
-        p = dict(params)
-        p["seed"] = seed + fold
-        model = lgb.train(
-            p,
-            dtr,
-            num_boost_round=n_rounds,
-            valid_sets=[dva],
-            callbacks=[lgb.early_stopping(early, verbose=False)],
-        )
-        pred_res = model.predict(X[va])
+        preds_bag: list[np.ndarray] = []
+        for b in range(n_seed_bag):
+            p = dict(params)
+            p["seed"] = seed + fold * 17 + b * 101
+            model = lgb.train(
+                p,
+                dtr,
+                num_boost_round=n_rounds,
+                valid_sets=[dva],
+                callbacks=[lgb.early_stopping(early, verbose=False)],
+            )
+            preds_bag.append(np.asarray(model.predict(X[va]), dtype=float))
+            models.append(model)
+        pred_res = np.mean(np.vstack(preds_bag), axis=0)
+        pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
         oof[va] = pred_res
         fold_scores.append(rmse(y[va], prior[va] + pred_res))
-        models.append(model)
 
     oof_mask = np.zeros(len(train_df), dtype=bool)
     if n_groups < 2:
@@ -242,6 +250,7 @@ def train_lgbm_residual(
             _fit_fold(tr, va, fold)
             oof_mask[va] = True
 
+    oof = np.clip(oof, -residual_max_dev, residual_max_dev)
     oof_tvt = prior + oof
     from rwt.kernel_api import resolve_kernel
     from rwt.provenance import seal_artifact
@@ -363,6 +372,8 @@ def train_lgbm_residual(
         "max_precision": bool(max_precision),
         "lgb_threads": int(lgb_threads),
         "n_rounds_cap": int(n_rounds),
+        "n_seed_bag": int(n_seed_bag),
+        "residual_max_dev": float(residual_max_dev),
         "baseline_rmse": baseline_rmse,
         "beats_baselines": beats,
         "kernel_id": k.kernel_id(),
@@ -476,6 +487,9 @@ def main(argv: list[str] | None = None) -> int:
                     "feature_cols": result["feature_cols"],
                     "prior_column": result["prior_column"],
                     "use_residual": result.get("use_residual", True),
+                    "residual_max_dev": float(
+                        result.get("report", {}).get("residual_max_dev", 18.0)
+                    ),
                 },
                 out / "model.joblib",
             )

@@ -46,14 +46,11 @@ def format_submission(
 
 
 def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
+    from rwt.features import impute_feature_frame
+
     cols = model_blob["feature_cols"]
-    X = (
-        stations.reindex(columns=cols)
-        .astype(float)
-        .replace([np.inf, -np.inf], np.nan)
-        .fillna(0.0)
-    )
-    Xn = X.to_numpy()
+    # Train/serve parity: median impute (not zero-fill) for residual features
+    Xn = impute_feature_frame(stations.reindex(columns=cols)).to_numpy(dtype=float)
     # Train-serve contract: stored prior_column is strict (no silent swap).
     # Legacy blobs without the key fall back through PRIOR_FALLBACKS.
     stored_prior = model_blob.get("prior_column")
@@ -74,6 +71,9 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         return prior
     preds = [m.predict(Xn) for m in models]
     res = np.mean(np.vstack(preds), axis=0)
+    # Clamp residual delta so a runaway head cannot leave last±max_dev band
+    max_dev = float(model_blob.get("residual_max_dev", 18.0))
+    res = np.clip(res, -max_dev, max_dev)
     out = prior + res
     if not np.isfinite(out).all():
         n_bad = int((~np.isfinite(out)).sum())

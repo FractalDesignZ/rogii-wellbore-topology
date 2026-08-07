@@ -16,7 +16,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft) |
-| **Residual** | Default base **`prior_stack`**; toe-weighted LGBM; median feature impute; Gate3 vs all floors |
+| **Residual** | Default base **`prior_stack`**; toe-weighted L2 LGBM; dual seed bag; residual Δ clip ±18; median impute train/serve; Gate3 |
 | **Clamp** | All pure candidates ≤ last_known ± 18 ft |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
@@ -26,21 +26,22 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-3)
+## Measure (12w crown set-4)
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| residual on **prior_stack** (Gate3 ACCEPT) | **11.27** (was 11.49) |
+| residual on **prior_stack** (Gate3 ACCEPT) | **11.03** (was 11.27 / 11.49) |
+| residual set-3 default | 11.27 |
 | residual on prior_last_tvt | 12.30 |
 | prior_stack (best pure) | **12.33** |
-| prior_best (stack-led) | **12.65** (was 13.21) |
+| prior_best (stack-led) | **12.65** |
 | pf_blend_last_known | 12.92 |
 | last_known | 13.41 |
-| prior_ncc (seed-local) | **16.27** (was 21.81 full-lag) |
+| prior_ncc (seed-local) | **16.27** |
 | pf_bag (median) | 17.44 |
 
-Set-3 levers: toe-weighted LGBM residual, median feature impute, high-conf NCC soft in stack, deeper default trees.
-`--max-precision` 12w residual **11.12** (vs default 11.27).
+Set-4 levers: dual seed bag residual; residual Δ clip ±18 train/serve; median impute train/serve parity;
+`prior_disagreement` feature; soft neighbor into stack. (Huber objective rejected — regressed to 11.56.)
 
 ## Measure protocol
 

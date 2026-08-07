@@ -267,6 +267,21 @@ def build_station_frame(
             "pf_tvt_std": float(pf["pf_tvt_std"][i])
             if np.isfinite(pf["pf_tvt_std"][i])
             else 0.0,
+            # stalk disagreement → residual head trust signal
+            "prior_disagreement": float(
+                np.nanstd(
+                    [
+                        last_f if np.isfinite(last_f) else np.nan,
+                        float(stack[i]),
+                        float(pf["prior_pf_blend"][i]),
+                        float(ncc_track["prior_ncc_tvt"][i])
+                        if np.isfinite(ncc_track["prior_ncc_tvt"][i])
+                        else np.nan,
+                    ]
+                )
+            )
+            if np.isfinite(last_f)
+            else 0.0,
             "C_heel": float(dip_prior["C_heel"]),
             "dip_coef_x": float(dip_prior["dip_coef_x"]),
             "dip_coef_y": float(dip_prior["dip_coef_y"]),
@@ -334,6 +349,23 @@ def build_station_frame(
                 if 0 <= int(ki) < len(best) and np.isfinite(hv):
                     best[int(ki)] = float(hv)
     stations["prior_best"] = best
+    # Soft neighbor into residual base (stack) only where transfer is trusted
+    if (
+        "prior_stack" in stations.columns
+        and nb is not None
+        and nb_ok is not None
+        and np.isfinite(last_f)
+    ):
+        st = stations["prior_stack"].to_numpy(dtype=float).copy()
+        ok = np.asarray(nb_ok, dtype=float)
+        nbt = np.asarray(nb, dtype=float)
+        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st)
+        if m.any():
+            nb_c = last_f + np.clip(nbt - last_f, -18.0, 18.0)
+            w = 0.12 * np.clip(ok, 0.0, 1.0)
+            st = np.where(m, (1.0 - w) * st + w * nb_c, st)
+            st = last_f + np.clip(st - last_f, -18.0, 18.0)
+            stations["prior_stack"] = st
     stations = kernel.augment_station_frame(stations, df, typewell)
     stations = embed_column(stations)
     return stations
@@ -381,6 +413,7 @@ FEATURE_COLS_DEFAULT = [
     "ncc_track_conf",
     "pf_confidence",
     "pf_tvt_std",
+    "prior_disagreement",
     "ncc_16",
     "ncc_32",
     "ncc_64",
@@ -421,13 +454,21 @@ def feature_matrix(
             f"structural leak: refuse form-surface features {leak} "
             f"(train-only ANCC..BUDA; drop before residual train)"
         )
-    # Median impute (max-op set-5 / neural parity) — zero-fill biases residual
-    frame = stations[cols].astype(float).replace([np.inf, -np.inf], np.nan)
-    for c in frame.columns:
-        s = frame[c]
+    frame = impute_feature_frame(stations[cols])
+    X = frame.to_numpy(dtype=float)
+    return X, cols
+
+
+def impute_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """
+    Median impute per column (train/serve parity). Zero-fill biases residual
+    when features are sparse (max-op set-5 / crown set-3/4).
+    """
+    out = frame.astype(float).replace([np.inf, -np.inf], np.nan).copy()
+    for c in out.columns:
+        s = out[c]
         med = float(np.nanmedian(s.to_numpy(dtype=float))) if s.notna().any() else 0.0
         if not np.isfinite(med):
             med = 0.0
-        frame[c] = s.fillna(med)
-    X = frame.to_numpy(dtype=float)
-    return X, cols
+        out[c] = s.fillna(med)
+    return out
