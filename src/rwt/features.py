@@ -7,7 +7,12 @@ import numpy as np
 import pandas as pd
 
 from rwt.geometry import station_local_geometry, trajectory_in_dip_frame
-from rwt.gr_match import gr_mismatch_at_tvt, multi_scale_ncc, ncc_tvt_track
+from rwt.gr_match import (
+    fit_heel_gr_affine,
+    gr_mismatch_at_tvt,
+    multi_scale_ncc,
+    ncc_tvt_track,
+)
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
 from rwt.particle_track import particle_prior_for_well
@@ -369,7 +374,7 @@ def build_station_frame(
     # pre-nb stack for CR tests / diagnostics (not in FEATURE_COLS; safe for concat)
     stations["_prior_stack_pre_neighbor"] = stack_pre_nb
 
-    # GR↔typewell mismatch at final stalk TVTs (residual head signal; set-8)
+    # GR↔typewell mismatch at final stalk TVTs (residual head signal; set-8/9)
     n_st = len(stations)
     if tw_gr_arr is not None and tw_tvt_arr is not None and "GR" in stations.columns:
         lat_gr = stations["GR"].to_numpy(dtype=float)
@@ -381,6 +386,8 @@ def build_station_frame(
             kn[valid] = known_full[st_idx[valid]]
         else:
             kn = known_full[:n_st] if len(known_full) >= n_st else np.full(n_st, np.nan)
+        # single heel affine for all stalks (consistency + cost)
+        a_cal, b_cal = fit_heel_gr_affine(tw_gr_arr, tw_tvt_arr, lat_gr, kn)
         stack_tvt = stations["prior_stack"].to_numpy(dtype=float)
         last_arr = stations["prior_last_tvt"].to_numpy(dtype=float)
         ncc_tvt = (
@@ -388,18 +395,21 @@ def build_station_frame(
             if "prior_ncc_tvt" in stations.columns
             else last_arr
         )
+        mm_kw = dict(a_cal=a_cal, b_cal=b_cal, known_tvt=kn)
         stations["gr_mismatch_stack"] = gr_mismatch_at_tvt(
-            lat_gr, tw_gr_arr, tw_tvt_arr, stack_tvt, known_tvt=kn
+            lat_gr, tw_gr_arr, tw_tvt_arr, stack_tvt, **mm_kw
         )
         stations["gr_mismatch_last"] = gr_mismatch_at_tvt(
-            lat_gr, tw_gr_arr, tw_tvt_arr, last_arr, known_tvt=kn
+            lat_gr, tw_gr_arr, tw_tvt_arr, last_arr, **mm_kw
         )
         stations["gr_mismatch_ncc"] = gr_mismatch_at_tvt(
-            lat_gr, tw_gr_arr, tw_tvt_arr, ncc_tvt, known_tvt=kn
+            lat_gr, tw_gr_arr, tw_tvt_arr, ncc_tvt, **mm_kw
         )
-        stations["gr_mismatch_abs_stack"] = np.abs(
-            stations["gr_mismatch_stack"].to_numpy(dtype=float)
+        mm_s = stations["gr_mismatch_stack"].to_numpy(dtype=float)
+        stations["gr_mismatch_abs_stack"] = np.where(
+            np.isfinite(mm_s), np.abs(mm_s), np.nan
         )
+        # Note: |stack|-|last| delta feature regressed 12w residual 11.06→11.14
     else:
         stations["gr_mismatch_stack"] = 0.0
         stations["gr_mismatch_last"] = 0.0

@@ -31,6 +31,8 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | Floor / head | OOF RMSE |
 | --- | ---: |
 | residual on **prior_stack** (Gate3 ACCEPT) | **11.06** (was 11.08) |
+| residual set-9 (+delta feat) | 11.14 (rejected) |
+| residual max-precision set-8 | 11.21 (rejected on 12w) |
 | residual set-4/7 honest | 11.08 |
 | residual set-3 | 11.27 |
 | residual on prior_last_tvt | 12.30 |
@@ -52,8 +54,10 @@ Set-8: `gr_mismatch_{stack,last,ncc}` = lateral GR − heel-calibrated typewell 
 | seed-bag median + std shrink | 11.28 | over-shrinks residual |
 | 3-seed mean bag (default) | 11.25 | worse than dual seed |
 | denser NCC stride=5 | ~11.25 | no residual gain |
+| gr_mismatch delta \|stack\|−\|last\| | 11.14 | collinear noise |
+| max-precision LGBM on 12w set-8 | 11.21 | overfit small cohort |
 
-### Kept (set-5–7 coherence)
+### Kept (set-5–9 coherence)
 
 Soft neighbor → stack **before** `prior_best`; `prior_disagreement` post-transfer;
 `compute_prior_disagreement` helper + deterministic CR test; residual Δ clip vs base only.

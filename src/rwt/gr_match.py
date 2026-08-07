@@ -167,6 +167,60 @@ def multi_scale_ncc(
     return out
 
 
+def _prep_typewell_gr_grid(
+    typewell_gr: np.ndarray,
+    typewell_tvt: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Sorted unique finite typewell (TVT, GR) grid, or None if too short."""
+    tw_gr = np.asarray(typewell_gr, dtype=float)
+    tw_tvt = np.asarray(typewell_tvt, dtype=float)
+    m = np.isfinite(tw_gr) & np.isfinite(tw_tvt)
+    if m.sum() < 4:
+        return None
+    order = np.argsort(tw_tvt[m])
+    tw_t = tw_tvt[m][order]
+    tw_g = tw_gr[m][order]
+    if len(tw_t) >= 2:
+        uniq = np.concatenate([[True], np.diff(tw_t) > 1e-12])
+        tw_t, tw_g = tw_t[uniq], tw_g[uniq]
+    return tw_t, tw_g
+
+
+def fit_heel_gr_affine(
+    typewell_gr: np.ndarray,
+    typewell_tvt: np.ndarray,
+    lateral_gr: np.ndarray,
+    known_tvt: np.ndarray,
+) -> tuple[float, float]:
+    """
+    Heel-only affine map typewell GR → lateral GR (PF stalk spirit).
+
+    Returns (a, b) with typewell_in_lateral = a * tw_gr + b. Identity (1, 0)
+    if fewer than 8 finite heel pairs or fit fails.
+    """
+    grid = _prep_typewell_gr_grid(typewell_gr, typewell_tvt)
+    if grid is None:
+        return 1.0, 0.0
+    tw_t, tw_g = grid
+    lat = np.asarray(lateral_gr, dtype=float)
+    kn = np.asarray(known_tvt, dtype=float)
+    if len(lat) != len(kn):
+        return 1.0, 0.0
+    km = np.isfinite(lat) & np.isfinite(kn)
+    if km.sum() < 8:
+        return 1.0, 0.0
+    tw_k = np.interp(kn[km], tw_t, tw_g)
+    A = np.column_stack([tw_k, np.ones(int(km.sum()))])
+    try:
+        coef, _, _, _ = np.linalg.lstsq(A, lat[km], rcond=None)
+        a0, b0 = float(coef[0]), float(coef[1])
+        if np.isfinite(a0) and a0 > 1e-3 and np.isfinite(b0):
+            return a0, b0
+    except np.linalg.LinAlgError:
+        pass
+    return 1.0, 0.0
+
+
 def typewell_gr_at_tvt(
     typewell_gr: np.ndarray,
     typewell_tvt: np.ndarray,
@@ -174,47 +228,29 @@ def typewell_gr_at_tvt(
     *,
     lateral_gr: np.ndarray | None = None,
     known_tvt: np.ndarray | None = None,
+    a_cal: float | None = None,
+    b_cal: float | None = None,
 ) -> np.ndarray:
     """
     Typewell GR interpolated at hypothesized lateral TVT (optionally heel-calibrated).
 
-    When known heel TVT + lateral GR are provided (≥8 points), fits affine
-    map typewell→lateral GR (same spirit as PF stalk) so mismatch is in
-    lateral GR units.
+    Pass ``a_cal``/``b_cal`` to reuse a single heel fit across stalks; otherwise
+    when known heel TVT + lateral GR are provided (≥8 points), fits affine
+    map typewell→lateral GR so mismatch is in lateral GR units.
     """
-    tw_gr = np.asarray(typewell_gr, dtype=float)
-    tw_tvt = np.asarray(typewell_tvt, dtype=float)
     q = np.asarray(query_tvt, dtype=float)
-    m = np.isfinite(tw_gr) & np.isfinite(tw_tvt)
-    if m.sum() < 4:
+    grid = _prep_typewell_gr_grid(typewell_gr, typewell_tvt)
+    if grid is None:
         return np.full(len(q), np.nan, dtype=float)
-    order = np.argsort(tw_tvt[m])
-    tw_t = tw_tvt[m][order]
-    tw_g = tw_gr[m][order]
-    # unique TVT for interp
-    if len(tw_t) >= 2:
-        uniq = np.concatenate([[True], np.diff(tw_t) > 1e-12])
-        tw_t, tw_g = tw_t[uniq], tw_g[uniq]
-    a_cal, b_cal = 1.0, 0.0
-    if (
-        lateral_gr is not None
-        and known_tvt is not None
-        and len(lateral_gr) == len(known_tvt)
-    ):
-        lat = np.asarray(lateral_gr, dtype=float)
-        kn = np.asarray(known_tvt, dtype=float)
-        km = np.isfinite(lat) & np.isfinite(kn)
-        if km.sum() >= 8:
-            tw_k = np.interp(kn[km], tw_t, tw_g)
-            A = np.column_stack([tw_k, np.ones(int(km.sum()))])
-            try:
-                coef, _, _, _ = np.linalg.lstsq(A, lat[km], rcond=None)
-                a0, b0 = float(coef[0]), float(coef[1])
-                if np.isfinite(a0) and a0 > 1e-3 and np.isfinite(b0):
-                    a_cal, b_cal = a0, b0
-            except np.linalg.LinAlgError:
-                pass
-    tw_g = a_cal * tw_g + b_cal
+    tw_t, tw_g = grid
+    if a_cal is None or b_cal is None:
+        if lateral_gr is not None and known_tvt is not None:
+            a_cal, b_cal = fit_heel_gr_affine(
+                typewell_gr, typewell_tvt, lateral_gr, known_tvt
+            )
+        else:
+            a_cal, b_cal = 1.0, 0.0
+    tw_g = float(a_cal) * tw_g + float(b_cal)
     out = np.full(len(q), np.nan, dtype=float)
     qm = np.isfinite(q)
     if qm.any() and len(tw_t) >= 2:
@@ -231,6 +267,8 @@ def gr_mismatch_at_tvt(
     query_tvt: np.ndarray,
     *,
     known_tvt: np.ndarray | None = None,
+    a_cal: float | None = None,
+    b_cal: float | None = None,
 ) -> np.ndarray:
     """Lateral GR − calibrated typewell GR at hypothesized TVT (residual signal)."""
     lat = np.asarray(lateral_gr, dtype=float)
@@ -240,9 +278,10 @@ def gr_mismatch_at_tvt(
         query_tvt,
         lateral_gr=lat,
         known_tvt=known_tvt,
+        a_cal=a_cal,
+        b_cal=b_cal,
     )
-    out = lat - hyp
-    return out
+    return lat - hyp
 
 
 def ncc_tvt_track(
