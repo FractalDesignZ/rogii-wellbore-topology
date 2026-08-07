@@ -75,6 +75,17 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     preds = [m.predict(Xn) for m in models]
     res = np.mean(np.vstack(preds), axis=0)
     out = prior + res
+
+    # Adaptive serve (public): when train stored adaptive_serve=True, apply residual
+    # only where PF confidence is high enough. Mirrors gate_residual_acceptance_per_well
+    # without requiring a stored well_fire map (works on test wells too).
+    adaptive = bool(model_blob.get("adaptive_serve", False))
+    conf_thresh = float(model_blob.get("adaptive_conf_threshold", 0.35))
+    if adaptive and "pf_confidence" in stations.columns:
+        conf = stations["pf_confidence"].to_numpy(dtype=float)
+        fire = np.isfinite(conf) & (conf >= conf_thresh)
+        out = np.where(fire, out, prior)
+
     if not np.isfinite(out).all():
         n_bad = int((~np.isfinite(out)).sum())
         raise ValueError(
@@ -84,20 +95,15 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
 
 
 def assemble_split_stations(
-    data_root: Path,
-    split: str = "test",
+    root: Path,
+    split: str,
     *,
     max_wells: int = 0,
-    predict_only: bool = True,
     max_neighbor_wells: int = 0,
+    predict_only: bool = True,
 ) -> pd.DataFrame:
-    """Build station frames for train/test wells (toe by default).
-
-    Spatial index uses the same train laterals as training (default: all train
-    wells) so neighbor transfer matches the train-time graph contract.
-    """
-    root = Path(data_root)
-    train_wells = []
+    """Build station frames for a split (train or test)."""
+    train_wells: list[tuple[str, pd.DataFrame]] = []
     for i, (wid, df) in enumerate(iter_well_frames(root, "train")):
         train_wells.append((wid, df))
         if max_neighbor_wells and i + 1 >= max_neighbor_wells:
