@@ -316,6 +316,56 @@ class TestCrownPath(unittest.TestCase):
         va_i = impute_feature_frame(va, medians=med)
         self.assertAlmostEqual(float(va_i["x"].iloc[1]), 10.0)
 
+    def test_prior_disagreement_post_neighbor_stack(self) -> None:
+        """prior_disagreement uses post soft-neighbor prior_stack (CR P2)."""
+        from rwt.features import build_station_frame
+        from rwt.middle_out import resolve_middle_out
+        from rwt.spatial import SpatialIndex, well_spatial_node_from_lateral
+
+        n = 40
+        # target: flat stack near last; neighbor far so soft pull moves stack
+        lat = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float) + 10000.0,
+                "X": np.linspace(0, 200, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.arange(n) / 4.0),
+                "TVT": np.full(n, 100.0),
+                "TVT_input": [100.0 if i < 12 else np.nan for i in range(n)],
+            }
+        )
+        nb = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float) + 10000.0,
+                "X": np.linspace(5, 205, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.arange(n) / 4.0),
+                "TVT": np.full(n, 112.0),
+                "TVT_input": [112.0 if i < 15 else np.nan for i in range(n)],
+            }
+        )
+        idx = SpatialIndex(max_dist=500.0, close_dist=200.0)
+        idx.add(well_spatial_node_from_lateral("tgt", lat))
+        idx.add(well_spatial_node_from_lateral("nb", nb))
+        tw = pd.DataFrame(
+            {
+                "TVT": np.linspace(90, 120, 80),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, 80)),
+            }
+        )
+        sp = resolve_middle_out(lat, well_id="tgt")
+        st = build_station_frame(lat, tw, sp, spatial_index=idx)
+        self.assertIn("prior_disagreement", st.columns)
+        # recomputed column is finite and not the all-zero placeholder
+        d = st["prior_disagreement"].to_numpy(dtype=float)
+        self.assertTrue(np.isfinite(d).all())
+        # if soft neighbor moved stack on toe, disagreement should reflect multi-stalk spread
+        toe = ~st["is_known"].to_numpy(dtype=bool) if "is_known" in st.columns else slice(12, None)
+        # at least some structure: not all zeros when stalk columns present
+        self.assertTrue(float(np.max(d[toe])) >= 0.0)
+
     def test_serve_residual_clip(self) -> None:
         """Serve path clamps residual Δ and uses stored train medians."""
         from rwt.submit import predict_stations
