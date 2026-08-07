@@ -6,8 +6,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
 from rwt.load import synthetic_well  # noqa: E402
-from rwt.middle_out import known_prior_tvt, split_by_mask  # noqa: E402
+from rwt.middle_out import known_prior_tvt, resolve_middle_out, split_by_mask  # noqa: E402
 
 
 class TestMiddleOut(unittest.TestCase):
@@ -25,6 +28,21 @@ class TestMiddleOut(unittest.TestCase):
         sp = split_by_mask(lat, well_id="SYN01")
         p = known_prior_tvt(lat, sp)
         self.assertTrue(all(k in p for k in ("prior_last_tvt", "prior_tvt_plus_z")))
+
+    def test_tvt_input_heel_mask(self) -> None:
+        """ROGII train: full TVT labels + TVT_input only on known heel."""
+        n = 20
+        df = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "Z": -np.arange(n, dtype=float),
+                "TVT": 100 + np.arange(n, dtype=float),
+                "TVT_input": [100.0 + i if i < 8 else np.nan for i in range(n)],
+            }
+        )
+        sp = resolve_middle_out(df, well_id="w1")
+        self.assertEqual(sp.n_known, 8)
+        self.assertEqual(sp.n_predict, 12)
 
 
 if __name__ == "__main__":

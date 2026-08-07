@@ -20,7 +20,7 @@ from rwt.baselines import (
 )
 from rwt.features import build_station_frame, feature_matrix
 from rwt.geometry import trajectory_geometry_features
-from rwt.middle_out import MiddleOutSplit, known_prior_tvt, split_by_mask, split_by_tvt_nan
+from rwt.middle_out import MiddleOutSplit, known_prior_tvt, resolve_middle_out, split_by_mask
 
 
 class Mode(str, Enum):
@@ -79,9 +79,7 @@ def mode_geom(lateral: pd.DataFrame) -> dict[str, Any]:
 
 
 def mode_middle_out(lateral: pd.DataFrame, well_id: str) -> MiddleOutSplit:
-    if "is_predict" in lateral.columns:
-        return split_by_mask(lateral, well_id=well_id)
-    return split_by_tvt_nan(lateral, well_id=well_id)
+    return resolve_middle_out(lateral, well_id=well_id)
 
 
 def mode_prior(lateral: pd.DataFrame, split: MiddleOutSplit) -> dict[str, float]:

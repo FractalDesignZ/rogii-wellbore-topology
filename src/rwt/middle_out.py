@@ -87,9 +87,9 @@ def split_by_tvt_nan(
     """NaN TVT → predict zone (common Kaggle pattern for train masks)."""
     tvt = df[tvt_col]
     m = tvt.isna().to_numpy()
-    if not m.any() and "TVT_input" in df.columns:
-        # fallback: where TVT_input present but we still need a mask column
-        m = np.zeros(len(df), dtype=bool)
+    if not m.any() and "TVT_input" in df.columns and df["TVT_input"].isna().any():
+        # Train labels often fill full TVT; heel/toe mask is TVT_input
+        m = df["TVT_input"].isna().to_numpy()
     idx = np.arange(len(df))
     pred = idx[m]
     known = idx[~m]
@@ -101,6 +101,44 @@ def split_by_tvt_nan(
         ps_md=ps_md,
         n_known=int(len(known)),
         n_predict=int(len(pred)),
+    )
+
+
+def resolve_middle_out(
+    df: pd.DataFrame,
+    *,
+    well_id: str,
+) -> MiddleOutSplit:
+    """
+    Prefer explicit mask, then TVT_input heel mask (ROGII), then TVT NaNs.
+    """
+    if "is_predict" in df.columns:
+        return split_by_mask(df, well_id=well_id)
+    if "TVT_input" in df.columns and df["TVT_input"].isna().any():
+        m = df["TVT_input"].isna().to_numpy()
+        idx = np.arange(len(df))
+        pred = idx[m]
+        known = idx[~m]
+        ps_md = float(df.iloc[pred[0]]["MD"]) if len(pred) and "MD" in df.columns else None
+        return MiddleOutSplit(
+            well_id=str(well_id),
+            known_idx=known,
+            predict_idx=pred,
+            ps_md=ps_md,
+            n_known=int(len(known)),
+            n_predict=int(len(pred)),
+        )
+    if "TVT" in df.columns:
+        return split_by_tvt_nan(df, well_id=well_id)
+    # last resort: all known
+    idx = np.arange(len(df))
+    return MiddleOutSplit(
+        well_id=str(well_id),
+        known_idx=idx,
+        predict_idx=np.array([], dtype=int),
+        ps_md=None,
+        n_known=int(len(idx)),
+        n_predict=0,
     )
 
 

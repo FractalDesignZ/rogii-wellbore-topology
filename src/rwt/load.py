@@ -55,11 +55,26 @@ def discover_layout(root: Path) -> dict[str, Any]:
     }
 
 
+def well_id_from_path(path: Path) -> str:
+    """Normalize ``000d7d20__horizontal_well`` → ``000d7d20`` (submission id prefix)."""
+    stem = path.stem
+    for suf in ("__horizontal_well", "_horizontal_well", "__lateral", "_lateral"):
+        if stem.endswith(suf):
+            return stem[: -len(suf)]
+    return stem
+
+
 def read_well_csv(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     df = _remap_columns(df)
     if "well_id" not in df.columns:
-        df["well_id"] = path.stem
+        df["well_id"] = well_id_from_path(path)
+    else:
+        # prefer path-derived short id when column is missing/empty-like
+        wid0 = str(df["well_id"].iloc[0])
+        if "__horizontal" in wid0 or wid0.endswith("_horizontal_well"):
+            df = df.copy()
+            df["well_id"] = well_id_from_path(path)
     return df
 
 

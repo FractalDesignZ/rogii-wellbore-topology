@@ -19,10 +19,14 @@ def build_station_frame(
     split: MiddleOutSplit,
     *,
     scales: tuple[int, ...] = (16, 32, 64),
+    station_idx: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """
     One row per station. Includes well-level geometry broadcast + local geometry
     + GR match + middle-out priors.
+
+    If ``station_idx`` is set, only those stations are emitted (well geometry still
+    uses the full lateral). Useful for training on known heel only.
     """
     df = lateral.reset_index(drop=True)
     n = len(df)
@@ -44,10 +48,16 @@ def build_station_frame(
         if typewell is not None and "TVT" in typewell
         else None
     )
-    gr = df["GR"].to_numpy(dtype=float) if "GR" in df.columns else np.zeros(n)
+    if "GR" in df.columns:
+        gr = np.nan_to_num(df["GR"].to_numpy(dtype=float), nan=0.0)
+    else:
+        gr = np.zeros(n)
+    if tw_gr is not None:
+        tw_gr = np.nan_to_num(np.asarray(tw_gr, dtype=float), nan=0.0)
 
     rows = []
-    for i in range(n):
+    indices = range(n) if station_idx is None else [int(i) for i in station_idx]
+    for i in indices:
         row: dict[str, Any] = {
             "well_id": split.well_id,
             "station": i,
