@@ -1,0 +1,15 @@
+rogii-wellbore-topology
+Copyright (C) 2026 ZuluYokohama / Aaron Jones
+
+This product includes public interface software licensed under AGPLv3
+(see LICENSE). Proprietary kernel components, if any, are not included
+in this public distribution and remain under separate closed terms.
+
+Lineage (methodology ideas, open-curve transport adaptations):
+  topology-sees-sequence — https://github.com/ZuluYokohama/topology-sees-sequence
+
+Competition context:
+  ROGII Wellbore Geology Prediction (Kaggle)
+
+This NOTICE does not modify the License. For legal protection of novel
+methods (patents, contracts), consult a registered IP attorney.

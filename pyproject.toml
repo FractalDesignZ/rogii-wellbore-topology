@@ -5,9 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rwt"
 version = "0.1.0"
-description = "ROGII late entry — topology-sees-sequence lineage for wellbore TVT"
+description = "ROGII late entry — open-core public face; TSS lineage abstraction modes"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "ZuluYokohama" }]
 dependencies = [
   "numpy>=1.24",
   "scipy>=1.11",

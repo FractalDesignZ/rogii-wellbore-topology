@@ -6,9 +6,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from rwt.geometry import station_local_geometry, trajectory_geometry_features
+from rwt.geometry import station_local_geometry
 from rwt.gr_match import multi_scale_ncc
+from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, known_prior_tvt
+from rwt.watermark import embed_column
 
 
 def build_station_frame(
@@ -24,7 +26,8 @@ def build_station_frame(
     """
     df = lateral.reset_index(drop=True)
     n = len(df)
-    well_geom = trajectory_geometry_features(
+    kernel = resolve_kernel()
+    well_geom = kernel.trajectory_features(
         df["MD"].to_numpy(),
         df["X"].to_numpy(),
         df["Y"].to_numpy(),
@@ -80,7 +83,10 @@ def build_station_frame(
         elif "TVT_true" in df.columns:
             row["TVT"] = float(df.loc[i, "TVT_true"])
         rows.append(row)
-    return pd.DataFrame(rows)
+    stations = pd.DataFrame(rows)
+    stations = kernel.augment_station_frame(stations, df, typewell)
+    stations = embed_column(stations)
+    return stations
 
 
 FEATURE_COLS_DEFAULT = [

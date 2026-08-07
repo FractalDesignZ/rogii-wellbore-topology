@@ -75,6 +75,24 @@ python -m rwt.train --data data/raw --out artifacts/late_real
 - Competition: ROGII × Kaggle  
 - Domain features (NCC, tortuosity proxies): standard geosteering practice + public discussion  
 
+## IP / open-core
+
+| Layer | Where | License |
+|-------|--------|---------|
+| **Public interface** | this repo (`src/rwt`, scripts, tests) | **AGPLv3-or-later** (+ dual-license option) |
+| **Proprietary kernel** | `private_kernel/` (gitignored) or private repo | Closed — never pushed here |
+| **Competition export** | `scripts/export_competition_bundle.py` | Predictions + seal only |
+
+Governance: [`docs/IP_GOVERNANCE.md`](docs/IP_GOVERNANCE.md) · `LICENSE` · `NOTICE`  
+Provenance seals: `rwt.provenance` · watermark: `rwt.watermark` · kernel switch: `RWT_KERNEL=public|private`
+
+```bash
+# competition isolation — never ships private_kernel
+python scripts/export_competition_bundle.py --pred submissions/raw_preds.csv --out submissions/competition_bundle
+```
+
+**Not legal advice.** Patents / commercial contracts → IP attorney.
+
 ## License
 
-Research / competition entry — attribute TSS lineage.
+**AGPL-3.0-or-later** for the public tree. Commercial dual-license available from the copyright holder. Attribute TSS lineage.

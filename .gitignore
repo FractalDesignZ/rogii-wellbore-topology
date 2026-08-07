@@ -5,6 +5,16 @@ data/processed/
 *.csv
 !data/README.md
 
+# PROPRIETARY KERNEL — never publish source; keep README only
+private_kernel/*
+!private_kernel/README.md
+*.whl
+secrets/
+.env
+.env.*
+!.env.example
+
+
 # python
 __pycache__/
 *.py[cod]

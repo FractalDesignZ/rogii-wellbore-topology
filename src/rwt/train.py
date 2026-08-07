@@ -131,6 +131,10 @@ def train_lgbm_residual(
             _fit_fold(tr, va, fold)
 
     oof_tvt = prior + oof
+    from rwt.kernel_api import resolve_kernel
+    from rwt.provenance import seal_artifact
+
+    k = resolve_kernel()
     report = {
         "ok": True,
         "n_stations": int(len(train_df)),
@@ -140,8 +144,15 @@ def train_lgbm_residual(
         "cv_rmse_mean": float(np.mean(fold_scores)),
         "cv_rmse_std": float(np.std(fold_scores)),
         "oof_rmse": rmse(y, oof_tvt),
-        "law": "GroupKFold by well; residual on flat-formation prior; TSS geometry features",
+        "kernel_id": k.kernel_id(),
+        "kernel_private": k.is_private(),
+        "law": (
+            "GroupKFold by well; residual on flat-formation prior; "
+            "open-core public kernel default; private kernel optional"
+        ),
+        "license": "AGPL-3.0-or-later",
     }
+    report["provenance"] = seal_artifact(report, kind="cv_report")
     return {"report": report, "models": models, "feature_cols": cols}
 
 
