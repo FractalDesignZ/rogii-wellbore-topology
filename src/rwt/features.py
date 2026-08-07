@@ -313,18 +313,23 @@ def build_station_frame(
         if "ncc_track_conf" in stations.columns
         else None,
     )
-    # lock heel on best
-    if "is_known" in stations.columns and "TVT" in stations.columns:
-        kmask = stations["is_known"].to_numpy(dtype=bool) & stations["TVT"].notna().to_numpy()
-        if kmask.any():
-            best = best.copy()
-            best[kmask] = stations.loc[kmask, "TVT"].to_numpy(dtype=float)
-    elif len(split.known_idx) and "station" in stations.columns:
-        kset = set(int(x) for x in split.known_idx)
-        st = stations["station"].to_numpy(dtype=int)
-        for j, s in enumerate(st):
-            if s in kset and "TVT" in stations.columns and pd.notna(stations.iloc[j].get("TVT")):
-                best[j] = float(stations.iloc[j]["TVT"])
+    # Heel lock: TVT_input-first (competition-safe), same helper as stack / dip.
+    # Do not require form-label TVT column — test wells may only have TVT_input.
+    if len(split.known_idx):
+        k = np.asarray(split.known_idx, dtype=int)
+        heel_vals = _heel_tvt_values(df, k)
+        best = np.asarray(best, dtype=float).copy()
+        if "station" in stations.columns:
+            st = stations["station"].to_numpy(dtype=int)
+            k_to_h = {int(ki): float(hv) for ki, hv in zip(k, heel_vals) if np.isfinite(hv)}
+            for j, s in enumerate(st):
+                if int(s) in k_to_h:
+                    best[j] = k_to_h[int(s)]
+        else:
+            # stations rows align with full lateral 0..n-1
+            for j, (ki, hv) in enumerate(zip(k, heel_vals)):
+                if 0 <= int(ki) < len(best) and np.isfinite(hv):
+                    best[int(ki)] = float(hv)
     stations["prior_best"] = best
     stations = kernel.augment_station_frame(stations, df, typewell)
     stations = embed_column(stations)

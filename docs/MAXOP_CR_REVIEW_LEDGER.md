@@ -13,9 +13,16 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **4** | #8 | Floors fully finite on residual OOF; private ImportError fail-closed; fold clamp; LGBM audit meta |
 | **5** | #9 | nanmedian impute; `n_splits` clamp in API; `--prior-col`; unit impute |
 
+## Open / in flight
+
+| Set | PR | Results → fixes |
+|-----|-----|-----------------|
+| **1** (crown) | #11 | seed-local NCC band (alias 21.8→16.3); stack-led prior_best weights (12w) |
+| **2** (crown) | #11 | (1) heel conf no bleed into toe; (2) clamp_origin freeze + walk last on known; (3) prior_best heel lock TVT_input-first; (4) TVT-sort typewell + expand empty seed band |
+
 ## CodeRabbit
 
-Fair-usage rate limits often blocked full inline review. Local max-op review substituted; unit tests (48) green at merge.
+Fair-usage rate limits often blocked full inline review. Local max-op review substituted; unit tests green at merge.
 
 ## Sealed MEASURE (this kit)
 

@@ -81,7 +81,9 @@ def multi_scale_ncc(
     med = float(np.median(tw_finite)) if len(tw_finite) else 0.0
     tw_f = np.where(np.isfinite(tw), tw, med)
 
-    # Optional seed-local template band (indices into full typewell)
+    # Optional seed-local template band (indices into full typewell).
+    # Expand radius if seed sits off-grid / sparse so we never silently fall
+    # back to full-well lag (cyclic GR alias).
     band_lo, band_hi = 0, len(tw_f)
     if (
         tw_tvt_arr is not None
@@ -92,14 +94,24 @@ def multi_scale_ncc(
         and len(tw_tvt_arr) == len(tw_f)
     ):
         r_tvt = float(tvt_search_radius)
-        in_band = np.flatnonzero(
-            np.isfinite(tw_tvt_arr)
-            & (tw_tvt_arr >= float(seed_tvt) - r_tvt)
-            & (tw_tvt_arr <= float(seed_tvt) + r_tvt)
-        )
-        if in_band.size >= 4:
-            band_lo = int(in_band[0])
-            band_hi = int(in_band[-1]) + 1
+        in_band = np.array([], dtype=int)
+        for _ in range(6):
+            in_band = np.flatnonzero(
+                np.isfinite(tw_tvt_arr)
+                & (tw_tvt_arr >= float(seed_tvt) - r_tvt)
+                & (tw_tvt_arr <= float(seed_tvt) + r_tvt)
+            )
+            if in_band.size >= 4:
+                band_lo = int(in_band[0])
+                band_hi = int(in_band[-1]) + 1
+                break
+            r_tvt *= 1.5
+        # last resort: nearest-index window (~2·original radius in samples)
+        if in_band.size < 4 and np.isfinite(tw_tvt_arr).any():
+            i0 = int(np.nanargmin(np.abs(tw_tvt_arr - float(seed_tvt))))
+            half_n = max(4, int(len(tw_f) * 0.08))
+            band_lo = max(0, i0 - half_n)
+            band_hi = min(len(tw_f), i0 + half_n + 1)
 
     for s in scales:
         half = s // 2
@@ -190,23 +202,32 @@ def ncc_tvt_track(
             "ncc_track_conf": conf,
         }
 
-    sample = list(range(0, n, max(1, int(stride))))
-    if sample[-1] != n - 1:
-        sample.append(n - 1)
+    # Clamp law is vs original seed (heel last-known), not progressive walk.
+    clamp_origin = float(last)
 
+    # Typewell must be TVT-sorted for lag index ↔ TVT and seed-local band.
     m_tw = np.isfinite(tw_gr) & np.isfinite(tw_tvt)
     if m_tw.sum() < 8:
-        arr = np.full(n, last, dtype=float)
+        arr = np.full(n, clamp_origin, dtype=float)
         arr = np.where(np.isfinite(known_tvt), known_tvt, arr)
         return {
             "prior_ncc_tvt": arr,
             "ncc_track_conf": np.where(np.isfinite(known_tvt), 1.0, conf).astype(float),
         }
+    order = np.argsort(tw_tvt[m_tw])
+    tw_gr = tw_gr[m_tw][order]
+    tw_tvt = tw_tvt[m_tw][order]
+
+    sample = list(range(0, n, max(1, int(stride))))
+    if sample[-1] != n - 1:
+        sample.append(n - 1)
 
     for i in sample:
         if np.isfinite(known_tvt[i]):
             track[i] = float(known_tvt[i])
-            conf[i] = 1.0
+            # walk progressive last for next sparse clamp; do NOT set conf=1
+            # here — heel conf must not bleed into toe via nearest-fill
+            last = float(known_tvt[i])
             continue
         # seed-local lag search (± max_dev·1.25) — full-well lag aliases on cyclic GR
         m = multi_scale_ncc(
@@ -222,35 +243,34 @@ def ncc_tvt_track(
         hint = m.get("tvt_hint_median")
         if hint is None or not np.isfinite(hint) or peak < float(min_peak):
             continue
-        # clamp each sparse hint to seed ± max_dev
+        # clamp each sparse hint to progressive last ± max_dev
         track[i] = last + float(np.clip(float(hint) - last, -max_dev, max_dev))
         conf[i] = float(np.clip(peak, 0.0, 1.0))
 
-    # dense track: linear interp of finite sparse samples; else hold seed
+    # dense track: linear interp of finite sparse samples; else hold clamp origin
     idx = np.flatnonzero(np.isfinite(track))
     if len(idx) >= 2:
         filled = np.interp(np.arange(n, dtype=float), idx.astype(float), track[idx])
     elif len(idx) == 1:
         filled = np.full(n, float(track[idx[0]]), dtype=float)
     else:
-        filled = np.full(n, last, dtype=float)
+        filled = np.full(n, clamp_origin, dtype=float)
 
-    # conf: nearest finite-sample confidence, attenuated off-sample
+    # conf: nearest *NCC-peak* sample only (never heel-known conf → cold toe)
     conf_f = np.zeros(n, dtype=float)
-    if len(idx) >= 1:
-        # vectorized nearest sample index into idx
-        # for each station i, j* = argmin |idx - i|
-        pos = np.searchsorted(idx, np.arange(n))
-        pos = np.clip(pos, 0, len(idx) - 1)
-        pos_lo = np.clip(pos - 1, 0, len(idx) - 1)
-        d_hi = np.abs(idx[pos] - np.arange(n))
-        d_lo = np.abs(idx[pos_lo] - np.arange(n))
+    peak_idx = np.flatnonzero(conf > 0.0)
+    if len(peak_idx) >= 1:
+        pos = np.searchsorted(peak_idx, np.arange(n))
+        pos = np.clip(pos, 0, len(peak_idx) - 1)
+        pos_lo = np.clip(pos - 1, 0, len(peak_idx) - 1)
+        d_hi = np.abs(peak_idx[pos] - np.arange(n))
+        d_lo = np.abs(peak_idx[pos_lo] - np.arange(n))
         nearest = np.where(d_lo <= d_hi, pos_lo, pos)
-        conf_f = conf[idx[nearest]] * 0.85
-        conf_f[idx] = conf[idx]  # exact samples keep full conf
+        conf_f = conf[peak_idx[nearest]] * 0.85
+        conf_f[peak_idx] = conf[peak_idx]
 
-    # clamp law + heel lock
-    filled = last + np.clip(filled - last, -max_dev, max_dev)
+    # clamp law vs seed + heel lock (known conf = 1 only on known stations)
+    filled = clamp_origin + np.clip(filled - clamp_origin, -max_dev, max_dev)
     known_m = np.isfinite(known_tvt)
     filled = np.where(known_m, known_tvt, filled)
     conf_f = np.where(known_m, 1.0, conf_f)

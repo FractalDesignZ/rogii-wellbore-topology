@@ -147,6 +147,49 @@ class TestCrownPath(unittest.TestCase):
         # cold conf off-heel should be low when no peak accepted
         self.assertLess(float(np.mean(out["ncc_track_conf"][10:])), 0.5)
 
+    def test_ncc_heel_conf_does_not_bleed_to_toe(self) -> None:
+        """Known heel conf=1 must not nearest-fill into cold toe (prior_best poison)."""
+        from rwt.gr_match import ncc_tvt_track
+
+        tw_tvt = np.linspace(100, 200, 200)
+        tw_gr = 80 + 20 * np.sin(tw_tvt / 8)
+        n = 80
+        seed = 150.0
+        # pure noise + very high min_peak → zero NCC peaks accepted
+        lat = np.random.default_rng(7).normal(80, 40, n)
+        known = np.full(n, np.nan)
+        known[:20] = seed
+        out = ncc_tvt_track(
+            lat,
+            tw_gr,
+            tw_tvt,
+            known_tvt=known,
+            seed_tvt=seed,
+            stride=4,
+            max_dev=18.0,
+            min_peak=0.99,
+        )
+        self.assertTrue(np.all(out["ncc_track_conf"][:20] == 1.0))
+        # toe must be ~0 conf (no peak samples to nearest-fill from)
+        self.assertLess(float(np.max(out["ncc_track_conf"][20:])), 0.05)
+
+    def test_ncc_unsorted_typewell_still_clamps(self) -> None:
+        """TVT-descending typewell must not break seed-local band / clamp law."""
+        from rwt.gr_match import ncc_tvt_track
+
+        tw_tvt = np.linspace(200, 100, 200)  # reverse order
+        tw_gr = 80 + 20 * np.sin(tw_tvt / 8)
+        n = 50
+        true = 150 + np.linspace(0, 2, n)
+        lat = 80 + 20 * np.sin(true / 8)
+        known = np.full(n, np.nan)
+        known[:12] = true[:12]
+        out = ncc_tvt_track(
+            lat, tw_gr, tw_tvt, known_tvt=known, seed_tvt=true[11], stride=4, max_dev=18.0
+        )
+        self.assertTrue(np.all(np.abs(out["prior_ncc_tvt"] - true[11]) <= 18.0 + 1e-6))
+        self.assertTrue(np.allclose(out["prior_ncc_tvt"][:12], true[:12]))
+
     def test_blend_ncc_conf_gated(self) -> None:
         """Zero NCC conf must not move prior_best; high conf may pull within clamp."""
         n = 30
