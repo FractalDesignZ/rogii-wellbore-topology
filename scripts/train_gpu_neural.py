@@ -40,6 +40,11 @@ def main() -> int:
         default=0,
         help="assemble workers (0=RWT_WORKERS env or auto)",
     )
+    ap.add_argument(
+        "--prior-col",
+        default=None,
+        help="residual base prior (default: resolve DEFAULT / fallbacks incl. prior_best)",
+    )
     a = ap.parse_args()
 
     from rwt.neural_residual import train_neural_residual
@@ -78,13 +83,18 @@ def main() -> int:
         f"t={time.perf_counter()-t0:.1f}s",
         flush=True,
     )
+    n_wells = int(stations["well_id"].nunique()) if "well_id" in stations.columns else 0
+    n_splits = max(2, min(int(a.folds), n_wells)) if n_wells else int(a.folds)
+    if n_splits != a.folds:
+        print(f"[folds] clamped {a.folds} → {n_splits} (n_wells={n_wells})", flush=True)
     rep = train_neural_residual(
         stations,
-        n_splits=a.folds,
+        n_splits=n_splits,
         epochs=a.epochs,
         batch_wells=8,
         max_len=2048,
         hidden=128,
+        prior_col=a.prior_col,
     )
     d = rep.to_dict()
     d["gate2_n_passed"] = gate2.get("n_passed")

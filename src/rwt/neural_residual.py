@@ -190,26 +190,31 @@ def train_neural_residual(
     # put feature cols back for packing
     for i, c in enumerate(cols):
         train_df[c] = X_all[:, i]
-    # sanitize
+    # sanitize: median impute (0-fill biases residual when features sparse)
     for c in cols:
-        train_df[c] = (
-            train_df[c]
-            .replace([np.inf, -np.inf], np.nan)
-            .fillna(0.0)
-            .astype(np.float32)
-        )
+        s = train_df[c].replace([np.inf, -np.inf], np.nan)
+        med = float(np.nanmedian(s.to_numpy(dtype=float))) if len(s) else 0.0
+        if not np.isfinite(med):
+            med = 0.0
+        train_df[c] = s.fillna(med).astype(np.float32)
 
     wells = _well_tensors(train_df, cols, prior_col, max_len=max_len)
     well_ids = np.array([w["well_id"] for w in wells])
     n_groups = len(wells)
     if n_groups < 2:
         raise ValueError("need ≥2 wells for GroupKFold neural residual")
+    n_splits_eff = max(2, min(int(n_splits), n_groups))
+    if n_splits_eff != n_splits:
+        print(
+            f"[neural] folds clamped {n_splits} → {n_splits_eff} (n_wells={n_groups})",
+            flush=True,
+        )
 
     # flatten for OOF / Gate3 (station-level)
     y_flat = train_df["TVT"].to_numpy(float)
     prior_flat = train_df[prior_col].to_numpy(float)
 
-    gkf = GroupKFold(n_splits=min(n_splits, n_groups))
+    gkf = GroupKFold(n_splits=n_splits_eff)
     # station-level OOF storage
     oof_pred = np.full(len(train_df), np.nan, dtype=float)
     fold_scores: list[float] = []
@@ -297,6 +302,23 @@ def train_neural_residual(
     prior_m = prior_flat[m]
     y_m = y_flat[m]
     oof_m = oof_pred[m]
+    if not np.any(m):
+        return NeuralReport(
+            ok=False,
+            device=dev,
+            oof_rmse=float("inf"),
+            oof_rmse_selected=float("inf"),
+            use_residual=False,
+            baseline_rmse={},
+            gate3={"name": "RESIDUAL_ACCEPTANCE", "passed": False, "error": "empty_oof"},
+            fold_rmse=[float(x) for x in fold_scores],
+            n_stations=int(len(train_df)),
+            n_wells=int(n_groups),
+            seconds=round(time.perf_counter() - t0, 2),
+            detail={"error": "no finite OOF predictions"},
+        )
+    # Gate3 floors must be scored on the *same* OOF rows as residual (LGBM parity).
+    # Skip floors with holes on m so beat_all_floors is a fair comparison.
     floor_rmses: dict[str, float] = {}
     for name, col in (
         ("last_known", "prior_last_tvt"),
@@ -313,27 +335,10 @@ def train_neural_residual(
         if col not in train_df.columns:
             continue
         b = train_df[col].to_numpy(float)
-        # Score on OOF rows where this floor is finite (same spirit as LGBM path)
-        mm = m & np.isfinite(b)
-        if int(mm.sum()) < 50:
+        if not np.isfinite(b[m]).all():
             continue
-        floor_rmses[name] = rmse(y_flat[mm], b[mm])
+        floor_rmses[name] = rmse(y_flat[m], b[m])
     baseline_rmse = dict(floor_rmses)
-    if not np.any(m):
-        return NeuralReport(
-            ok=False,
-            device=dev,
-            oof_rmse=float("inf"),
-            oof_rmse_selected=float("inf"),
-            use_residual=False,
-            baseline_rmse=baseline_rmse,
-            gate3={"name": "RESIDUAL_ACCEPTANCE", "passed": False, "error": "empty_oof"},
-            fold_rmse=[float(x) for x in fold_scores],
-            n_stations=int(len(train_df)),
-            n_wells=int(n_groups),
-            seconds=round(time.perf_counter() - t0, 2),
-            detail={"error": "no finite OOF predictions"},
-        )
     lk_m = None
     if "prior_last_tvt" in train_df.columns:
         lk = train_df["prior_last_tvt"].to_numpy(float)[m]
