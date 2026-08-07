@@ -16,17 +16,17 @@ import pandas as pd
 
 from rwt.middle_out import MiddleOutSplit
 
-# Residual base: 12w measure — prior_stack best pure (~12.35) and residual on
-# stack beats residual on last_known (11.49 vs 12.30). last_known remains a
-# Gate3 floor + fallback. prior_best is the crown ensemble feature.
-DEFAULT_PRIOR_COL = "prior_stack"
+# Residual base: 12w set-14 — residual on prior_best **10.95** beats residual on
+# prior_stack **11.06** (Gate3 vs pure stack floor 12.33 ACCEPT). Pure floor still
+# favors prior_stack (~12.33) over prior_best (~12.69); last_known remains Gate3 floor.
+DEFAULT_PRIOR_COL = "prior_best"
 
 # Clamp law: pure prior candidates and residual Δ vs base stay within ±MAX_TVT_DEV.
 # Shared so PF bag, stack blend, NCC track, residual train/serve stay aligned.
 MAX_TVT_DEV = 18.0
 PRIOR_FALLBACKS = (
-    "prior_stack",
     "prior_best",
+    "prior_stack",
     "prior_last_tvt",
     "prior_ncc_tvt",
     "prior_pf_blend",
