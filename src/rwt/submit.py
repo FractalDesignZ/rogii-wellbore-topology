@@ -78,8 +78,9 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     use_residual = bool(model_blob.get("use_residual", True)) and len(models) > 0
     if not use_residual:
         return prior
-    preds = [m.predict(Xn) for m in models]
-    res = np.mean(np.vstack(preds), axis=0)
+    preds = np.vstack([np.asarray(m.predict(Xn), dtype=float) for m in models])
+    # Match train OOF: mean seed bag (median+std-shrink rejected by measure)
+    res = np.mean(preds, axis=0)
     # Clamp residual Δ vs residual *base* only (prior_stack). Do not re-clamp to
     # last_known: Gate3 residual may leave the pure-prior band when it wins OOF.
     max_dev = float(model_blob.get("residual_max_dev", MAX_TVT_DEV))

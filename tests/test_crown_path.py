@@ -244,6 +244,21 @@ class TestCrownPath(unittest.TestCase):
         # high conf + high ncc moves toward stalk within clamp
         self.assertGreater(float(np.mean(out[-8:])), last + 3.0)
 
+    def test_compute_prior_disagreement_pure(self) -> None:
+        """Unit: four-way nanstd matches helper (CR P2 contract)."""
+        from rwt.features import compute_prior_disagreement
+
+        last = 100.0
+        stack = np.array([100.0, 110.0, 100.0])
+        pf = np.array([100.0, 100.0, 100.0])
+        ncc = np.array([100.0, 100.0, np.nan])
+        got = compute_prior_disagreement(last, stack, pf, ncc)
+        exp0 = float(np.nanstd([100.0, 100.0, 100.0, 100.0]))
+        exp1 = float(np.nanstd([100.0, 110.0, 100.0, 100.0]))
+        self.assertAlmostEqual(float(got[0]), exp0, places=6)
+        self.assertAlmostEqual(float(got[1]), exp1, places=6)
+        self.assertGreater(float(got[1]), float(got[0]))
+
     def test_prior_disagreement_uses_post_neighbor_stack(self) -> None:
         """prior_disagreement must use stack after soft-neighbor transfer (CR)."""
         from rwt.features import build_station_frame
@@ -278,22 +293,28 @@ class TestCrownPath(unittest.TestCase):
         idx.add(well_spatial_node_from_lateral("nb", nb))
         sp = resolve_middle_out(lat, well_id="tgt")
         st = build_station_frame(lat, None, sp, spatial_index=idx)
-        # soft neighbor should move some unknown stack rows off last
+        # require soft-neighbor moved stack (deterministic fixture — no skip)
         last = float(st["prior_last_tvt"].iloc[0])
         unknown = ~st["is_known"].to_numpy(dtype=bool)
         stack = st["prior_stack"].to_numpy(dtype=float)
+        ok = st["neighbor_transfer_ok"].to_numpy(dtype=float)
+        nbt = st["neighbor_tvt"].to_numpy(dtype=float)
+        # ensure spatial transfer is live so soft-neighbor can fire
+        self.assertTrue((ok[unknown] > 0.55).any(), "fixture must have trusted neighbor transfer")
+        self.assertTrue(np.isfinite(nbt[unknown]).any())
         moved = unknown & np.isfinite(stack) & (np.abs(stack - last) > 0.05)
-        if not moved.any():
-            self.skipTest("neighbor transfer did not move stack in this fixture")
-        # disagreement of final stack vs last/pf/ncc must match feature column
+        self.assertTrue(
+            moved.any(),
+            "soft neighbor must move at least one unknown stack row off last",
+        )
+        # disagreement of final stack vs last/pf/ncc must match pure helper
+        from rwt.features import compute_prior_disagreement
+
         pf = st["prior_pf_blend"].to_numpy(dtype=float)
         ncc = st["prior_ncc_tvt"].to_numpy(dtype=float)
-        last_arr = np.full(len(st), last)
-        expected = np.nanstd(np.column_stack([last_arr, stack, pf, ncc]), axis=1)
-        expected = np.where(np.isfinite(expected), expected, 0.0)
+        expected = compute_prior_disagreement(last, stack, pf, ncc)
         got = st["prior_disagreement"].to_numpy(dtype=float)
-        self.assertTrue(np.allclose(got, expected, equal_nan=True))
-        # if stack moved, some disagreement on those rows should exceed near-zero
+        self.assertTrue(np.allclose(got, expected, equal_nan=True, atol=1e-9))
         self.assertGreater(float(np.max(got[moved])), 0.01)
 
     def test_impute_feature_frame_median_not_zero(self) -> None:
@@ -315,56 +336,6 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(med["x"], 10.0)
         va_i = impute_feature_frame(va, medians=med)
         self.assertAlmostEqual(float(va_i["x"].iloc[1]), 10.0)
-
-    def test_prior_disagreement_post_neighbor_stack(self) -> None:
-        """prior_disagreement uses post soft-neighbor prior_stack (CR P2)."""
-        from rwt.features import build_station_frame
-        from rwt.middle_out import resolve_middle_out
-        from rwt.spatial import SpatialIndex, well_spatial_node_from_lateral
-
-        n = 40
-        # target: flat stack near last; neighbor far so soft pull moves stack
-        lat = pd.DataFrame(
-            {
-                "MD": np.arange(n, dtype=float) + 10000.0,
-                "X": np.linspace(0, 200, n),
-                "Y": np.zeros(n),
-                "Z": -np.arange(n, dtype=float),
-                "GR": 80 + 5 * np.sin(np.arange(n) / 4.0),
-                "TVT": np.full(n, 100.0),
-                "TVT_input": [100.0 if i < 12 else np.nan for i in range(n)],
-            }
-        )
-        nb = pd.DataFrame(
-            {
-                "MD": np.arange(n, dtype=float) + 10000.0,
-                "X": np.linspace(5, 205, n),
-                "Y": np.zeros(n),
-                "Z": -np.arange(n, dtype=float),
-                "GR": 80 + 5 * np.sin(np.arange(n) / 4.0),
-                "TVT": np.full(n, 112.0),
-                "TVT_input": [112.0 if i < 15 else np.nan for i in range(n)],
-            }
-        )
-        idx = SpatialIndex(max_dist=500.0, close_dist=200.0)
-        idx.add(well_spatial_node_from_lateral("tgt", lat))
-        idx.add(well_spatial_node_from_lateral("nb", nb))
-        tw = pd.DataFrame(
-            {
-                "TVT": np.linspace(90, 120, 80),
-                "GR": 80 + 5 * np.sin(np.linspace(0, 6, 80)),
-            }
-        )
-        sp = resolve_middle_out(lat, well_id="tgt")
-        st = build_station_frame(lat, tw, sp, spatial_index=idx)
-        self.assertIn("prior_disagreement", st.columns)
-        # recomputed column is finite and not the all-zero placeholder
-        d = st["prior_disagreement"].to_numpy(dtype=float)
-        self.assertTrue(np.isfinite(d).all())
-        # if soft neighbor moved stack on toe, disagreement should reflect multi-stalk spread
-        toe = ~st["is_known"].to_numpy(dtype=bool) if "is_known" in st.columns else slice(12, None)
-        # at least some structure: not all zeros when stalk columns present
-        self.assertTrue(float(np.max(d[toe])) >= 0.0)
 
     def test_serve_residual_clip(self) -> None:
         """Serve path clamps residual Δ and uses stored train medians."""

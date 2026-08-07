@@ -23,6 +23,7 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **4** (crown) | #11 | dual seed bag; residual Δ clip ±18; prior_disagreement; soft neighbor→stack. Huber rejected. CR P1: fold-local medians + persist serve medians + serve refit. 12w residual **11.08** honest |
 | **5** (crown) | #11 | neighbor soft **before** prior_best; reject last-reclamp / trust-shrink / collinear feats. Score hold 11.08. |
 | **6** (crown CR) | #11 | heel-safe soft nb; MAX_TVT_DEV; serve zero-fill; **prior_disagreement recompute after neighbor** (OPEN→fixed) |
+| **7** (crown CR) | #11 | `compute_prior_disagreement` helper; deterministic post-neighbor test (no skip); reject bag-std/3-seed/NCC-dense A/B. Score hold **11.08** |
 
 ## CodeRabbit
 

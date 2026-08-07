@@ -170,7 +170,7 @@ def train_lgbm_residual(
     )
     # Clamp residual Δ so head cannot leave pure-prior band (clamp law parity)
     residual_max_dev = float(MAX_TVT_DEV)
-    # Dual seed bag per fold (reduces fold variance on heterogeneous wells)
+    # Dual seed bag per fold (3-seed mean regressed 12w 11.08→11.25; keep 2)
     n_seed_bag = 3 if max_precision else 2
     # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
     if max_precision:

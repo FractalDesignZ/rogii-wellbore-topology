@@ -24,6 +24,30 @@ from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
 
 
+def compute_prior_disagreement(
+    last_known: float,
+    prior_stack: np.ndarray,
+    prior_pf_blend: np.ndarray,
+    prior_ncc: np.ndarray | None = None,
+) -> np.ndarray:
+    """
+    Four-way stalk spread (last, stack, pf_blend, ncc) after final stack is known.
+
+    Call only after soft-neighbor may have updated ``prior_stack``.
+    """
+    stack = np.asarray(prior_stack, dtype=float)
+    pf = np.asarray(prior_pf_blend, dtype=float)
+    n = len(stack)
+    last_arr = np.full(n, float(last_known) if np.isfinite(last_known) else np.nan)
+    if prior_ncc is None:
+        ncc = np.full(n, np.nan)
+    else:
+        ncc = np.asarray(prior_ncc, dtype=float)
+    with np.errstate(all="ignore"):
+        dd = np.nanstd(np.column_stack([last_arr, stack, pf, ncc]), axis=1)
+    return np.where(np.isfinite(dd), dd, 0.0).astype(float)
+
+
 def build_station_frame(
     lateral: pd.DataFrame,
     typewell: pd.DataFrame | None,

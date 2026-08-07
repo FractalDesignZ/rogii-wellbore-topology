@@ -38,7 +38,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | last_known | 13.41 |
 | prior_ncc (seed-local) | **16.27** |
 
-### Rejected A/B (set-5)
+### Rejected A/B (set-5 / set-7)
 
 | Lever | 12w residual | Note |
 | --- | ---: | --- |
@@ -46,10 +46,14 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | trust×disagreement shrink | 11.50 | over-shrinks good residual |
 | re-clamp residual to last±18 | 11.35 | truth can leave pure band |
 | md_frac + stack_minus_last feats | 11.34 | collinear noise |
+| seed-bag median + std shrink | 11.28 | over-shrinks residual |
+| 3-seed mean bag (default) | 11.25 | worse than dual seed |
+| denser NCC stride=5 | ~11.25 | no residual gain |
 
-### Kept (set-5 coherence)
+### Kept (set-5–7 coherence)
 
-Soft neighbor → stack **before** `prior_best` (ensemble saw stale stack). Residual Δ clip vs base only.
+Soft neighbor → stack **before** `prior_best`; `prior_disagreement` post-transfer;
+`compute_prior_disagreement` helper + deterministic CR test; residual Δ clip vs base only.
 
 ## Measure protocol
 
