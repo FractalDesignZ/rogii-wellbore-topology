@@ -312,10 +312,27 @@ def train_neural_residual(
         if col not in train_df.columns:
             continue
         b = train_df[col].to_numpy(float)
-        if not np.isfinite(b[m]).all():
+        # Score on OOF rows where this floor is finite (same spirit as LGBM path)
+        mm = m & np.isfinite(b)
+        if int(mm.sum()) < 50:
             continue
-        floor_rmses[name] = rmse(y_m, b[m])
+        floor_rmses[name] = rmse(y_flat[mm], b[mm])
     baseline_rmse = dict(floor_rmses)
+    if not np.any(m):
+        return NeuralReport(
+            ok=False,
+            device=dev,
+            oof_rmse=float("inf"),
+            oof_rmse_selected=float("inf"),
+            use_residual=False,
+            baseline_rmse=baseline_rmse,
+            gate3={"name": "RESIDUAL_ACCEPTANCE", "passed": False, "error": "empty_oof"},
+            fold_rmse=[float(x) for x in fold_scores],
+            n_stations=int(len(train_df)),
+            n_wells=int(n_groups),
+            seconds=round(time.perf_counter() - t0, 2),
+            detail={"error": "no finite OOF predictions"},
+        )
     lk_m = None
     if "prior_last_tvt" in train_df.columns:
         lk = train_df["prior_last_tvt"].to_numpy(float)[m]
@@ -383,31 +400,23 @@ def export_onnx_for_npu(
     epochs: int = 5,
 ) -> dict[str, Any]:
     """
-    Tiny CUDA train then ONNX export for Intel NPU / OpenVINO experiments.
-    Does not change Gate3 product path until parity measured.
+    Structure-only ONNX export of ResidualTCN for OpenVINO / NPU experiments.
+
+    Does **not** re-train (avoids double MEASURE). Weights are zero-init residual
+    head — not for production score. Product accept remains CUDA/CPU OOF + Gate3.
+    ``epochs`` retained for API compat; ignored.
     """
     import torch
 
+    _ = epochs  # API compat; structure export only
     if "is_predict" in stations.columns:
         df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
     else:
         df = stations[stations["TVT"].notna()].copy()
     if prior_col is None:
         prior_col = resolve_prior_column(df, DEFAULT_PRIOR_COL, strict=False)
-    X_all, cols = feature_matrix(df)
-    for i, c in enumerate(cols):
-        df[c] = X_all[:, i]
+    _X, cols = feature_matrix(df)
     model = _build_model(len(cols), hidden=hidden)
-    # quick fit one well batch on CUDA if present
-    rep = train_neural_residual(
-        stations,
-        n_splits=2,
-        epochs=epochs,
-        max_len=max_len,
-        hidden=hidden,
-        batch_wells=4,
-    )
-    # re-init export model from scratch with dummy forward (structure only)
     model.eval()
     dummy = torch.zeros(1, max_len, len(cols), dtype=torch.float32)
     out_path = Path(out_path)
@@ -437,6 +446,7 @@ def export_onnx_for_npu(
         "onnx_error": onnx_err,
         "n_feat": len(cols),
         "max_len": max_len,
-        "note": "NPU path experimental — product accept still CUDA/CPU OOF + Gate3",
-        "pilot_report": rep.to_dict(),
+        "weights": "structure_only_zero_residual_head",
+        "note": "NPU experimental structure export — not a scored model; Gate3 CUDA/CPU OOF is authority",
+        "prior_col": prior_col,
     }

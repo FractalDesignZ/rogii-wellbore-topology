@@ -46,6 +46,17 @@ def main() -> int:
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--max-wells", type=int, default=0, help="0 = all")
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="assemble workers (0=use RWT_WORKERS env or auto)",
+    )
+    ap.add_argument(
+        "--no-max-precision",
+        action="store_true",
+        help="use crown-default shallow LGBM instead of deep residual head",
+    )
     a = ap.parse_args()
 
     out = Path(a.out)
@@ -68,9 +79,9 @@ def main() -> int:
         flush=True,
     )
 
-    # Honor dashboard / parallel env when present
-    workers = None
-    if os.environ.get("RWT_WORKERS"):
+    # Honor CLI workers, then dashboard / parallel env
+    workers = a.workers if a.workers > 0 else None
+    if workers is None and os.environ.get("RWT_WORKERS"):
         try:
             workers = max(1, int(os.environ["RWT_WORKERS"]))
         except ValueError:
@@ -94,7 +105,7 @@ def main() -> int:
         n_splits=a.folds,
         seed=a.seed,
         gate2_meta=gate2,
-        max_precision=True,
+        max_precision=not a.no_max_precision,
     )
     rep = result["report"]
     selected = float(rep.get("oof_rmse_selected") or rep.get("oof_rmse") or 1e9)
