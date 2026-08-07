@@ -14,6 +14,7 @@ from rwt.particle_track import particle_prior_for_well
 from rwt.priors import (
     FORM_SURFACE_LEAK_COLS,
     _heel_tvt_values,
+    blend_prior_best,
     blend_stack_priors,
     compute_heel_fitted_dip_prior,
     compute_local_dip_prior,
@@ -250,6 +251,43 @@ def build_station_frame(
     stations = attach_spatial_features(
         stations, df, spatial_index, split.well_id
     )
+    # Crown pure prior after neighbor attach (uses transfer_ok + heel offset)
+    last_col = stations["prior_last_tvt"].to_numpy(dtype=float)
+    last_f = float(last_col[0]) if len(last_col) and np.isfinite(last_col[0]) else float("nan")
+    if not np.isfinite(last_f):
+        last_f = float(np.nanmedian(last_col)) if np.isfinite(last_col).any() else 0.0
+    nb = (
+        stations["neighbor_tvt"].to_numpy(dtype=float)
+        if "neighbor_tvt" in stations.columns
+        else None
+    )
+    nb_ok = (
+        stations["neighbor_transfer_ok"].to_numpy(dtype=float)
+        if "neighbor_transfer_ok" in stations.columns
+        else None
+    )
+    best = blend_prior_best(
+        last_f,
+        stations["prior_stack"].to_numpy(dtype=float),
+        stations["prior_pf_blend"].to_numpy(dtype=float),
+        stations["prior_local_dip"].to_numpy(dtype=float),
+        stations["pf_confidence"].to_numpy(dtype=float),
+        neighbor_tvt=nb,
+        neighbor_ok=nb_ok,
+    )
+    # lock heel on best
+    if "is_known" in stations.columns and "TVT" in stations.columns:
+        kmask = stations["is_known"].to_numpy(dtype=bool) & stations["TVT"].notna().to_numpy()
+        if kmask.any():
+            best = best.copy()
+            best[kmask] = stations.loc[kmask, "TVT"].to_numpy(dtype=float)
+    elif len(split.known_idx) and "station" in stations.columns:
+        kset = set(int(x) for x in split.known_idx)
+        st = stations["station"].to_numpy(dtype=int)
+        for j, s in enumerate(st):
+            if s in kset and "TVT" in stations.columns and pd.notna(stations.iloc[j].get("TVT")):
+                best[j] = float(stations.iloc[j]["TVT"])
+    stations["prior_best"] = best
     stations = kernel.augment_station_frame(stations, df, typewell)
     stations = embed_column(stations)
     return stations
@@ -292,6 +330,7 @@ FEATURE_COLS_DEFAULT = [
     "prior_pf_blend",
     "prior_pf_bag",
     "prior_stack",
+    "prior_best",
     "pf_confidence",
     "pf_tvt_std",
     "ncc_16",
@@ -306,6 +345,7 @@ FEATURE_COLS_DEFAULT = [
     "neighbor_transfer_ok",
     "neighbor_count",
     "neighbor_min_dist",
+    "neighbor_offset",
 ]
 
 

@@ -16,13 +16,14 @@ import pandas as pd
 
 from rwt.middle_out import MiddleOutSplit
 
-# Residual base: clamped stack (last_known + soft PF/dip) is best pure floor
-# after hard-clamp math (12w: stack ~11.8 < last ~13.4). Residual must beat it.
-DEFAULT_PRIOR_COL = "prior_stack"
+# Residual base: last_known is still strongest pure floor on many cohorts;
+# prior_best is the crown ensemble feature + optional residual base when it wins.
+DEFAULT_PRIOR_COL = "prior_last_tvt"
 PRIOR_FALLBACKS = (
+    "prior_last_tvt",
+    "prior_best",
     "prior_stack",
     "prior_pf_blend",
-    "prior_last_tvt",
     "prior_local_dip",
     "prior_pf_bag",
     "prior_dip_stack",
@@ -322,3 +323,70 @@ def blend_stack_priors(
     pf_delta = np.clip(pf - last_known, -max_dev, max_dev)
     out = (1.0 - c) * struct + c * (last_known + pf_delta)
     return last_known + np.clip(out - last_known, -max_dev, max_dev)
+
+
+def blend_prior_best(
+    last_known: float,
+    prior_stack: np.ndarray,
+    prior_pf_blend: np.ndarray,
+    prior_local_dip: np.ndarray,
+    pf_confidence: np.ndarray,
+    *,
+    neighbor_tvt: np.ndarray | None = None,
+    neighbor_ok: np.ndarray | None = None,
+    max_dev: float = 18.0,
+) -> np.ndarray:
+    """
+    Crown-path pure prior: confidence-weighted ensemble of clamped candidates.
+
+    All candidates hard-clamped to last_known ± max_dev. Neighbor TVT only where
+    transfer_ok is high. Output never wanders more than max_dev from last_known.
+    """
+    last = float(last_known)
+    n = len(prior_stack)
+    last_arr = np.full(n, last, dtype=float)
+
+    def _clamp(x: np.ndarray) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        return last + np.clip(x - last, -max_dev, max_dev)
+
+    stack = _clamp(prior_stack)
+    blend = _clamp(prior_pf_blend)
+    local = _clamp(prior_local_dip)
+    conf = np.clip(np.asarray(pf_confidence, dtype=float), 0.0, 1.0)
+
+    # zero-weight non-finite candidates (after clamp) so NaNs cannot poison out
+    def _finite_or_last(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        fin = np.isfinite(x)
+        return np.where(fin, x, last_arr), fin
+
+    stack, fin_s = _finite_or_last(stack)
+    blend, fin_b = _finite_or_last(blend)
+    local, fin_l = _finite_or_last(local)
+
+    # Crown weights: last_known dominates; PF/stack only when conf high (full-cohort law)
+    w_last = 0.50 + 0.25 * (1.0 - conf)
+    w_stack = (0.20 + 0.10 * conf) * fin_s.astype(float)
+    w_pf = (0.08 + 0.22 * conf) * fin_b.astype(float)
+    w_loc = (0.05 * (1.0 - conf)) * fin_l.astype(float)
+    w_nb = np.zeros(n, dtype=float)
+    nb = last_arr
+    if neighbor_tvt is not None and neighbor_ok is not None:
+        nb_raw = np.asarray(neighbor_tvt, dtype=float)
+        ok = np.asarray(neighbor_ok, dtype=float)
+        m = np.isfinite(nb_raw) & (ok > 0.5)
+        if m.any():
+            nb = _clamp(np.where(m, nb_raw, last))
+            nb, fin_n = _finite_or_last(nb)
+            w_nb = np.where(m & fin_n, 0.12 * ok * conf, 0.0)
+
+    w_sum = w_last + w_stack + w_pf + w_loc + w_nb
+    w_sum = np.where(w_sum < 1e-9, 1.0, w_sum)
+    out = (
+        w_last * last_arr
+        + w_stack * stack
+        + w_pf * blend
+        + w_loc * local
+        + w_nb * nb
+    ) / w_sum
+    return _clamp(out)
