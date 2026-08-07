@@ -70,7 +70,7 @@ class TestSpatial(unittest.TestCase):
         sp = resolve_middle_out(a, well_id="a")
         st = build_station_frame(a, None, sp, spatial_index=idx)
         self.assertIn("neighbor_tvt_wmean", st.columns)
-        self.assertIn("neighbor_n_close", st.columns)
+        self.assertIn("neighbor_count_close", st.columns)
         self.assertIn("neighbor_weight_sum", st.columns)
         # interaction features present
         self.assertIn("pf_conf_x_rel_md", st.columns)

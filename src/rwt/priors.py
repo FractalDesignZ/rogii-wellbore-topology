@@ -16,13 +16,23 @@ import pandas as pd
 
 from rwt.middle_out import MiddleOutSplit
 
-# Residual base: last_known is still strongest pure floor on many cohorts;
-# prior_best is the crown ensemble feature + optional residual base when it wins.
-DEFAULT_PRIOR_COL = "prior_last_tvt"
+# Residual base: 12w set-14 — residual on prior_best **10.95** beats residual on
+# prior_stack **11.06** (Gate3 vs pure stack floor 12.33 ACCEPT). Pure floor still
+# favors prior_stack (~12.33) over prior_best (~12.69); last_known remains Gate3 floor.
+DEFAULT_PRIOR_COL = "prior_best"
+
+# Clamp law: pure prior candidates and residual Δ vs base stay within ±MAX_TVT_DEV.
+# Shared so PF bag, stack blend, NCC track, residual train/serve stay aligned.
+MAX_TVT_DEV = 18.0
+# Neighbor transfer trust gate (prior_best blend + optional stack soft-nb).
+NEIGHBOR_TRANSFER_OK_MIN = 0.55
+# Legacy blobs without stored prior_column: prefer stack (older residual base)
+# before prior_best so stack-trained models do not silently switch bases.
 PRIOR_FALLBACKS = (
-    "prior_last_tvt",
-    "prior_best",
     "prior_stack",
+    "prior_best",
+    "prior_last_tvt",
+    "prior_ncc_tvt",
     "prior_pf_blend",
     "prior_local_dip",
     "prior_pf_bag",
@@ -299,22 +309,27 @@ def compute_heel_fitted_dip_prior(
 def blend_stack_priors(
     last_known: float,
     prior_dip_stack: np.ndarray,
-    prior_pf_bag: np.ndarray,
+    prior_pf: np.ndarray,
     pf_confidence: np.ndarray,
     *,
+    prior_ncc: np.ndarray | None = None,
+    ncc_conf: np.ndarray | None = None,
     conf_floor: float = 0.25,
     conf_ceil: float = 0.70,
-    max_dev: float = 18.0,
+    max_dev: float = MAX_TVT_DEV,
 ) -> np.ndarray:
     """
-    Conservative stack: last_known floor + small dip pull + PF only where confident.
+    Best pure residual base (12w ~12.35 with median-bag PF arm).
 
-    Hard-clamps deviation from last_known to ±max_dev so a runaway PF/dip cannot
-    destroy the strong public floor (diag: unclamped blend lost 5–7 ft on some wells).
+    last_known floor + soft dip + conf-gated PF stalk. Optional NCC soft pull
+    only at high ncc_conf (cold stalk ≡ zero). Clamp law: last ± max_dev.
+
+    Note: callers should pass median-bag or blend for ``prior_pf``; raw single-PF
+    tracks with high process span destroy the pure floor.
     """
     last_known = float(last_known)
     dip = np.asarray(prior_dip_stack, float)
-    pf = np.asarray(prior_pf_bag, float)
+    pf = np.asarray(prior_pf, float)
     conf = np.asarray(pf_confidence, float)
     # structural: mostly last_known; dip only a soft nudge (already MD-decayed)
     dip_delta = np.clip(dip - last_known, -max_dev, max_dev)
@@ -322,6 +337,18 @@ def blend_stack_priors(
     c = np.clip((conf - conf_floor) / max(conf_ceil - conf_floor, 1e-6), 0.0, 1.0)
     pf_delta = np.clip(pf - last_known, -max_dev, max_dev)
     out = (1.0 - c) * struct + c * (last_known + pf_delta)
+    if prior_ncc is not None:
+        ncc = np.asarray(prior_ncc, float)
+        nc = (
+            np.clip(np.asarray(ncc_conf, float), 0.0, 1.0)
+            if ncc_conf is not None
+            else np.zeros(len(ncc))
+        )
+        # only high NCC conf moves stack (cold stalk ≡ zero pull); max 20% mix
+        cn = np.clip((nc - 0.45) / 0.40, 0.0, 1.0) * 0.20
+        ncc_delta = np.clip(ncc - last_known, -max_dev, max_dev)
+        fin = np.isfinite(ncc)
+        out = np.where(fin, (1.0 - cn) * out + cn * (last_known + ncc_delta), out)
     return last_known + np.clip(out - last_known, -max_dev, max_dev)
 
 
@@ -334,13 +361,15 @@ def blend_prior_best(
     *,
     neighbor_tvt: np.ndarray | None = None,
     neighbor_ok: np.ndarray | None = None,
-    max_dev: float = 18.0,
+    prior_ncc: np.ndarray | None = None,
+    ncc_conf: np.ndarray | None = None,
+    max_dev: float = MAX_TVT_DEV,
 ) -> np.ndarray:
     """
     Crown-path pure prior: confidence-weighted ensemble of clamped candidates.
 
-    All candidates hard-clamped to last_known ± max_dev. Neighbor TVT only where
-    transfer_ok is high. Output never wanders more than max_dev from last_known.
+    Includes PF blend, stack, local MD, neighbor (ok+conf), and NCC stalk track.
+    All candidates hard-clamped to last_known ± max_dev.
     """
     last = float(last_known)
     n = len(prior_stack)
@@ -355,7 +384,6 @@ def blend_prior_best(
     local = _clamp(prior_local_dip)
     conf = np.clip(np.asarray(pf_confidence, dtype=float), 0.0, 1.0)
 
-    # zero-weight non-finite candidates (after clamp) so NaNs cannot poison out
     def _finite_or_last(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         fin = np.isfinite(x)
         return np.where(fin, x, last_arr), fin
@@ -364,23 +392,36 @@ def blend_prior_best(
     blend, fin_b = _finite_or_last(blend)
     local, fin_l = _finite_or_last(local)
 
-    # Crown weights: last_known dominates; PF/stack only when conf high (full-cohort law)
-    w_last = 0.50 + 0.25 * (1.0 - conf)
-    w_stack = (0.20 + 0.10 * conf) * fin_s.astype(float)
-    w_pf = (0.08 + 0.22 * conf) * fin_b.astype(float)
-    w_loc = (0.05 * (1.0 - conf)) * fin_l.astype(float)
+    # Measure-driven weights (12w crown): prior_stack best pure (~12.35) vs
+    # last (~13.4). Stack-led ensemble; last anchors; PF/NCC conf-gated only.
+    w_last = 0.24 + 0.14 * (1.0 - conf)
+    w_stack = (0.42 + 0.10 * conf) * fin_s.astype(float)
+    w_pf = (0.06 + 0.16 * conf) * fin_b.astype(float)
+    w_loc = (0.02 * (1.0 - conf)) * fin_l.astype(float)
     w_nb = np.zeros(n, dtype=float)
+    w_ncc = np.zeros(n, dtype=float)
     nb = last_arr
+    ncc_arr = last_arr
     if neighbor_tvt is not None and neighbor_ok is not None:
         nb_raw = np.asarray(neighbor_tvt, dtype=float)
         ok = np.asarray(neighbor_ok, dtype=float)
-        m = np.isfinite(nb_raw) & (ok > 0.5)
+        m = np.isfinite(nb_raw) & (ok > NEIGHBOR_TRANSFER_OK_MIN)
         if m.any():
             nb = _clamp(np.where(m, nb_raw, last))
             nb, fin_n = _finite_or_last(nb)
-            w_nb = np.where(m & fin_n, 0.12 * ok * conf, 0.0)
+            w_nb = np.where(m & fin_n, 0.08 * ok * conf, 0.0)
+    if prior_ncc is not None:
+        ncc_raw = np.asarray(prior_ncc, dtype=float)
+        nc = (
+            np.clip(np.asarray(ncc_conf, dtype=float), 0.0, 1.0)
+            if ncc_conf is not None
+            else np.zeros(n)
+        )
+        ncc_arr, fin_c = _finite_or_last(_clamp(ncc_raw))
+        # zero conf → zero weight; seed-local NCC only when peak is trusted
+        w_ncc = (0.22 * nc) * fin_c.astype(float)
 
-    w_sum = w_last + w_stack + w_pf + w_loc + w_nb
+    w_sum = w_last + w_stack + w_pf + w_loc + w_nb + w_ncc
     w_sum = np.where(w_sum < 1e-9, 1.0, w_sum)
     out = (
         w_last * last_arr
@@ -388,5 +429,6 @@ def blend_prior_best(
         + w_pf * blend
         + w_loc * local
         + w_nb * nb
+        + w_ncc * ncc_arr
     ) / w_sum
     return _clamp(out)

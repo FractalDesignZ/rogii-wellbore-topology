@@ -10,7 +10,7 @@ import pandas as pd
 from rwt.features import build_station_frame
 from rwt.load import iter_well_frames, load_typewell, typewell_path_for_well
 from rwt.middle_out import resolve_middle_out
-from rwt.priors import resolve_prior_column
+from rwt.priors import MAX_TVT_DEV, PRIOR_FALLBACKS, resolve_prior_column
 from rwt.spatial import build_spatial_index
 
 
@@ -46,21 +46,36 @@ def format_submission(
 
 
 def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
+    from rwt.features import impute_feature_frame
+
     cols = model_blob["feature_cols"]
-    X = (
-        stations.reindex(columns=cols)
-        .astype(float)
-        .replace([np.inf, -np.inf], np.nan)
-        .fillna(0.0)
-    )
-    Xn = X.to_numpy()
+    # Train/serve parity: use *stored* train medians (never batch-fit on serve).
+    # Legacy blobs without feature_medians get deterministic zero-fill so results
+    # do not depend on serving-batch composition.
+    stored_med = model_blob.get("feature_medians")
+    if isinstance(stored_med, dict) and stored_med:
+        medians = {str(k): float(v) for k, v in stored_med.items()}
+    else:
+        medians = {str(c): 0.0 for c in cols}
+    missing = [c for c in cols if c not in stations.columns]
+    if missing:
+        raise ValueError(
+            f"serving frame missing {len(missing)} trained feature columns: "
+            f"{missing[:10]} — refuse silent median fill; rebuild station frame"
+        )
+    Xn = impute_feature_frame(
+        stations.reindex(columns=cols), medians=medians
+    ).to_numpy(dtype=float)
     # Train-serve contract: stored prior_column is strict (no silent swap).
     # Legacy blobs without the key fall back through PRIOR_FALLBACKS.
     stored_prior = model_blob.get("prior_column")
     if stored_prior:
         prior_col = resolve_prior_column(stations, str(stored_prior), strict=True)
     else:
-        prior_col = resolve_prior_column(stations, "prior_last_tvt", strict=False)
+        # Legacy blob: walk PRIOR_FALLBACKS (stack before best); not last_tvt-first
+        prior_col = resolve_prior_column(
+            stations, PRIOR_FALLBACKS[0], strict=False
+        )
     prior = stations[prior_col].to_numpy(dtype=float)
     if not np.isfinite(prior).all():
         n_bad = int((~np.isfinite(prior)).sum())
@@ -68,24 +83,94 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
             f"non-finite serving prior '{prior_col}' on {n_bad}/{len(prior)} rows; "
             "refuse silent fill — fix assemble/prior before submit"
         )
-    models = model_blob.get("models") or []
-    use_residual = bool(model_blob.get("use_residual", True)) and len(models) > 0
-    if not use_residual:
-        return prior
-    preds = [m.predict(Xn) for m in models]
-    res = np.mean(np.vstack(preds), axis=0)
-    out = prior + res
+    max_dev = float(model_blob.get("residual_max_dev", MAX_TVT_DEV))
+    smooth_w = int(model_blob.get("residual_smooth_window") or 0)
+    wids = (
+        stations["well_id"].to_numpy()
+        if "well_id" in stations.columns
+        else None
+    )
 
-    # Adaptive serve (public): when train stored adaptive_serve=True, apply residual
-    # only where PF confidence is high enough. Mirrors gate_residual_acceptance_per_well
-    # without requiring a stored well_fire map (works on test wells too).
+    def _head_tvt(prior_arr: np.ndarray, models: list) -> np.ndarray:
+        if not models:
+            return prior_arr
+        preds = np.vstack([np.asarray(m.predict(Xn), dtype=float) for m in models])
+        # Match train OOF: mean seed bag (median+std-shrink rejected by measure)
+        res = np.mean(preds, axis=0)
+        # Clamp residual Δ vs residual *base* only. Do not re-clamp to last_known.
+        res = np.clip(res, -max_dev, max_dev)
+        if smooth_w > 1 and wids is not None:
+            # Skip when well_id missing — avoid cross-well rolling blend
+            from rwt.baselines import smooth_residual_along_well
+
+            order_key = None
+            if "MD" in stations.columns:
+                order_key = stations["MD"].to_numpy(dtype=float)
+            elif "station" in stations.columns:
+                order_key = stations["station"].to_numpy(dtype=float)
+            res = smooth_residual_along_well(
+                res, wids, window=smooth_w, order_key=order_key
+            )
+            res = np.clip(res, -max_dev, max_dev)
+        return prior_arr + res
+
+    # Dual residual: mean over residual_heads (set-15); legacy uses models alone
+    heads = model_blob.get("residual_heads") or []
+    use_residual = bool(model_blob.get("use_residual", True))
+    if use_residual and heads:
+        outs: list[np.ndarray] = []
+        out_bases: list[str] = []
+        # Weights are aligned to residual_heads order at train time (by base name)
+        w_raw = model_blob.get("dual_residual_weights")
+        name_to_w: dict[str, float] = {}
+        if isinstance(w_raw, (list, tuple)):
+            for h, wi in zip(heads, w_raw, strict=False):
+                if isinstance(h, dict):
+                    name_to_w[str(h.get("prior_column") or "")] = float(wi)
+        for h in heads:
+            if not isinstance(h, dict):
+                continue
+            h_models = h.get("models") or []
+            if not h_models:
+                continue
+            h_prior_name = str(h.get("prior_column") or stored_prior or "prior_best")
+            h_col = resolve_prior_column(stations, h_prior_name, strict=True)
+            h_prior = stations[h_col].to_numpy(dtype=float)
+            if not np.isfinite(h_prior).all():
+                n_bad = int((~np.isfinite(h_prior)).sum())
+                raise ValueError(
+                    f"non-finite serving prior '{h_col}' on {n_bad}/{len(h_prior)} rows"
+                )
+            outs.append(_head_tvt(h_prior, list(h_models)))
+            out_bases.append(h_prior_name)
+        if outs:
+            stacked = np.vstack(outs)
+            ww = np.asarray(
+                [name_to_w.get(b, float("nan")) for b in out_bases], dtype=float
+            )
+            if np.isfinite(ww).all() and float(np.sum(ww)) > 0:
+                ww = ww / ww.sum()
+                out = np.average(stacked, axis=0, weights=ww)
+            else:
+                out = np.mean(stacked, axis=0)
+            if not np.isfinite(out).all():
+                n_bad = int((~np.isfinite(out)).sum())
+                raise ValueError(
+                    f"non-finite residual predictions on {n_bad}/{len(out)} rows"
+                )
+            return out
+    models = model_blob.get("models") or []
+    if not use_residual or not models:
+        return prior
+    out = _head_tvt(prior, list(models))
+    # Adaptive serve: residual only where PF confidence is high enough
+    # (mirrors gate_residual_acceptance_per_well without well_fire map)
     adaptive = bool(model_blob.get("adaptive_serve", False))
     conf_thresh = float(model_blob.get("adaptive_conf_threshold", 0.35))
     if adaptive and "pf_confidence" in stations.columns:
         conf = stations["pf_confidence"].to_numpy(dtype=float)
         fire = np.isfinite(conf) & (conf >= conf_thresh)
         out = np.where(fire, out, prior)
-
     if not np.isfinite(out).all():
         n_bad = int((~np.isfinite(out)).sum())
         raise ValueError(
