@@ -14,20 +14,24 @@
 
 Full thesis: [`docs/ABSTRACTION_MODES.md`](docs/ABSTRACTION_MODES.md) · entry blurb: [`docs/KAGGLE_ENTRY.md`](docs/KAGGLE_ENTRY.md)
 
+**NotebookLM / RAG knowledge base (truth-audited):**  
+[`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) — Volume II map, three traps, three-layer stack, Gate3, full-cohort ledger (773w residual OOF **14.54** vs last_known **15.91**).
+
 ## Competition law (short)
 
 - **Target:** TVT (stratigraphic position), not Z alone  
 - **Metric:** RMSE(dTVT)  
 - **CV:** GroupKFold by well  
 - **Trap:** global TVT↔Z ≠ within-lateral slope  
+- **Clamp / Gate3:** residual only if it beats best pure prior floor *and* last_known  
 
 ## Layout
 
 ```text
 src/rwt/           # executable modes + train/submit
-scripts/           # download, probe, eda, late-entry driver, smoke
+scripts/           # download, probe, eda, late-entry, dashboard, parallel train
 tests/
-docs/              # ABSTRACTION_MODES, LINEAGE_TSS, PROTOCOL, KAGGLE_ENTRY
+docs/              # KB, ABSTRACTION_MODES, LINEAGE_TSS, PROTOCOL, KAGGLE_ENTRY
 data/raw/          # Kaggle download (gitignored)
 artifacts/         # CV + certificates (gitignored contents ok to regenerate)
 ```
@@ -50,7 +54,10 @@ python scripts/run_late_entry.py
 python scripts/download_kaggle.py          # needs kaggle.json + rules accepted
 python scripts/probe_data.py
 python scripts/eda_report.py --data data/raw
-python -m rwt.train --data data/raw --out artifacts/late_real
+
+# multi-core full train + live progress bar dashboard
+powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
+# → http://127.0.0.1:8765/  (bar-only refresh; details in pop-outs)
 ```
 
 ### Kaggle credentials
@@ -65,9 +72,12 @@ python -m rwt.train --data data/raw --out artifacts/late_real
 | Phase | Status |
 |-------|--------|
 | Abstraction-mode stack + TSS open-curve geometry | **landed** |
-| GitHub remote | push target `ZuluYokohama/rogii-wellbore-topology` |
-| Kaggle data | **NEED_INFO** until token + rules |
-| First scored submit | after data + schema align in `submit.py` |
+| PF stack + clamps + Gate3 best pure floor | **landed** (PR#3–#4) |
+| Multi-process assemble + live dashboard | **landed** (PR#5) |
+| Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
+| GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
+| RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
+| First scored Kaggle submit | human upload only — OOF mid-teens; submit MEASURES, does not close LB ~6–7 |
 
 ## Attribution
 
