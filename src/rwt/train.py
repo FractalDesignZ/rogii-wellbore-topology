@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -97,12 +98,16 @@ def train_lgbm_residual(
     seed: int = 42,
     prior_col: str | None = None,
     gate2_meta: dict[str, Any] | None = None,
+    max_precision: bool = False,
 ) -> dict[str, Any]:
     """
     Residual learner on labeled *toe* (is_predict).
 
     Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (pf_blend).
     Explicit prior_col is strict (must exist); omitted uses DEFAULT with fallbacks.
+
+    max_precision=True: deeper trees, more rounds, more leaves — for 24c/32GB kits
+    hunting sub-5ft RMSE (still Gate3 gated).
     """
     if "is_predict" in stations.columns:
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
@@ -137,28 +142,47 @@ def train_lgbm_residual(
     oof = np.zeros(len(train_df))
     models = []
     fold_scores: list[float] = []
-    # Residual head: shallow, regularized — target is small ΔTVT, not absolute map
-    import os as _os
-
+    # Residual head: shallow default; max_precision deepens trees for score war.
+    # Thread count from RWT_LGBM_THREADS / OMP (dashboard parallel train sets these).
     lgb_threads = int(
-        _os.environ.get("RWT_LGBM_THREADS")
-        or _os.environ.get("OMP_NUM_THREADS")
-        or max(1, (_os.cpu_count() or 4))
+        os.environ.get("RWT_LGBM_THREADS")
+        or os.environ.get("OMP_NUM_THREADS")
+        or os.environ.get("RWT_NUM_THREADS")
+        or max(1, (os.cpu_count() or 4))
     )
-    params = {
-        "objective": "regression",
-        "metric": "rmse",
-        "learning_rate": 0.03,
-        "num_leaves": 31,
-        "min_data_in_leaf": 80,
-        "feature_fraction": 0.7,
-        "bagging_fraction": 0.8,
-        "bagging_freq": 1,
-        "lambda_l2": 2.0,
-        "num_threads": lgb_threads,
-        "verbosity": -1,
-        "seed": seed,
-    }
+    if max_precision:
+        params = {
+            "objective": "regression",
+            "metric": "rmse",
+            "learning_rate": 0.02,
+            "num_leaves": 127,
+            "min_data_in_leaf": 40,
+            "feature_fraction": 0.85,
+            "bagging_fraction": 0.9,
+            "bagging_freq": 1,
+            "lambda_l2": 1.0,
+            "max_bin": 511,
+            "num_threads": lgb_threads,
+            "verbosity": -1,
+            "seed": seed,
+        }
+        n_rounds, early = 2500, 120
+    else:
+        params = {
+            "objective": "regression",
+            "metric": "rmse",
+            "learning_rate": 0.03,
+            "num_leaves": 31,
+            "min_data_in_leaf": 80,
+            "feature_fraction": 0.7,
+            "bagging_fraction": 0.8,
+            "bagging_freq": 1,
+            "lambda_l2": 2.0,
+            "num_threads": lgb_threads,
+            "verbosity": -1,
+            "seed": seed,
+        }
+        n_rounds, early = 800, 60
 
     def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int) -> None:
         dtr = lgb.Dataset(X[tr], label=y_res[tr], feature_name=cols)
@@ -168,9 +192,9 @@ def train_lgbm_residual(
         model = lgb.train(
             p,
             dtr,
-            num_boost_round=800,
+            num_boost_round=n_rounds,
             valid_sets=[dva],
-            callbacks=[lgb.early_stopping(60, verbose=False)],
+            callbacks=[lgb.early_stopping(early, verbose=False)],
         )
         pred_res = model.predict(X[va])
         oof[va] = pred_res

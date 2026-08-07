@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""
+Max-precision ROGII train driver — use every core, full float64 features,
+report vs 5.0 ft target under Gate3 residual law.
+
+Harness coupling (separate process / MCP):
+  restrict → this MEASURE → audit OPEN|STOP on RMSE vs 5ft + Gate3
+  residue never forced: pure prior wins if residual loses floors
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+# saturate this kit
+os.environ.setdefault("OMP_NUM_THREADS", "20")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "20")
+os.environ.setdefault("MKL_NUM_THREADS", "20")
+os.environ.setdefault("RWT_NUM_THREADS", "20")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "20")
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+import numpy as np  # noqa: E402
+
+# Prefer float64 for feature geom / priors (accuracy over RAM on 32GB)
+np.set_printoptions(precision=8)
+
+from rwt.train import _assemble_dataset, train_lgbm_residual  # noqa: E402
+
+
+TARGET_FT = 5.0
+
+
+def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data", default=str(ROOT / "data" / "raw"))
+    ap.add_argument("--out", default=str(ROOT / "artifacts" / "max_precision"))
+    ap.add_argument("--folds", type=int, default=5)
+    ap.add_argument("--max-wells", type=int, default=0, help="0 = all")
+    ap.add_argument("--seed", type=int, default=42)
+    a = ap.parse_args()
+
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    t0 = time.perf_counter()
+    print(
+        json.dumps(
+            {
+                "phase": "MEASURE",
+                "law": "restrict→measure→audit→OPEN|STOP",
+                "target_ft": TARGET_FT,
+                "threads": {
+                    "OMP": os.environ.get("OMP_NUM_THREADS"),
+                    "OPENBLAS": os.environ.get("OPENBLAS_NUM_THREADS"),
+                },
+                "data": a.data,
+                "max_wells": a.max_wells or "ALL",
+            }
+        ),
+        flush=True,
+    )
+
+    stations, gate2 = _assemble_dataset(
+        Path(a.data), synthetic=False, max_wells=a.max_wells
+    )
+    print(
+        f"assembled stations={len(stations)} wells={stations['well_id'].nunique()} "
+        f"gate2_passed={gate2.get('n_passed')} t={time.perf_counter()-t0:.1f}s",
+        flush=True,
+    )
+    stations.to_csv(out / "stations.csv", index=False)
+
+    # LightGBM: deeper + more leaves for max accuracy on this CPU
+    result = train_lgbm_residual(
+        stations,
+        n_splits=a.folds,
+        seed=a.seed,
+        gate2_meta=gate2,
+        max_precision=True,
+    )
+    rep = result["report"]
+    selected = float(rep.get("oof_rmse_selected") or rep.get("oof_rmse") or 1e9)
+    residual_oof = float(rep.get("oof_rmse") or 1e9)
+    floors = rep.get("baseline_rmse") or {}
+    best_floor = min(floors.values()) if floors else None
+    use_res = bool(rep.get("use_residual"))
+
+    beats_5 = selected < TARGET_FT
+    cert = {
+        "artifact": "RWT_MAX_PRECISION_MEASURE",
+        "target_ft": TARGET_FT,
+        "oof_rmse_selected": selected,
+        "oof_rmse_residual": residual_oof,
+        "best_floor_rmse": best_floor,
+        "use_residual": use_res,
+        "beats_5ft": beats_5,
+        "delta_vs_5ft": selected - TARGET_FT,
+        "n_stations": int(rep.get("n_stations") or 0),
+        "n_wells": int(rep.get("n_wells") or 0),
+        "gate2": gate2,
+        "gates": rep.get("gates"),
+        "baseline_rmse": floors,
+        "fold_rmse": rep.get("fold_rmse"),
+        "seconds": round(time.perf_counter() - t0, 2),
+        "hardware_intent": {
+            "CPU": "geometry+priors+LGBM+GroupKFold (this process)",
+            "GPU": "optional neural residual / LMS scout — not force-required for trees",
+            "NPU": "optional Job2 measure fabric — not TVT score authority",
+            "law": "precision = correct prior floors + residual only if Gate3",
+        },
+        "verdict": "BEATS_5FT" if beats_5 else "NEED_IMPROVE",
+        "production_open": "NO-GO until submit+domain audit; this is GO_MEASURE only",
+        "full_report": rep,
+    }
+    (out / "measure_vs_5ft.json").write_text(
+        json.dumps(cert, indent=2, default=str) + "\n", encoding="utf-8"
+    )
+    (out / "cv_report.json").write_text(
+        json.dumps(rep, indent=2, default=str) + "\n", encoding="utf-8"
+    )
+    print(json.dumps({k: cert[k] for k in (
+        "verdict", "oof_rmse_selected", "best_floor_rmse", "use_residual",
+        "beats_5ft", "delta_vs_5ft", "n_wells", "n_stations", "seconds"
+    )}, indent=2), flush=True)
+    return 0 if beats_5 else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
