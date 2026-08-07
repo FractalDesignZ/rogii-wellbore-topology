@@ -263,7 +263,7 @@ class TestCrownPath(unittest.TestCase):
 
     def test_finalize_after_spatial_parity_with_index(self) -> None:
         """Parallel path (None → attach → finalize) == direct spatial_index path."""
-        from rwt.features import build_station_frame, finalize_after_spatial
+        from rwt.features import build_station_frame, seal_station_frame
         from rwt.middle_out import resolve_middle_out
         from rwt.spatial import SpatialIndex, attach_spatial_features, well_spatial_node_from_lateral
 
@@ -301,16 +301,11 @@ class TestCrownPath(unittest.TestCase):
             }
         )
         direct = build_station_frame(lat, tw, sp, spatial_index=idx)
-        # parallel-style: no index in build, parent attach + finalize
-        raw = build_station_frame(lat, tw, sp, spatial_index=None)
-        # strip neighbor-dependent final cols then re-attach (simulate worker output)
+        # parallel-style worker: seal=False (no spatial / no kernel yet)
+        raw = build_station_frame(lat, tw, sp, spatial_index=None, seal=False)
+        self.assertNotIn("prior_best", raw.columns)  # not sealed yet
         raw = attach_spatial_features(raw, lat, idx, "tgt")
-        # re-run finalize as parent would (worker already finalized once with empty nb)
-        # reset stack to pre-neighbor if present so finalize applies transfer cleanly
-        if "_prior_stack_pre_neighbor" in raw.columns:
-            raw = raw.copy()
-            raw["prior_stack"] = raw["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
-        fixed = finalize_after_spatial(raw, lat, sp, tw)
+        fixed = seal_station_frame(raw, lat, sp, tw)
         cols = [
             "prior_stack",
             "prior_disagreement",

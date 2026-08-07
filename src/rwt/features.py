@@ -60,19 +60,14 @@ def finalize_after_spatial(
     typewell: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
-    Neighbor-dependent crown fields — must run **after** spatial attach.
+    Neighbor-dependent crown fields only — must run **after** spatial attach.
 
-    Applies soft-neighbor → ``prior_stack``, then recomputes ``prior_disagreement``,
-    GR mismatch@stalk, and ``prior_best`` (+ kernel/watermark).
-
-    Used by:
-      - ``build_station_frame`` (direct path, after attach with optional index)
-      - ``parallel.assemble_wells_parallel`` (parent attach after disk workers)
-    so train OOF and serve share the same neighbor-aware residual base.
+    Soft-neighbor → ``prior_stack``, then ``prior_disagreement``, GR mismatch@stalk,
+    and ``prior_best``. Does **not** call kernel.augment or watermark (those run
+    once via ``seal_station_frame`` after the final spatial step — CR P1.1).
     """
     df = lateral.reset_index(drop=True)
     n = len(df)
-    kernel = resolve_kernel()
 
     last_col = stations["prior_last_tvt"].to_numpy(dtype=float)
     last_f = float(last_col[0]) if len(last_col) and np.isfinite(last_col[0]) else float("nan")
@@ -217,6 +212,21 @@ def finalize_after_spatial(
                 if 0 <= int(ki) < len(best) and np.isfinite(hv):
                     best[int(ki)] = float(hv)
     stations["prior_best"] = best
+    return stations
+
+
+def seal_station_frame(
+    stations: pd.DataFrame,
+    lateral: pd.DataFrame,
+    split: MiddleOutSplit,
+    typewell: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """
+    Neighbor finalize + kernel augment + watermark — exactly once after final spatial.
+    """
+    df = lateral.reset_index(drop=True)
+    stations = finalize_after_spatial(stations, df, split, typewell)
+    kernel = resolve_kernel()
     stations = kernel.augment_station_frame(stations, df, typewell)
     stations = embed_column(stations)
     return stations
@@ -230,12 +240,16 @@ def build_station_frame(
     scales: tuple[int, ...] = (16, 32, 64),
     station_idx: np.ndarray | None = None,
     spatial_index: SpatialIndex | None = None,
+    seal: bool = True,
 ) -> pd.DataFrame:
     """
     One row per station: SE(3) local geom, local-dip / PF / dual priors,
     relative kinematics, multi-scale GR rolls + NCC, spatial neighbors.
 
     Never emits train-only form surfaces (ANCC..BUDA) — structural leak trap.
+
+    ``seal=False``: skip neighbor finalize / kernel / watermark (parallel worker
+    path). Parent must attach spatial then call ``seal_station_frame``.
     """
     df = lateral.reset_index(drop=True)
     n = len(df)
@@ -488,11 +502,13 @@ def build_station_frame(
             row["TVT"] = float(df.loc[i, "TVT_true"])
         rows.append(row)
     stations = pd.DataFrame(rows)
+    if not seal:
+        # Worker path: no spatial index pickle; parent attaches + seals once
+        return stations
     stations = attach_spatial_features(
         stations, df, spatial_index, split.well_id
     )
-    # Neighbor-dependent crown fields (shared with parallel parent path)
-    return finalize_after_spatial(stations, df, split, typewell)
+    return seal_station_frame(stations, df, split, typewell)
 
 
 # Tight residual X: relative kinematics + signal + strong priors only.

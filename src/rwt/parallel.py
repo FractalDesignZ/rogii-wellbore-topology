@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from rwt.features import build_station_frame, finalize_after_spatial
+from rwt.features import build_station_frame, seal_station_frame
 from rwt.gates import gate_middle_out_mask
 from rwt.middle_out import MiddleOutSplit
 from rwt.spatial import SpatialIndex, attach_spatial_features
@@ -71,13 +71,14 @@ def _assemble_one_to_disk(
             "unlabeled": True,
             "error": None,
         }
-    # no spatial here — parent attaches after load (keeps IPC small + no SpatialIndex pickle)
+    # no spatial / seal here — parent attaches + seals once (CR P1.1: single kernel pass)
     frame = build_station_frame(
         df,
         tw,
         sp,
         station_idx=labeled_pred,
         spatial_index=None,
+        seal=False,
     )
     # secure temp path inside tmp_dir (never derive filename from well_id)
     fd, path = tempfile.mkstemp(dir=tmp_dir, suffix=".pkl", prefix="well_")
@@ -197,10 +198,9 @@ def assemble_wells_parallel(
                     progress.tick(item=wid, ok=False, message="no_frame")
                 continue
             frame = pd.read_pickle(path)
-            # Parent attach + finalize (soft-nb stack, disagreement, GR mismatch,
-            # prior_best) so train OOF matches serve build_station_frame path (CR P1)
+            # Parent: attach neighbors then seal once (finalize + kernel + watermark)
             frame = attach_spatial_features(frame, df, spatial, wid)
-            frame = finalize_after_spatial(frame, df, sp, tw)
+            frame = seal_station_frame(frame, df, sp, tw)
             frames.append(frame)
             passed_wells.append(wid)
             if progress is not None:
