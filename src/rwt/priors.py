@@ -16,12 +16,13 @@ import pandas as pd
 
 from rwt.middle_out import MiddleOutSplit
 
-# Residual base preference: multi-PF bag stack, then single PF blend, then floors
-DEFAULT_PRIOR_COL = "prior_stack"
+# Residual base: pf_blend beat last_known on 40w OOF (~11.0 vs ~11.8);
+# residual on this base GATE3-accepted (~10.3). Stack kept as fallback feature.
+DEFAULT_PRIOR_COL = "prior_pf_blend"
 PRIOR_FALLBACKS = (
-    "prior_stack",
-    "prior_pf_bag",
     "prior_pf_blend",
+    "prior_pf_bag",
+    "prior_stack",
     "prior_dip_stack",
     "prior_last_tvt",
     "prior_mid",
