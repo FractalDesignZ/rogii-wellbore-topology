@@ -103,10 +103,11 @@ def train_lgbm_residual(
     else:
         train_df = stations[stations["TVT"].notna()].copy()
     prior_col = resolve_prior_column(train_df, prior_col, strict=False)
-    # drop rows where selected prior is non-finite (PF NaN when no TVT ref)
-    train_df = train_df.loc[
-        np.isfinite(train_df[prior_col].to_numpy(dtype=float))
-    ].copy()
+    # require finite TVT and selected prior (PF returns NaN when no TVT ref)
+    fin = np.isfinite(train_df["TVT"].to_numpy(dtype=float)) & np.isfinite(
+        train_df[prior_col].to_numpy(dtype=float)
+    )
+    train_df = train_df.loc[fin].copy()
     if len(train_df) < 50:
         raise ValueError(
             f"Insufficient labeled prediction-zone rows for residual train "
@@ -178,9 +179,14 @@ def train_lgbm_residual(
     from rwt.provenance import seal_artifact
 
     k = resolve_kernel()
-    # Baselines and OOF share the same row set (oof_mask) so beats_* is valid
+    # Baselines and OOF share the same finite OOF-row set so beats_* is valid
     row_m = oof_mask if oof_mask.any() else np.ones(len(train_df), dtype=bool)
     y_m = y[row_m]
+    oof_m = oof_tvt[row_m]
+    shared = np.isfinite(y_m) & np.isfinite(oof_m)
+    y_s = y_m[shared]
+    oof_s = oof_m[shared]
+    oof_r = rmse(y_s, oof_s)
     baseline_rmse: dict[str, float] = {}
     for name, col in (
         ("last_known", "prior_last_tvt"),
@@ -193,11 +199,12 @@ def train_lgbm_residual(
         ("pf_bag", "prior_pf_bag"),
         ("prior_stack", "prior_stack"),
     ):
-        if col in train_df.columns:
-            baseline_rmse[name] = rmse(
-                y_m, train_df[col].to_numpy(dtype=float)[row_m]
-            )
-    oof_r = rmse(y_m, oof_tvt[row_m])
+        if col not in train_df.columns:
+            continue
+        b = train_df[col].to_numpy(dtype=float)[row_m]
+        if not np.isfinite(b[shared]).all():
+            continue  # skip baselines with holes on the OOF row set
+        baseline_rmse[name] = rmse(y_s, b[shared])
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
@@ -206,13 +213,15 @@ def train_lgbm_residual(
     from rwt.gates import gate_ip_fence, gate_residual_acceptance
     from rwt.simd import cpu_feature_report
 
-    prior_m = prior[row_m]
+    prior_m = prior[row_m][shared]
     lk_m = None
     if "prior_last_tvt" in train_df.columns:
-        lk_m = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
+        lk_full = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
+        if np.isfinite(lk_full[shared]).all():
+            lk_m = lk_full[shared]
     gate3 = gate_residual_acceptance(
-        y_m,
-        oof_tvt[row_m],
+        y_s,
+        oof_s,
         prior_m,
         prior_name=prior_col,
         last_known_pred=lk_m,
