@@ -391,7 +391,7 @@ class TestCrownPath(unittest.TestCase):
         self.assertEqual(dual_residual_weights_for_bases(["prior_best"]), [1.0])
 
     def test_crown_defaults_single_deep_prior_best(self) -> None:
-        """Set-17 measure: dual off, deep residual on, prior_best default base."""
+        """Set-17/18: dual off, deep residual on, prior_best base, deep n_refit floor."""
         from rwt.priors import DEFAULT_PRIOR_COL
         from rwt.train import (
             CROWN_DEEP_RESIDUAL,
@@ -403,7 +403,6 @@ class TestCrownPath(unittest.TestCase):
         self.assertEqual(DEFAULT_PRIOR_COL, "prior_best")
         self.assertFalse(DUAL_RESIDUAL_ENSEMBLE)
         self.assertTrue(CROWN_DEEP_RESIDUAL)
-        # deep n_refit floor 400
         self.assertEqual(N_REFIT_FLOOR_DEEP, 400)
         self.assertEqual(select_n_refit([50, 60, 70], 2500, floor=400), 400)
 

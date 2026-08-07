@@ -89,7 +89,8 @@ def select_n_refit(
     Serve refit boost rounds from OOF early-stop history.
 
     Uses max(floor, median, p75) of fold/seed best_iteration, capped at n_rounds.
-    Empty history → n_rounds.
+    When floor ≥ 400 (deep residual), also takes p90 so long early-stop tails
+    are not under-refit on serve. Empty history → n_rounds.
     """
     n_rounds = max(1, int(n_rounds))
     floor = max(1, int(floor))
@@ -101,7 +102,11 @@ def select_n_refit(
     bests = bests[np.isfinite(bests)]
     if len(bests) == 0:
         return n_rounds
-    n_refit = max(floor, int(np.median(bests)), int(np.percentile(bests, 75)))
+    p75 = int(np.percentile(bests, 75))
+    p90 = int(np.percentile(bests, 90))
+    # deep floor (≥400): include p90; shallow: p75 only (set-18 measure)
+    tail = p90 if floor >= 400 else p75
+    n_refit = max(floor, int(np.median(bests)), p75, tail)
     return int(min(n_refit, n_rounds))
 
 
@@ -268,9 +273,10 @@ def train_lgbm_residual(
     # Clamp residual Δ so head cannot leave pure-prior band (clamp law parity)
     residual_max_dev = float(MAX_TVT_DEV)
     # Set-17: single deep prior_best **10.830** beats dual deep 10.836.
+    # Set-18: deep n_seed_bag **4** → 10.825 (3-seed 10.830); p90 n_refit deep.
     # Deep profile is crown default; max_precision is alias; dual opt-in only.
     use_deep = bool(max_precision) or bool(CROWN_DEEP_RESIDUAL)
-    n_seed_bag = 3 if use_deep else 2
+    n_seed_bag = 4 if use_deep else 2
     n_refit_floor = N_REFIT_FLOOR_DEEP if use_deep else N_REFIT_FLOOR_SHALLOW
     if use_deep:
         params = {

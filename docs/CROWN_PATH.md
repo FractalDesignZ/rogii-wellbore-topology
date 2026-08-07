@@ -16,7 +16,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset; train/serve seal after attach; **stack soft-nb weight 0** (measure); neighbors in prior_best + features |
-| **Residual** | Single head **`prior_best` + deep LGBM** (set-17); pure floor **`prior_stack`**; dual residual opt-in only; toe-weighted L2; **deep residual 3-seed mean bag** (OOF+serve `np.mean`, not PF bag); GR mismatch@stalk; Δ clip ±18; fold-safe medians; Gate3 |
+| **Residual** | Single head **`prior_best` + deep LGBM** (set-18); pure floor **`prior_stack`**; dual opt-in only; toe-weighted L2; **4-seed mean bag**; GR mismatch@stalk; Δ clip ±18; deep n_refit floor 400+p90; Gate3 |
 | **Clamp** | Published stack/prior_best/NCC/PF ≤ last±18 (`MAX_TVT_DEV`); residual Δ ≤ base±18 (may leave last band when G3 wins). Raw neighbor_tvt feature may still show ±40 offset before blend. |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
@@ -26,25 +26,23 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-17 — single deep prior_best)
+## Measure (12w crown set-18 — 4-seed deep + n_refit p90)
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| **single deep prior_best** (set-17) | **10.830** |
+| **single deep prior_best 4-seed** (set-18) | **10.825** |
+| single deep prior_best 3-seed (set-17) | 10.830 |
 | dual deep 0.75/0.25 (set-16) | 10.836 |
-| dual deep 0.70/0.30 (set-17 A/B) | 10.839 |
+| drop base from X / drop ncc lags | 10.944 (rejected) |
+| deep lr=0.015 / leaves=95 / l2=2 | ≥10.84 (rejected) |
 | dual residual shallow 0.75/0.25 | 10.948 |
-| residual prior_best shallow | 10.951 |
 | single deep prior_stack | 11.170 |
-| dual equal-mean | 10.985 (rejected) |
-| prior_delta_best_stack feat | 10.955 (rejected) |
-| residual prior_stack (set-11–13) | 11.06 |
 | prior_stack (best pure) | **12.33** |
 | prior_best (pure) | 12.69 |
 | last_known | 13.41 |
 
-Set-16 dual deep diluted the best head. Set-17: dual **off** by default; deep LGBM
-**enabled by default** via `CROWN_DEEP_RESIDUAL`; `n_refit` floor 400 under deep.
+Set-17: dual off + deep always. Set-18: deep seed bag **4** (mean); serve n_refit
+uses p90 when floor≥400; rejected feature-drop and other LGBM knobs.
 
 ### Rejected A/B (set-5 / set-7)
 
@@ -65,8 +63,10 @@ Set-16 dual deep diluted the best head. Set-17: dual **off** by default; deep LG
 | dual residual equal-mean | 10.985 | dilutes best head |
 | prior_delta_best_stack feat | 10.955 | collinear noise on dual |
 | dual residual deep (any weight) | ≥10.836 | dilutes single-best deep |
+| drop residual base from X | 10.944 | trees need base level |
+| deep leaves=95 / stronger L2 | ≥10.85 | underfits 12w |
 
-### Kept (set-5–17 coherence)
+### Kept (set-5–18 coherence)
 
 Soft neighbor → stack **before** `prior_best` **only when** `STACK_SOFT_NB_WEIGHT>0`
 (default **0** by measure — neighbors still enter via `prior_best` + `neighbor_*` feats);

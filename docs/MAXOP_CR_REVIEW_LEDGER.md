@@ -34,6 +34,7 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **15** (crown) | #11 | dual residual heads best+stack train/serve; weights **0.75/0.25** → **10.948** (equal-mean 10.985 rejected); blob `residual_heads` + `dual_residual_weights`; tests dual serve. |
 | **16** (crown CR) | #11 | named dual weights by base (not position); thread-pool seal (CR serial seal); deep LGBM under dual → **10.836**; reject `prior_delta_best_stack` feat 10.955; tests weight-by-name. |
 | **17** (crown) | #11 | dual residual **off** (dilutes best head); single deep `prior_best` **10.830**; `CROWN_DEEP_RESIDUAL=True`; n_refit floor 400 deep; dual infrastructure retained opt-in. |
+| **18** (crown) | #11 | deep **4-seed bag** → **10.825**; n_refit p90 when deep floor≥400; reject drop-base-from-X 10.944 and LGBM lr/leaves/l2 A/B. |
 
 ## CodeRabbit
 
