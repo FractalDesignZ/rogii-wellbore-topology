@@ -81,26 +81,29 @@ def train_lgbm_residual(
     except ImportError as e:
         raise SystemExit("pip install lightgbm") from e
 
-    gkf = GroupKFold(n_splits=min(n_splits, max(2, len(np.unique(groups)))))
+    n_groups = len(np.unique(groups))
     oof = np.zeros(len(train_df))
     models = []
     fold_scores = []
-    for fold, (tr, va) in enumerate(gkf.split(X, y_res, groups)):
+    params = {
+        "objective": "regression",
+        "metric": "rmse",
+        "learning_rate": 0.05,
+        "num_leaves": 63,
+        "feature_fraction": 0.8,
+        "bagging_fraction": 0.8,
+        "bagging_freq": 1,
+        "verbosity": -1,
+        "seed": seed,
+    }
+
+    def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int):
         dtr = lgb.Dataset(X[tr], label=y_res[tr], feature_name=cols)
         dva = lgb.Dataset(X[va], label=y_res[va], feature_name=cols, reference=dtr)
-        params = {
-            "objective": "regression",
-            "metric": "rmse",
-            "learning_rate": 0.05,
-            "num_leaves": 63,
-            "feature_fraction": 0.8,
-            "bagging_fraction": 0.8,
-            "bagging_freq": 1,
-            "verbosity": -1,
-            "seed": seed + fold,
-        }
+        p = dict(params)
+        p["seed"] = seed + fold
         model = lgb.train(
-            params,
+            p,
             dtr,
             num_boost_round=400,
             valid_sets=[dva],
@@ -111,6 +114,21 @@ def train_lgbm_residual(
         sc = rmse(y[va], prior[va] + pred_res)
         fold_scores.append(sc)
         models.append(model)
+
+    if n_groups < 2:
+        # synthetic / single-well smoke: last 25% stations as holdout
+        n = len(train_df)
+        cut = max(1, int(n * 0.75))
+        tr = np.arange(0, cut)
+        va = np.arange(cut, n)
+        if len(va) == 0:
+            va = tr[-max(1, n // 5) :]
+            tr = tr[: -len(va)]
+        _fit_fold(tr, va, 0)
+    else:
+        gkf = GroupKFold(n_splits=min(n_splits, n_groups))
+        for fold, (tr, va) in enumerate(gkf.split(X, y_res, groups)):
+            _fit_fold(tr, va, fold)
 
     oof_tvt = prior + oof
     report = {
