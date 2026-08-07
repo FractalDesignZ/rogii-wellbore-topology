@@ -254,8 +254,6 @@ def train_lgbm_residual(
     oof_res_map = {b: np.zeros(len(train_df)) for b in residual_bases}
     fold_best_iters: list[int] = []
     fold_scores: list[float] = []
-    # Residual head: shallow default; max_precision deepens trees for score war.
-    # Thread count from RWT_LGBM_THREADS / OMP (dashboard parallel train sets these).
     def _env_threads(*keys: str, default: int | None = None) -> int:
         for k in keys:
             v = os.environ.get(k)
@@ -272,9 +270,7 @@ def train_lgbm_residual(
     )
     # Clamp residual Δ so head cannot leave pure-prior band (clamp law parity)
     residual_max_dev = float(MAX_TVT_DEV)
-    # Set-17: single deep prior_best **10.830** beats dual deep 10.836.
-    # Set-18: deep n_seed_bag **4** → 10.825 (3-seed 10.830); p90 n_refit deep.
-    # Deep profile is crown default; max_precision is alias; dual opt-in only.
+    # Set-17/18: single deep prior_best 4-seed; dual opt-in only
     use_deep = bool(max_precision) or bool(CROWN_DEEP_RESIDUAL)
     n_seed_bag = 4 if use_deep else 2
     n_refit_floor = N_REFIT_FLOOR_DEEP if use_deep else N_REFIT_FLOOR_SHALLOW
@@ -415,7 +411,6 @@ def train_lgbm_residual(
     from rwt.provenance import seal_artifact
 
     k = resolve_kernel()
-    # Baselines and OOF share the same finite OOF-row set so beats_* is valid
     row_m = oof_mask if oof_mask.any() else np.ones(len(train_df), dtype=bool)
     y_m = y[row_m]
     oof_m = oof_tvt[row_m]
@@ -444,14 +439,13 @@ def train_lgbm_residual(
             continue
         b = train_df[col].to_numpy(dtype=float)[row_m]
         if not np.isfinite(b[shared]).all():
-            continue  # skip baselines with holes on the OOF row set
+            continue
         baseline_rmse[name] = rmse(y_s, b[shared])
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
 
-    # ── Gates 1+3 (Gate 2 is structural at assemble time) ───────────────
-    from rwt.gates import gate_ip_fence, gate_residual_acceptance
+    from rwt.gates import gate_ip_fence, gate_residual_acceptance, gate_residual_acceptance_per_well
     from rwt.simd import cpu_feature_report
 
     prior_m = prior[row_m][shared]
@@ -475,6 +469,21 @@ def train_lgbm_residual(
     )
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
+
+    pf_conf_s = None
+    if "pf_confidence" in train_df.columns:
+        pf_full = train_df["pf_confidence"].to_numpy(dtype=float)[row_m]
+        if np.isfinite(pf_full[shared]).any():
+            pf_conf_s = pf_full[shared]
+    groups_s = groups[row_m][shared]
+    gate3_pw = gate_residual_acceptance_per_well(
+        groups_s,
+        y_s,
+        oof_s,
+        prior_m,
+        global_gate=gate3,
+        pf_confidence=pf_conf_s,
+    )
     serve_prior_col = prior_col
     residual_heads: list[dict[str, Any]] = []
     final_models: list[Any] = []
@@ -518,7 +527,7 @@ def train_lgbm_residual(
         n_refit = None
         cand: dict[str, float] = {prior_col: float(gate3.detail["oof_rmse_prior"])}
         for n, s in floor_rmses.items():
-            col = _floor_col.get(n, n)
+            col = _FLOOR_COL.get(n, n)
             if col in train_df.columns:
                 cand[col] = float(s)
         serve_prior_col = min(cand, key=cand.get)
@@ -579,7 +588,11 @@ def train_lgbm_residual(
                 "note": "not evaluated (caller assembled stations externally)",
             },
             gate3.to_dict(),
+            gate3_pw.to_dict(),
         ],
+        "adaptive_oof_rmse": gate3_pw.detail.get("adaptive_oof_rmse"),
+        "adaptive_n_fire": gate3_pw.detail.get("n_fire"),
+        "adaptive_n_fallback": gate3_pw.detail.get("n_fallback"),
         "cpu": cpu_feature_report(),
         "law": (
             "GroupKFold by well; residual gated by prior OOF; "
@@ -635,7 +648,6 @@ def main(argv: list[str] | None = None) -> int:
     from rwt.parallel import configure_compute_env
     from rwt.progress import init_progress
 
-    # resolve workers before progress snapshot so dashboard shows real RWT_WORKERS
     workers = args.workers if args.workers > 0 else None
     cfg = configure_compute_env(workers=workers)
     progress = init_progress(out)
@@ -689,6 +701,9 @@ def main(argv: list[str] | None = None) -> int:
                         result.get("residual_smooth_window") or 0
                     ),
                     "feature_medians": result.get("feature_medians") or {},
+                    # Adaptive serve: residual only where pf_confidence is high
+                    "adaptive_serve": bool(result.get("use_residual", False)),
+                    "adaptive_conf_threshold": 0.35,
                 },
                 out / "model.joblib",
             )

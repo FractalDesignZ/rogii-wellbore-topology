@@ -83,3 +83,30 @@ bases; deep `n_refit` floor+p90 unit tests; seal per-well error isolation +
 python -m rwt.train --data data/raw --out artifacts/crown_12w --max-wells 12 --folds 3 --workers 6
 # compare baseline_rmse prior_best vs last_known / stack and Gate3 decision
 ```
+
+## Public architecture map (research-consolidated)
+
+| Layer | Live public reality | Residue (not public default) |
+| --- | --- | --- |
+| **PF** | 1-D TVT walk: bias±0.05 + Gaussian; GR×ΔGR; dropout inflate; median bag; last±18 | Joint \([TVT,\theta]\) transition; dip state \(\gamma_k\); \(E_{\mathrm{ref}}\) PF weights |
+| **Dip** | MD-slope prior clip ±0.008; Z-dip **0** on laterals; heel XY ridge dip | Dip inside PF process matrix |
+| **SE(3) \(E_{\mathrm{ref}}\)** | Screw-norm **proxy** \(\sqrt{\theta^2+(\|t\|/L)^2}\) → residual feature `e_ref` | Full \(se(3)\) 6-vector log \(\xi=(\omega,v)\); SVD SO(3) pose stack |
+| **Match stalk** | Seed-local multi-scale NCC TVT track + conf | Full-well lag (alias) |
+| **Lattice** | Discrete PF, not DP | Viterbi/Dijkstra TVT lattice \(O(N\cdot M^2)\) (private beam) |
+| **Residual** | Deep LGBM on `prior_best` (4-seed); Gate3 vs pure floors | Force residual without Gate3 |
+
+Law: **restrict → measure (GroupKFold OOF + Gate3) → audit → OPEN|STOP**. Residue never force-OPEN.
+
+## Main integration (all-suggestions + crown)
+
+| Vector | Encoding |
+| --- | --- |
+| Spatial multi-neighbor | `neighbor_tvt_wmean`, `neighbor_weight_sum`, `neighbor_count_close` |
+| Residual interactions | `pf_conf_x_rel_md`, `curv_x_pf_std`, `ncc_peak`, `ncc_lag_consistency`, `nb_offset_x_ok` |
+| Adaptive Gate3 | `gate_residual_acceptance_per_well` + serve conf gate (global Gate3 still hard law) |
+| Adaptive PF | process noise from prior particle std; dynamic GR shape weight |
+| Single seal | `finalize_after_spatial` → interactions → kernel → watermark once |
+| GPU / neural | Optional `neural_residual` (CUDA TCN); main train CPU under RESTRICT |
+| Private kernel | Fail-closed stub; beam/DTW/lattice offline |
+
+Measure: same GroupKFold OOF + Gate3 seal protocol.

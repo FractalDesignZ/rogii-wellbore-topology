@@ -75,6 +75,8 @@ def particle_filter_tvt(
       - process bias = median heel ΔTVT/station (formation walk, not pure noise)
       - likelihood: GR level × ΔGR match (shape, not only level)
       - GR dropout: inflate process noise, no false high confidence
+      - adaptive process noise from previous particle spread
+      - dynamic shape weight when level match is weak
 
     Caller-supplied ``process_bias`` is clipped to the inclusive range
     [-0.05, 0.05] (same bound as the heel-calibrated estimate).
@@ -172,22 +174,34 @@ def particle_filter_tvt(
                 prev_obs = float(gr[i])
             continue
 
-        # motion: bias (formation walk) + diffusion; inflate when GR missing
+        # motion: bias (formation walk) + adaptive diffusion
+        # - inflate on GR dropout
+        # - mild inflate when previous residual uncertainty was high (tracked via std)
         obs = gr[i]
         sig_proc = process_sigma * (1.75 if not np.isfinite(obs) else 1.0)
+        # adaptive: if last station had high particle spread, allow more diffusion
+        if i > 0 and np.isfinite(stds[i - 1]):
+            sig_proc *= float(np.clip(1.0 + 0.15 * (stds[i - 1] / 5.0), 1.0, 1.8))
         particles = particles + process_bias + rng.normal(0.0, sig_proc, size=n_particles)
         particles = np.clip(particles, t_min, t_max)
 
         if np.isfinite(obs):
             hyp = gr_at(particles)
-            like = np.exp(-0.5 * ((obs - hyp) / gr_sig) ** 2)
-            # shape term: match lateral ΔGR to typewell dGR·ΔTVT≈dGR at particle
+            level_like = np.exp(-0.5 * ((obs - hyp) / gr_sig) ** 2)
+            # shape term: match lateral ΔGR to typewell dGR
+            # weight increases when level match is weak (shape becomes primary signal)
+            shape_w = 0.25
             if np.isfinite(prev_obs):
                 d_obs = float(obs - prev_obs)
-                # soft shape term (half weight) — level match remains primary
                 step = process_bias if abs(process_bias) > 1e-6 else spacing * 0.25
                 d_hyp = dgr_at(particles) * step
-                like = like * np.exp(-0.25 * ((d_obs - d_hyp) / dgr_sig) ** 2)
+                # if level residual is large, lean harder on shape
+                level_resid = np.abs(obs - hyp)
+                shape_w = float(np.clip(0.25 + 0.20 * np.mean(level_resid > gr_sig), 0.25, 0.55))
+                shape_like = np.exp(-0.5 * shape_w * ((d_obs - d_hyp) / dgr_sig) ** 2)
+                like = level_like * shape_like
+            else:
+                like = level_like
             weights = weights * like
             s = float(weights.sum())
             if s < 1e-30:

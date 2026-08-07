@@ -262,6 +262,75 @@ def finalize_after_spatial(
     )
     delta = np.asarray(best, dtype=float) - stack_arr
     stations["prior_delta_best_stack"] = np.where(np.isfinite(delta), delta, 0.0)
+
+    # Interaction / structure features (from main all-suggestions; non-leaky)
+    n_st = len(stations)
+    pf_conf = (
+        stations["pf_confidence"].to_numpy(dtype=float)
+        if "pf_confidence" in stations.columns
+        else np.zeros(n_st)
+    )
+    rel_md_arr = (
+        stations["relative_md"].to_numpy(dtype=float)
+        if "relative_md" in stations.columns
+        else np.zeros(n_st)
+    )
+    curv = (
+        stations["local_curv"].to_numpy(dtype=float)
+        if "local_curv" in stations.columns
+        else np.zeros(n_st)
+    )
+    pf_std = (
+        stations["pf_tvt_std"].to_numpy(dtype=float)
+        if "pf_tvt_std" in stations.columns
+        else np.zeros(n_st)
+    )
+    stations["pf_conf_x_rel_md"] = pf_conf * rel_md_arr
+    stations["curv_x_pf_std"] = curv * pf_std
+    ncc16 = (
+        stations["ncc_16"].to_numpy(dtype=float)
+        if "ncc_16" in stations.columns
+        else np.zeros(n_st)
+    )
+    ncc32 = (
+        stations["ncc_32"].to_numpy(dtype=float)
+        if "ncc_32" in stations.columns
+        else np.zeros(n_st)
+    )
+    ncc64 = (
+        stations["ncc_64"].to_numpy(dtype=float)
+        if "ncc_64" in stations.columns
+        else np.zeros(n_st)
+    )
+    stations["ncc_peak"] = np.nanmax(np.vstack([ncc16, ncc32, ncc64]), axis=0)
+    lag16 = (
+        stations["ncc_16_lag"].to_numpy(dtype=float)
+        if "ncc_16_lag" in stations.columns
+        else np.zeros(n_st)
+    )
+    lag32 = (
+        stations["ncc_32_lag"].to_numpy(dtype=float)
+        if "ncc_32_lag" in stations.columns
+        else np.zeros(n_st)
+    )
+    lag64 = (
+        stations["ncc_64_lag"].to_numpy(dtype=float)
+        if "ncc_64_lag" in stations.columns
+        else np.zeros(n_st)
+    )
+    lag_std = np.nanstd(np.vstack([lag16, lag32, lag64]), axis=0)
+    stations["ncc_lag_consistency"] = 1.0 / (1.0 + lag_std)
+    nb_off = (
+        stations["neighbor_offset"].to_numpy(dtype=float)
+        if "neighbor_offset" in stations.columns
+        else np.zeros(n_st)
+    )
+    nb_ok_f = (
+        stations["neighbor_transfer_ok"].to_numpy(dtype=float)
+        if "neighbor_transfer_ok" in stations.columns
+        else np.zeros(n_st)
+    )
+    stations["nb_offset_x_ok"] = nb_off * nb_ok_f
     return stations
 
 
@@ -555,10 +624,11 @@ def build_station_frame(
     stations = attach_spatial_features(
         stations, df, spatial_index, split.well_id
     )
+    # finalize + interactions + kernel + watermark (single seal; train/serve parity)
     return seal_station_frame(stations, df, split, typewell)
 
 
-# Tight residual X: relative kinematics + signal + strong priors only.
+# Tight residual X: relative kinematics + signal + strong priors + interactions.
 # Drop absolute map coords, well-azimuth lease encodings, dual-transport mid
 # (diag: mid/flat/extrap RMSE 100–1000 on toe — poison for residual trees).
 FEATURE_COLS_DEFAULT = [
@@ -620,6 +690,14 @@ FEATURE_COLS_DEFAULT = [
     "neighbor_count",
     "neighbor_min_dist",
     "neighbor_offset",
+    # multi-neighbor + interaction terms (main all-suggestions integration)
+    "neighbor_tvt_wmean",
+    "neighbor_count_close",
+    "neighbor_weight_sum",
+    "pf_conf_x_rel_md",
+    "curv_x_pf_std",
+    "ncc_lag_consistency",
+    "nb_offset_x_ok",
 ]
 
 
