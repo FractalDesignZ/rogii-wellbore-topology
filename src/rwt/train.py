@@ -267,7 +267,7 @@ def train_lgbm_residual(
     }
 
     # ── Gates 1+3 (Gate 2 is structural at assemble time) ───────────────
-    from rwt.gates import gate_ip_fence, gate_residual_acceptance
+    from rwt.gates import gate_ip_fence, gate_residual_acceptance, gate_residual_acceptance_per_well
     from rwt.simd import cpu_feature_report
 
     prior_m = prior[row_m][shared]
@@ -305,6 +305,22 @@ def train_lgbm_residual(
     )
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
+
+    # Adaptive per-well fire (only meaningful when global Gate3 accepts)
+    pf_conf_s = None
+    if "pf_confidence" in train_df.columns:
+        pf_full = train_df["pf_confidence"].to_numpy(dtype=float)[row_m]
+        if np.isfinite(pf_full[shared]).any():
+            pf_conf_s = pf_full[shared]
+    groups_s = groups[row_m][shared]
+    gate3_pw = gate_residual_acceptance_per_well(
+        groups_s,
+        y_s,
+        oof_s,
+        prior_m,
+        global_gate=gate3,
+        pf_confidence=pf_conf_s,
+    )
     serve_prior_col = prior_col
     if use_residual:
         print(
@@ -367,7 +383,11 @@ def train_lgbm_residual(
                 "note": "not evaluated (caller assembled stations externally)",
             },
             gate3.to_dict(),
+            gate3_pw.to_dict(),
         ],
+        "adaptive_oof_rmse": gate3_pw.detail.get("adaptive_oof_rmse"),
+        "adaptive_n_fire": gate3_pw.detail.get("n_fire"),
+        "adaptive_n_fallback": gate3_pw.detail.get("n_fallback"),
         "cpu": cpu_feature_report(),
         "law": (
             "GroupKFold by well; residual gated by prior OOF; "
