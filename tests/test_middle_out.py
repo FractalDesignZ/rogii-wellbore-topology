@@ -64,8 +64,27 @@ class TestMiddleOut(unittest.TestCase):
         st = build_station_frame(df, None, sp, station_idx=sp.predict_idx)
         self.assertTrue(bool(st["is_predict"].all()))
         self.assertFalse(bool(st["is_known"].any()))
-        # prior uses heel last TVT, not toe station TVT
         self.assertAlmostEqual(float(st["prior_last_tvt"].iloc[0]), 107.0)
+        self.assertIn("prior_mid", st.columns)
+        self.assertIn("e_ref", st.columns)
+
+    def test_dual_transport_shapes(self) -> None:
+        from rwt.middle_out import dual_transport_prior
+
+        n = 12
+        df = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "Z": -np.arange(n, dtype=float),
+                "TVT": 50 + np.arange(n, dtype=float),
+                "TVT_input": [50.0 + i if i < 5 else np.nan for i in range(n)],
+            }
+        )
+        sp = resolve_middle_out(df, well_id="w2")
+        d = dual_transport_prior(df, sp)
+        self.assertEqual(len(d["prior_mid"]), n)
+        # heel locked to input
+        self.assertAlmostEqual(float(d["prior_mid"][0]), 50.0)
 
 
 if __name__ == "__main__":

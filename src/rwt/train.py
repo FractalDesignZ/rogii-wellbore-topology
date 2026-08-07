@@ -1,4 +1,4 @@
-"""GroupKFold-by-well training (LightGBM residual on prior_flat_tvt)."""
+"""GroupKFold-by-well training (LightGBM residual on heel last-known prior)."""
 from __future__ import annotations
 
 import argparse
@@ -11,24 +11,29 @@ import pandas as pd
 from sklearn.model_selection import GroupKFold
 
 from rwt.baselines import rmse
-from rwt.features import FEATURE_COLS_DEFAULT, build_station_frame, feature_matrix
-from rwt.load import iter_well_frames, load_typewell, synthetic_well
-from rwt.middle_out import resolve_middle_out, split_by_mask
+from rwt.features import build_station_frame, feature_matrix
+from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
+from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
+from rwt.spatial import SpatialIndex, build_spatial_index
+
+# Residual base prior: strongest public heel prior (CERTIFY beat-table intent).
+# Dual-transport mid / flat / NCC / E_ref remain as *features*, not residual base.
+DEFAULT_PRIOR_COL = "prior_last_tvt"
+PRIOR_FALLBACKS = ("prior_last_tvt", "prior_mid", "prior_flat_tvt")
+
+
+def _resolve_prior_column(df: pd.DataFrame, preferred: str = DEFAULT_PRIOR_COL) -> str:
+    if preferred in df.columns:
+        return preferred
+    for c in PRIOR_FALLBACKS:
+        if c in df.columns:
+            return c
+    raise KeyError(f"No residual prior column in {list(df.columns)[:20]}")
 
 
 def _typewell_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:
-    """Resolve ROGII ``{well_id}__typewell.csv`` (and a few aliases)."""
-    base = root / split
-    candidates = [
-        base / f"{well_id}__typewell.csv",
-        base / f"{well_id}_typewell.csv",
-        base / f"{well_id}__type_well.csv",
-        root / f"{well_id}__typewell.csv",
-    ]
-    for p in candidates:
-        if p.is_file():
-            return p
-    return None
+    """Back-compat alias — prefer ``typewell_path_for_well``."""
+    return typewell_path_for_well(root, well_id, split)
 
 
 def _assemble_dataset(
@@ -37,7 +42,7 @@ def _assemble_dataset(
     synthetic: bool = False,
     max_wells: int = 0,
 ) -> pd.DataFrame:
-    frames = []
+    frames: list[pd.DataFrame] = []
     if synthetic or data_root is None:
         lat, tw = synthetic_well()
         sp = split_by_mask(lat, well_id="SYN01")
@@ -46,36 +51,44 @@ def _assemble_dataset(
 
     root = Path(data_root)
 
-    n = 0
+    loaded: list[tuple[str, pd.DataFrame, MiddleOutSplit, pd.DataFrame | None]] = []
     for wid, df in iter_well_frames(root, "train"):
         sp = resolve_middle_out(df, well_id=wid)
-        tw_path = _typewell_for_well(root, wid, "train")
-        tw = load_typewell(tw_path) if tw_path else None
-        # Prior from known heel (inside build_station_frame); residual trains on labeled toe
         if not sp.n_predict:
             continue
         if "TVT" not in df.columns and "TVT_true" not in df.columns:
             continue
+        tw_path = typewell_path_for_well(root, wid, "train")
+        tw = load_typewell(tw_path) if tw_path else None
+        loaded.append((wid, df, sp, tw))
+        if max_wells and len(loaded) >= max_wells:
+            break
+    if not loaded:
+        raise FileNotFoundError(f"No wells under {root}")
+    spatial: SpatialIndex = build_spatial_index([(w, d) for w, d, _s, _t in loaded])
+
+    n = 0
+    for wid, df, sp, tw in loaded:
         tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
         labeled_pred = [
-            int(i)
-            for i in sp.predict_idx
-            if pd.notna(df.iloc[int(i)][tvt_col])
+            int(i) for i in sp.predict_idx if pd.notna(df.iloc[int(i)][tvt_col])
         ]
         if not labeled_pred:
             continue
         frames.append(
             build_station_frame(
-                df, tw, sp, station_idx=np.asarray(labeled_pred, dtype=int)
+                df,
+                tw,
+                sp,
+                station_idx=np.asarray(labeled_pred, dtype=int),
+                spatial_index=spatial,
             )
         )
         n += 1
-        if max_wells and n >= max_wells:
-            break
         if n % 10 == 0:
             print(f"assembled {n} wells…", flush=True)
     if not frames:
-        raise FileNotFoundError(f"No wells under {root}")
+        raise FileNotFoundError(f"No labeled predict stations under {root}")
     return pd.concat(frames, ignore_index=True)
 
 
@@ -84,8 +97,14 @@ def train_lgbm_residual(
     *,
     n_splits: int = 5,
     seed: int = 42,
+    prior_col: str = DEFAULT_PRIOR_COL,
 ) -> dict[str, Any]:
-    # Residual on prediction zone with labels (middle-out law); prior already heel-only
+    """
+    Residual learner on labeled *toe* (is_predict).
+
+    Target = TVT − prior  with prior = heel last-known by default (beat-table law).
+    Dual-transport / geometry / neighbor features supply the correction signal.
+    """
     if "is_predict" in stations.columns:
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
     else:
@@ -95,10 +114,10 @@ def train_lgbm_residual(
             f"Insufficient labeled prediction-zone rows for residual train "
             f"(n={len(train_df)}). Need is_predict & TVT labels."
         )
+    prior_col = _resolve_prior_column(train_df, prior_col)
     X, cols = feature_matrix(train_df)
     y = train_df["TVT"].to_numpy(dtype=float)
-    # residual vs flat prior
-    prior = train_df["prior_flat_tvt"].to_numpy(dtype=float)
+    prior = train_df[prior_col].to_numpy(dtype=float)
     y_res = y - prior
     groups = train_df["well_id"].astype(str).to_numpy()
 
@@ -110,7 +129,7 @@ def train_lgbm_residual(
     n_groups = len(np.unique(groups))
     oof = np.zeros(len(train_df))
     models = []
-    fold_scores = []
+    fold_scores: list[float] = []
     params = {
         "objective": "regression",
         "metric": "rmse",
@@ -123,7 +142,7 @@ def train_lgbm_residual(
         "seed": seed,
     }
 
-    def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int):
+    def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int) -> None:
         dtr = lgb.Dataset(X[tr], label=y_res[tr], feature_name=cols)
         dva = lgb.Dataset(X[va], label=y_res[va], feature_name=cols, reference=dtr)
         p = dict(params)
@@ -137,12 +156,11 @@ def train_lgbm_residual(
         )
         pred_res = model.predict(X[va])
         oof[va] = pred_res
-        sc = rmse(y[va], prior[va] + pred_res)
-        fold_scores.append(sc)
+        fold_scores.append(rmse(y[va], prior[va] + pred_res))
         models.append(model)
 
+    oof_mask = np.zeros(len(train_df), dtype=bool)
     if n_groups < 2:
-        # synthetic / single-well smoke: last 25% stations as holdout
         n = len(train_df)
         cut = max(1, int(n * 0.75))
         tr = np.arange(0, cut)
@@ -151,35 +169,62 @@ def train_lgbm_residual(
             va = tr[-max(1, n // 5) :]
             tr = tr[: -len(va)]
         _fit_fold(tr, va, 0)
+        oof_mask[va] = True
     else:
         gkf = GroupKFold(n_splits=min(n_splits, n_groups))
         for fold, (tr, va) in enumerate(gkf.split(X, y_res, groups)):
             _fit_fold(tr, va, fold)
+            oof_mask[va] = True
 
     oof_tvt = prior + oof
     from rwt.kernel_api import resolve_kernel
     from rwt.provenance import seal_artifact
 
     k = resolve_kernel()
+    baseline_rmse: dict[str, float] = {}
+    for name, col in (
+        ("last_known", "prior_last_tvt"),
+        ("flat_formation", "prior_flat_tvt"),
+        ("linear_md_extrap", "prior_extrap_tvt"),
+        ("dual_transport_mid", "prior_mid"),
+    ):
+        if col in train_df.columns:
+            baseline_rmse[name] = rmse(y, train_df[col].to_numpy(dtype=float))
+    oof_r = (
+        rmse(y[oof_mask], oof_tvt[oof_mask]) if oof_mask.any() else rmse(y, oof_tvt)
+    )
+    beats = {
+        name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
+    }
     report = {
         "ok": True,
         "n_stations": int(len(train_df)),
         "n_wells": int(len(np.unique(groups))),
+        "zone": "predict_toe_labeled",
         "feature_cols": cols,
         "fold_rmse": fold_scores,
         "cv_rmse_mean": float(np.mean(fold_scores)),
         "cv_rmse_std": float(np.std(fold_scores)),
-        "oof_rmse": rmse(y, oof_tvt),
+        "oof_rmse": oof_r,
+        "baseline_rmse": baseline_rmse,
+        "beats_baselines": beats,
         "kernel_id": k.kernel_id(),
         "kernel_private": k.is_private(),
+        "prior_column": prior_col,
         "law": (
-            "GroupKFold by well; residual on flat-formation prior; "
-            "open-core public kernel default; private kernel optional"
+            "GroupKFold by well; residual on heel last-known prior; "
+            "dual-transport + SE(3) E_ref + spatial neighbor as features; "
+            "toe residual zone; open-core public kernel default"
         ),
         "license": "AGPL-3.0-or-later",
     }
     report["provenance"] = seal_artifact(report, kind="cv_report")
-    return {"report": report, "models": models, "feature_cols": cols}
+    return {
+        "report": report,
+        "models": models,
+        "feature_cols": cols,
+        "prior_column": prior_col,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,6 +234,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default="artifacts/run1")
     ap.add_argument("--max-wells", type=int, default=0)
     ap.add_argument("--folds", type=int, default=5)
+    ap.add_argument(
+        "--prior-col",
+        default=DEFAULT_PRIOR_COL,
+        help="residual base prior column (default: prior_last_tvt)",
+    )
     args = ap.parse_args(argv)
 
     out = Path(args.out)
@@ -198,18 +248,21 @@ def main(argv: list[str] | None = None) -> int:
         synthetic=args.synthetic or not args.data,
         max_wells=args.max_wells,
     )
-    stations.to_parquet(out / "stations.parquet") if False else stations.to_csv(
-        out / "stations.csv", index=False
+    stations.to_csv(out / "stations.csv", index=False)
+    result = train_lgbm_residual(
+        stations, n_splits=args.folds, prior_col=args.prior_col
     )
-    result = train_lgbm_residual(stations, n_splits=args.folds)
     report = result["report"]
     (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    # save last model only for smoke; full ensemble later
     try:
         import joblib
 
         joblib.dump(
-            {"models": result["models"], "feature_cols": result["feature_cols"]},
+            {
+                "models": result["models"],
+                "feature_cols": result["feature_cols"],
+                "prior_column": result["prior_column"],
+            },
             out / "model.joblib",
         )
     except Exception:

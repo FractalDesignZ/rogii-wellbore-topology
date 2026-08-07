@@ -135,6 +135,21 @@ def load_typewell(path: Path) -> pd.DataFrame:
     return _remap_columns(df)
 
 
+def typewell_path_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:
+    """Resolve ROGII ``{well_id}__typewell.csv`` (and a few aliases)."""
+    base = root / split
+    candidates = [
+        base / f"{well_id}__typewell.csv",
+        base / f"{well_id}_typewell.csv",
+        base / f"{well_id}__type_well.csv",
+        root / f"{well_id}__typewell.csv",
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+    return None
+
+
 def synthetic_well(
     n: int = 200,
     ps_frac: float = 0.65,

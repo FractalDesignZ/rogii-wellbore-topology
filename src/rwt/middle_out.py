@@ -189,3 +189,87 @@ def known_prior_tvt(
         "prior_tvt_plus_z": c_flat,
         "prior_slope_tvt_md": slope,
     }
+
+
+def dual_transport_prior(
+    df: pd.DataFrame,
+    split: MiddleOutSplit,
+    *,
+    tvt_col: str = "TVT",
+    tvt_input_col: str = "TVT_input",
+    z_col: str = "Z",
+    md_col: str = "MD",
+) -> dict[str, np.ndarray | float]:
+    """
+    Bi-directional middle-out priors (public CTS-compatible).
+
+    prior_forward: heel last + MD slope; also flat C−Z from known.
+    prior_backward: structural flat C−Z (beds bidirectional; no toe labels needed).
+    prior_mid: MD-distance blend from prediction-start → well end.
+
+    On known heel stations, prior_mid equals observed heel TVT (input preferred).
+    """
+    n = len(df)
+    stats = known_prior_tvt(
+        df, split, tvt_col=tvt_col, tvt_input_col=tvt_input_col, z_col=z_col
+    )
+    md = (
+        df[md_col].to_numpy(dtype=float)
+        if md_col in df.columns
+        else np.arange(n, dtype=float)
+    )
+    z = df[z_col].to_numpy(dtype=float) if z_col in df.columns else np.zeros(n)
+
+    last = stats["prior_last_tvt"]
+    slope = stats["prior_slope_tvt_md"]
+    c_flat = stats["prior_tvt_plus_z"]
+    md_ref = float(md[int(split.known_idx[-1])]) if len(split.known_idx) else float(md[0])
+
+    prior_forward = last + slope * (md - md_ref)
+    prior_flat = c_flat - z
+    # Backward structural: flat formation is the toe-side anchor without labels
+    prior_backward = prior_flat.copy()
+
+    prior_mid = np.zeros(n, dtype=float)
+    if len(split.predict_idx):
+        md_ps = float(md[int(split.predict_idx[0])])
+        md_end = float(md[-1])
+        span = max(md_end - md_ps, 1e-6)
+    else:
+        md_ps, span = float(md[0]), 1.0
+
+    # known heel: lock to observed
+    known_tvt = np.full(n, np.nan)
+    if tvt_input_col in df.columns:
+        known_tvt = df[tvt_input_col].to_numpy(dtype=float)
+    if tvt_col in df.columns:
+        tcol = df[tvt_col].to_numpy(dtype=float)
+        # fill known indices where input missing but label exists (train heel)
+        for i in split.known_idx:
+            if not np.isfinite(known_tvt[int(i)]) and np.isfinite(tcol[int(i)]):
+                known_tvt[int(i)] = tcol[int(i)]
+
+    is_known = np.zeros(n, dtype=bool)
+    if len(split.known_idx):
+        is_known[np.asarray(split.known_idx, dtype=int)] = True
+    for i in range(n):
+        if is_known[i] and np.isfinite(known_tvt[i]):
+            prior_mid[i] = float(known_tvt[i])
+            continue
+        # weight: near PS → forward; near toe end → backward structural
+        t = float(np.clip((md[i] - md_ps) / span, 0.0, 1.0))
+        w_b = t
+        w_f = 1.0 - t
+        fwd = 0.5 * prior_forward[i] + 0.5 * prior_flat[i]
+        prior_mid[i] = w_f * fwd + w_b * prior_backward[i]
+
+    return {
+        "prior_forward": prior_forward,
+        "prior_backward": prior_backward,
+        "prior_flat": prior_flat,
+        "prior_mid": prior_mid,
+        "prior_last_tvt": last,
+        "prior_mean_tvt": stats["prior_mean_tvt"],
+        "prior_tvt_plus_z": c_flat,
+        "prior_slope_tvt_md": slope,
+    }
