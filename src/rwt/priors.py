@@ -23,6 +23,7 @@ PRIOR_FALLBACKS = (
     "prior_last_tvt",
     "prior_best",
     "prior_stack",
+    "prior_ncc_tvt",
     "prior_pf_blend",
     "prior_local_dip",
     "prior_pf_bag",
@@ -334,13 +335,15 @@ def blend_prior_best(
     *,
     neighbor_tvt: np.ndarray | None = None,
     neighbor_ok: np.ndarray | None = None,
+    prior_ncc: np.ndarray | None = None,
+    ncc_conf: np.ndarray | None = None,
     max_dev: float = 18.0,
 ) -> np.ndarray:
     """
     Crown-path pure prior: confidence-weighted ensemble of clamped candidates.
 
-    All candidates hard-clamped to last_known ± max_dev. Neighbor TVT only where
-    transfer_ok is high. Output never wanders more than max_dev from last_known.
+    Includes PF blend, stack, local MD, neighbor (ok+conf), and NCC stalk track.
+    All candidates hard-clamped to last_known ± max_dev.
     """
     last = float(last_known)
     n = len(prior_stack)
@@ -355,7 +358,6 @@ def blend_prior_best(
     local = _clamp(prior_local_dip)
     conf = np.clip(np.asarray(pf_confidence, dtype=float), 0.0, 1.0)
 
-    # zero-weight non-finite candidates (after clamp) so NaNs cannot poison out
     def _finite_or_last(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         fin = np.isfinite(x)
         return np.where(fin, x, last_arr), fin
@@ -364,13 +366,15 @@ def blend_prior_best(
     blend, fin_b = _finite_or_last(blend)
     local, fin_l = _finite_or_last(local)
 
-    # Crown weights: last_known dominates; PF/stack only when conf high (full-cohort law)
-    w_last = 0.50 + 0.25 * (1.0 - conf)
-    w_stack = (0.20 + 0.10 * conf) * fin_s.astype(float)
-    w_pf = (0.08 + 0.22 * conf) * fin_b.astype(float)
-    w_loc = (0.05 * (1.0 - conf)) * fin_l.astype(float)
+    # last_known dominates; NCC/PF only with conf (full-cohort law)
+    w_last = 0.48 + 0.22 * (1.0 - conf)
+    w_stack = (0.18 + 0.08 * conf) * fin_s.astype(float)
+    w_pf = (0.06 + 0.18 * conf) * fin_b.astype(float)
+    w_loc = (0.04 * (1.0 - conf)) * fin_l.astype(float)
     w_nb = np.zeros(n, dtype=float)
+    w_ncc = np.zeros(n, dtype=float)
     nb = last_arr
+    ncc_arr = last_arr
     if neighbor_tvt is not None and neighbor_ok is not None:
         nb_raw = np.asarray(neighbor_tvt, dtype=float)
         ok = np.asarray(neighbor_ok, dtype=float)
@@ -378,9 +382,19 @@ def blend_prior_best(
         if m.any():
             nb = _clamp(np.where(m, nb_raw, last))
             nb, fin_n = _finite_or_last(nb)
-            w_nb = np.where(m & fin_n, 0.12 * ok * conf, 0.0)
+            w_nb = np.where(m & fin_n, 0.10 * ok * conf, 0.0)
+    if prior_ncc is not None:
+        ncc_raw = np.asarray(prior_ncc, dtype=float)
+        nc = (
+            np.clip(np.asarray(ncc_conf, dtype=float), 0.0, 1.0)
+            if ncc_conf is not None
+            else np.zeros(n)
+        )
+        ncc_arr, fin_c = _finite_or_last(_clamp(ncc_raw))
+        # zero conf → zero weight (do not soft-pull with flat 0.08 when stalk is cold)
+        w_ncc = (0.28 * nc) * fin_c.astype(float)
 
-    w_sum = w_last + w_stack + w_pf + w_loc + w_nb
+    w_sum = w_last + w_stack + w_pf + w_loc + w_nb + w_ncc
     w_sum = np.where(w_sum < 1e-9, 1.0, w_sum)
     out = (
         w_last * last_arr
@@ -388,5 +402,6 @@ def blend_prior_best(
         + w_pf * blend
         + w_loc * local
         + w_nb * nb
+        + w_ncc * ncc_arr
     ) / w_sum
     return _clamp(out)

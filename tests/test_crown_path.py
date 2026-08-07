@@ -109,6 +109,83 @@ class TestCrownPath(unittest.TestCase):
         # offset from heel-only should be near 0, not pulled by toe 200 labels
         self.assertLess(abs(float(out["neighbor_offset"].iloc[0])), 5.0)
 
+    def test_ncc_track_clamped_and_shaped(self) -> None:
+        from rwt.gr_match import ncc_tvt_track
+
+        tw_tvt = np.linspace(100, 200, 200)
+        tw_gr = 80 + 20 * np.sin(tw_tvt / 8)
+        n = 80
+        true = 150 + np.linspace(0, 3, n)
+        lat = 80 + 20 * np.sin(true / 8)
+        known = np.full(n, np.nan)
+        known[:20] = true[:20]
+        out = ncc_tvt_track(
+            lat, tw_gr, tw_tvt, known_tvt=known, seed_tvt=true[19], stride=4, max_dev=18.0
+        )
+        self.assertEqual(len(out["prior_ncc_tvt"]), n)
+        self.assertTrue(np.all(np.abs(out["prior_ncc_tvt"] - true[19]) <= 18.0 + 1e-6))
+        # heel locked
+        self.assertTrue(np.allclose(out["prior_ncc_tvt"][:20], true[:20]))
+        self.assertTrue(np.all(out["ncc_track_conf"][:20] == 1.0))
+
+    def test_ncc_cold_track_holds_seed(self) -> None:
+        """Uncorrelated GR → no stalk trust → prior collapses to seed/known."""
+        from rwt.gr_match import ncc_tvt_track
+
+        tw_tvt = np.linspace(100, 200, 200)
+        tw_gr = 80 + 20 * np.sin(tw_tvt / 8)
+        n = 60
+        seed = 150.0
+        lat = np.random.default_rng(3).normal(80, 30, n)  # noise, no shape match
+        known = np.full(n, np.nan)
+        known[:10] = seed
+        out = ncc_tvt_track(
+            lat, tw_gr, tw_tvt, known_tvt=known, seed_tvt=seed, stride=8, max_dev=18.0
+        )
+        toe = out["prior_ncc_tvt"][10:]
+        self.assertTrue(np.all(np.abs(toe - seed) <= 18.0 + 1e-6))
+        # cold conf off-heel should be low when no peak accepted
+        self.assertLess(float(np.mean(out["ncc_track_conf"][10:])), 0.5)
+
+    def test_blend_ncc_conf_gated(self) -> None:
+        """Zero NCC conf must not move prior_best; high conf may pull within clamp."""
+        n = 30
+        last = 100.0
+        stack = np.full(n, 100.0)
+        blend = np.full(n, 100.0)
+        local = np.full(n, 100.0)
+        conf = np.ones(n) * 0.5
+        ncc = np.full(n, 112.0)
+        cold = blend_prior_best(
+            last, stack, blend, local, conf, prior_ncc=ncc, ncc_conf=np.zeros(n), max_dev=18.0
+        )
+        hot = blend_prior_best(
+            last, stack, blend, local, conf, prior_ncc=ncc, ncc_conf=np.ones(n), max_dev=18.0
+        )
+        self.assertTrue(np.allclose(cold, last, atol=1e-6))
+        self.assertGreater(float(np.mean(hot)), last + 0.5)
+        self.assertTrue(np.all(hot <= last + 18.0 + 1e-9))
+
+    def test_process_bias_near_ps_clipped(self) -> None:
+        """Build-section large dTVT must not set toe process_bias outside ±0.05."""
+        tw_tvt = np.linspace(100, 200, 200)
+        tw_gr = np.full(200, 80.0)
+        n = 100
+        known = np.full(n, np.nan)
+        # first half: steep build; last 40: flat near PS
+        known[:50] = 100 + np.linspace(0, 40, 50)
+        known[50:70] = 140 + np.linspace(0, 0.5, 20)
+        out = particle_filter_tvt(
+            np.full(n, 80.0),
+            tw_gr,
+            tw_tvt,
+            seed_tvt=140.5,
+            known_tvt=known,
+            n_particles=80,
+            rng=np.random.default_rng(0),
+        )
+        self.assertLessEqual(abs(float(out["process_bias"])), 0.05 + 1e-9)
+
     def test_well_prior_has_blend(self) -> None:
         n = 40
         df = pd.DataFrame(
@@ -132,6 +209,11 @@ class TestCrownPath(unittest.TestCase):
         p = particle_prior_for_well(df, tw, sp, n_particles=120, bag=True, seed=0)
         self.assertIn("prior_pf_blend", p)
         self.assertEqual(len(p["prior_pf_bag"]), n)
+        self.assertGreaterEqual(int(p["n_pf_bag"]), 4)
+        last = float(p["prior_last_tvt"])
+        # bag + blend must honor clamp law
+        self.assertTrue(np.all(np.abs(p["prior_pf_bag"] - last) <= 18.0 + 1e-6))
+        self.assertTrue(np.all(np.abs(p["prior_pf_blend"] - last) <= 18.0 + 1e-6))
 
 
 if __name__ == "__main__":

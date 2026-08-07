@@ -109,24 +109,24 @@ def particle_filter_tvt(
     else:
         a_cal, b_cal = 1.0, 0.0
 
-    # process bias: typical TVT step along known heel (clipped)
+    # process bias: near-PS heel only (last ≤80 known stations) — not the build section
     if process_bias is None:
         k_idx = np.flatnonzero(np.isfinite(known_tvt))
         if len(k_idx) >= 4:
-            # consecutive known stations only
+            k_idx = k_idx[-min(80, len(k_idx)) :]
             dsteps = []
             for a, b in zip(k_idx[:-1], k_idx[1:]):
                 if b == a + 1:
                     dsteps.append(float(known_tvt[b] - known_tvt[a]))
             if dsteps:
-                # conservative walk: laterals rarely move >0.08 TVT/ft station
-                process_bias = float(np.clip(np.median(dsteps), -0.08, 0.08))
+                # laterals: tiny walk; clip hard so build dTVT cannot leak into toe
+                process_bias = float(np.clip(np.median(dsteps), -0.05, 0.05))
             else:
                 process_bias = 0.0
         else:
             process_bias = 0.0
     else:
-        process_bias = float(np.clip(process_bias, -0.08, 0.08))
+        process_bias = float(np.clip(process_bias, -0.05, 0.05))
 
     t_min, t_max = float(tw_tvt[0]), float(tw_tvt[-1])
     grid = np.arange(t_min, t_max + spacing * 0.5, spacing)
@@ -245,13 +245,12 @@ def blend_pf_last_known(
     return last + c * delta
 
 
-# Diverse PF hyperconfigs (public multi-hypothesis bag — crown-path diversity)
+# Diverse but bounded PF bag (wide span configs destroyed pure bag RMSE 35–80 on real wells)
 _PF_BAG_CONFIGS: list[dict[str, Any]] = [
-    {"n_particles": 500, "process_sigma": 0.18, "gr_sigma": 14.0, "tvt_span": 55.0, "seed": 0},
-    {"n_particles": 500, "process_sigma": 0.28, "gr_sigma": 20.0, "tvt_span": 75.0, "seed": 1},
-    {"n_particles": 600, "process_sigma": 0.38, "gr_sigma": 26.0, "tvt_span": 95.0, "seed": 2},
-    {"n_particles": 400, "process_sigma": 0.22, "gr_sigma": 18.0, "tvt_span": 65.0, "seed": 3},
-    {"n_particles": 550, "process_sigma": 0.32, "gr_sigma": 22.0, "tvt_span": 80.0, "seed": 4},
+    {"n_particles": 450, "process_sigma": 0.16, "gr_sigma": 14.0, "tvt_span": 45.0, "seed": 0},
+    {"n_particles": 500, "process_sigma": 0.22, "gr_sigma": 18.0, "tvt_span": 55.0, "seed": 1},
+    {"n_particles": 500, "process_sigma": 0.28, "gr_sigma": 22.0, "tvt_span": 65.0, "seed": 2},
+    {"n_particles": 400, "process_sigma": 0.20, "gr_sigma": 16.0, "tvt_span": 50.0, "seed": 3},
 ]
 
 
@@ -351,12 +350,17 @@ def particle_prior_for_well(
                 for i, cfg in enumerate(_PF_BAG_CONFIGS)
             ]
             runs = [f.result() for f in futs]
-        bag_arr = np.mean(np.vstack([r["prior_pf_tvt"] for r in runs]), axis=0)
+        tracks = np.vstack([r["prior_pf_tvt"] for r in runs])
+        # median bag resists outlier configs (mean bag RMSE was 35–80 on real toes)
+        bag_arr = np.median(tracks, axis=0)
         conf = np.mean(np.vstack([r["pf_confidence"] for r in runs]), axis=0)
         stds = np.mean(np.vstack([r["pf_tvt_std"] for r in runs]), axis=0)
+        # disagreement across bag → lower confidence
+        disagree = np.std(tracks, axis=0)
+        conf = conf * (1.0 / (1.0 + disagree / 8.0))
         # single default-config track for prior_pf_tvt (distinct from bag)
         single = _run_one(
-            {"n_particles": n_particles, "process_sigma": 0.35, "gr_sigma": 22.0, "tvt_span": 80.0, "seed": 0},
+            {"n_particles": n_particles, "process_sigma": 0.22, "gr_sigma": 18.0, "tvt_span": 55.0, "seed": 0},
             seed_offset=0,
         )
         pf_tvt = single["prior_pf_tvt"]
@@ -365,9 +369,9 @@ def particle_prior_for_well(
         single = _run_one(
             {
                 "n_particles": n_particles,
-                "process_sigma": 0.35,
-                "gr_sigma": 22.0,
-                "tvt_span": 80.0,
+                "process_sigma": 0.22,
+                "gr_sigma": 18.0,
+                "tvt_span": 55.0,
                 "seed": 0,
             }
         )
@@ -376,13 +380,18 @@ def particle_prior_for_well(
         n_bag = 1
 
     fill = last_f if np.isfinite(last_f) else seed_tvt
+    # clamp raw bag/track before blend so feature columns are not poison
+    max_dev = 18.0
+    if np.isfinite(fill):
+        bag_arr = fill + np.clip(bag_arr - fill, -max_dev, max_dev)
+        pf_tvt = fill + np.clip(pf_tvt - fill, -max_dev, max_dev)
     blend = blend_pf_last_known(
         bag_arr if bag else pf_tvt,
         fill,
         conf,
-        conf_floor=0.20,
-        conf_ceil=0.65,
-        max_dev=18.0,
+        conf_floor=0.25,
+        conf_ceil=0.70,
+        max_dev=max_dev,
     )
     is_known = np.zeros(n, dtype=bool)
     if len(split.known_idx):

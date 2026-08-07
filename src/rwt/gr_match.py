@@ -99,7 +99,113 @@ def multi_scale_ncc(
     if tvt_hints:
         out["tvt_hint_median"] = float(np.median(tvt_hints))
         out["tvt_hint_std"] = float(np.std(tvt_hints))
+        out["ncc_peak"] = float(
+            np.nanmax([out.get(f"ncc_{s}", 0.0) for s in scales])
+        )
     else:
         out["tvt_hint_median"] = 0.0
         out["tvt_hint_std"] = 0.0
+        out["ncc_peak"] = 0.0
     return out
+
+
+def ncc_tvt_track(
+    lateral_gr: np.ndarray,
+    typewell_gr: np.ndarray,
+    typewell_tvt: np.ndarray,
+    *,
+    known_tvt: np.ndarray | None = None,
+    seed_tvt: float | None = None,
+    stride: int = 8,
+    scales: tuple[int, ...] = (32, 64),
+    max_dev: float = 18.0,
+    min_peak: float = 0.15,
+) -> dict[str, np.ndarray]:
+    """
+    Deterministic typewell stalk: sparse multi-scale NCC TVT hints → filled track.
+
+    Complements PF (stochastic). High ncc_peak → trust hint; else hold last-known.
+    Always hard-clamped to seed/last ± max_dev (clamp law).
+    """
+    gr = np.asarray(lateral_gr, dtype=float)
+    tw_gr = np.asarray(typewell_gr, dtype=float)
+    tw_tvt = np.asarray(typewell_tvt, dtype=float)
+    n = len(gr)
+    if known_tvt is None:
+        known_tvt = np.full(n, np.nan)
+    else:
+        known_tvt = np.asarray(known_tvt, dtype=float)
+
+    last = float(seed_tvt) if seed_tvt is not None and np.isfinite(seed_tvt) else float("nan")
+    if not np.isfinite(last) and np.isfinite(known_tvt).any():
+        last = float(known_tvt[np.isfinite(known_tvt)][-1])
+    if not np.isfinite(last) and np.isfinite(tw_tvt).any():
+        last = float(np.nanmedian(tw_tvt))
+
+    track = np.full(n, np.nan, dtype=float)
+    conf = np.zeros(n, dtype=float)
+    if n == 0 or not np.isfinite(last):
+        return {
+            "prior_ncc_tvt": np.full(n, np.nan, dtype=float),
+            "ncc_track_conf": conf,
+        }
+
+    sample = list(range(0, n, max(1, int(stride))))
+    if sample[-1] != n - 1:
+        sample.append(n - 1)
+
+    m_tw = np.isfinite(tw_gr) & np.isfinite(tw_tvt)
+    if m_tw.sum() < 8:
+        arr = np.full(n, last, dtype=float)
+        arr = np.where(np.isfinite(known_tvt), known_tvt, arr)
+        return {
+            "prior_ncc_tvt": arr,
+            "ncc_track_conf": np.where(np.isfinite(known_tvt), 1.0, conf).astype(float),
+        }
+
+    for i in sample:
+        if np.isfinite(known_tvt[i]):
+            track[i] = float(known_tvt[i])
+            conf[i] = 1.0
+            continue
+        m = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=i)
+        peak = float(m.get("ncc_peak") or 0.0)
+        hint = m.get("tvt_hint_median")
+        if hint is None or not np.isfinite(hint) or peak < float(min_peak):
+            continue
+        # clamp each sparse hint to seed ± max_dev
+        track[i] = last + float(np.clip(float(hint) - last, -max_dev, max_dev))
+        conf[i] = float(np.clip(peak, 0.0, 1.0))
+
+    # dense track: linear interp of finite sparse samples; else hold seed
+    idx = np.flatnonzero(np.isfinite(track))
+    if len(idx) >= 2:
+        filled = np.interp(np.arange(n, dtype=float), idx.astype(float), track[idx])
+    elif len(idx) == 1:
+        filled = np.full(n, float(track[idx[0]]), dtype=float)
+    else:
+        filled = np.full(n, last, dtype=float)
+
+    # conf: nearest finite-sample confidence, attenuated off-sample
+    conf_f = np.zeros(n, dtype=float)
+    if len(idx) >= 1:
+        # vectorized nearest sample index into idx
+        # for each station i, j* = argmin |idx - i|
+        pos = np.searchsorted(idx, np.arange(n))
+        pos = np.clip(pos, 0, len(idx) - 1)
+        pos_lo = np.clip(pos - 1, 0, len(idx) - 1)
+        d_hi = np.abs(idx[pos] - np.arange(n))
+        d_lo = np.abs(idx[pos_lo] - np.arange(n))
+        nearest = np.where(d_lo <= d_hi, pos_lo, pos)
+        conf_f = conf[idx[nearest]] * 0.85
+        conf_f[idx] = conf[idx]  # exact samples keep full conf
+
+    # clamp law + heel lock
+    filled = last + np.clip(filled - last, -max_dev, max_dev)
+    known_m = np.isfinite(known_tvt)
+    filled = np.where(known_m, known_tvt, filled)
+    conf_f = np.where(known_m, 1.0, conf_f)
+    return {
+        "prior_ncc_tvt": filled.astype(float),
+        "ncc_track_conf": conf_f.astype(float),
+    }

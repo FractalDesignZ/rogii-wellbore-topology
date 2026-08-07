@@ -7,21 +7,23 @@
 Push pure prior floor and residual toward best-in-class (~6–7 LB) without cloning
 competitors: typewell stalk fidelity + clamp law + residual only if it beats floors.
 
-## Axes in this branch
+## Axes (public open-core, cumulative)
 
 | Axis | Change |
 | --- | --- |
-| **PF stalk** | Process bias from heel ΔTVT; GR level × ΔGR likelihood; GR-dropout noise inflate; 5-config bag |
-| **Prior ensemble** | `prior_best` = conf-weighted clamp ensemble (last, stack, PF blend, local MD, neighbor) |
-| **Neighbor** | Heel median offset calibration (capped ±40 ft) before transfer |
-| **Residual** | Default base `prior_last_tvt`; `prior_best` is Gate3 floor + residual feature; stronger LGBM reg |
-| **Clamp** | All pure candidates still ≤ last_known ± 18 ft |
+| **PF stalk** | Near-PS process bias (last ≤80 known, clip ±0.05); GR×ΔGR; GR-dropout inflate; **median bag** + disagree demotion; bag/track pre-clamp ±18 |
+| **NCC stalk** | `prior_ncc_tvt` sparse multi-scale template track; conf-gated in ensemble; heel lock = TVT_input∪known TVT |
+| **Prior ensemble** | `prior_best` last-dominated clamp of stack/PF/local/neighbor/**NCC** (NCC weight ∝ conf only) |
+| **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft) |
+| **Residual** | Default base `prior_last_tvt`; Gate3 vs all floors; LGBM + optional CUDA TCN |
+| **Clamp** | All pure candidates ≤ last_known ± 18 ft |
+| **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
 ## What still is RESIDUE
 
-- Full 773w residual ~14.5 (pre-crown branch) vs LB ~6–7.
+- Full 773w residual ~14.5 vs LB ~6–7 / hunt 5 ft.
 - Private beam / DTW / sheaf stalk offline.
-- Public PF is still discrete particle — not Viterbi/HMM full lattice.
+- Public PF is discrete particle — not full lattice Viterbi.
 
 ## Measure protocol
 

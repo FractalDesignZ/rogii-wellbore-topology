@@ -308,6 +308,7 @@ def train_neural_residual(
         ("pf_bag", "prior_pf_bag"),
         ("prior_stack", "prior_stack"),
         ("prior_best", "prior_best"),
+        ("prior_ncc", "prior_ncc_tvt"),
     ):
         if col not in train_df.columns:
             continue

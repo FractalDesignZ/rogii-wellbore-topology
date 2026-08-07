@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from rwt.geometry import station_local_geometry, trajectory_in_dip_frame
-from rwt.gr_match import multi_scale_ncc
+from rwt.gr_match import multi_scale_ncc, ncc_tvt_track
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
 from rwt.particle_track import particle_prior_for_well
@@ -62,6 +62,34 @@ def build_station_frame(
     # Layer multi-PF bag (public lite of private-6th multi-PF idea)
     pf = particle_prior_for_well(df, typewell, split, bag=True)
     last_f = float(pf.get("prior_last_tvt", dual["prior_last_tvt"]))
+    # Deterministic NCC stalk (complements stochastic PF)
+    ncc_track = {
+        "prior_ncc_tvt": np.full(n, last_f if np.isfinite(last_f) else np.nan),
+        "ncc_track_conf": np.zeros(n),
+    }
+    if typewell is not None and "GR" in typewell.columns and "TVT" in typewell.columns:
+        # Same heel lock contract as PF: TVT_input, else TVT on known stations only
+        known_full = np.full(n, np.nan, dtype=float)
+        if "TVT_input" in df.columns:
+            known_full = np.asarray(df["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
+        if len(split.known_idx) and "TVT" in df.columns:
+            kidx = np.asarray(split.known_idx, dtype=int)
+            tcol = np.asarray(df["TVT"].to_numpy(dtype=float), dtype=float)
+            miss = ~np.isfinite(known_full[kidx]) & np.isfinite(tcol[kidx])
+            known_full[kidx[miss]] = tcol[kidx[miss]]
+        gr_full = (
+            df["GR"].to_numpy(dtype=float)
+            if "GR" in df.columns
+            else np.full(n, np.nan, dtype=float)
+        )
+        ncc_track = ncc_tvt_track(
+            gr_full,
+            typewell["GR"].to_numpy(dtype=float),
+            typewell["TVT"].to_numpy(dtype=float),
+            known_tvt=known_full,
+            seed_tvt=last_f,
+            stride=8,
+        )
     stack = blend_stack_priors(
         last_f,
         dip_prior["prior_dip_stack"],
@@ -228,6 +256,10 @@ def build_station_frame(
             "prior_pf_blend": float(pf["prior_pf_blend"][i]),
             "prior_pf_bag": float(pf["prior_pf_bag"][i]),
             "prior_stack": float(stack[i]),
+            "prior_ncc_tvt": float(ncc_track["prior_ncc_tvt"][i])
+            if np.isfinite(ncc_track["prior_ncc_tvt"][i])
+            else float(last_f) if np.isfinite(last_f) else float("nan"),
+            "ncc_track_conf": float(ncc_track["ncc_track_conf"][i]),
             "pf_confidence": float(pf["pf_confidence"][i]),
             "pf_tvt_std": float(pf["pf_tvt_std"][i])
             if np.isfinite(pf["pf_tvt_std"][i])
@@ -274,6 +306,12 @@ def build_station_frame(
         stations["pf_confidence"].to_numpy(dtype=float),
         neighbor_tvt=nb,
         neighbor_ok=nb_ok,
+        prior_ncc=stations["prior_ncc_tvt"].to_numpy(dtype=float)
+        if "prior_ncc_tvt" in stations.columns
+        else None,
+        ncc_conf=stations["ncc_track_conf"].to_numpy(dtype=float)
+        if "ncc_track_conf" in stations.columns
+        else None,
     )
     # lock heel on best
     if "is_known" in stations.columns and "TVT" in stations.columns:
@@ -331,6 +369,8 @@ FEATURE_COLS_DEFAULT = [
     "prior_pf_bag",
     "prior_stack",
     "prior_best",
+    "prior_ncc_tvt",
+    "ncc_track_conf",
     "pf_confidence",
     "pf_tvt_std",
     "ncc_16",
@@ -340,6 +380,7 @@ FEATURE_COLS_DEFAULT = [
     "ncc_32_lag",
     "ncc_64_lag",
     "tvt_hint_median",
+    "ncc_peak",
     "neighbor_tvt",
     "neighbor_xy_dist",
     "neighbor_transfer_ok",
