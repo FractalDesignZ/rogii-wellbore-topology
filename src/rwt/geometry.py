@@ -13,6 +13,104 @@ import numpy as np
 from numpy.linalg import norm
 
 
+def rotation_matrix_z(yaw_rad: float) -> np.ndarray:
+    """Right-handed SO(3) rotation about +Z."""
+    c, s = float(np.cos(yaw_rad)), float(np.sin(yaw_rad))
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=float)
+
+
+def rotation_matrix_y(pitch_rad: float) -> np.ndarray:
+    """Right-handed SO(3) rotation about +Y."""
+    c, s = float(np.cos(pitch_rad)), float(np.sin(pitch_rad))
+    return np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]], dtype=float)
+
+
+def rotation_matrix_x(roll_rad: float) -> np.ndarray:
+    """Right-handed SO(3) rotation about +X."""
+    c, s = float(np.cos(roll_rad)), float(np.sin(roll_rad))
+    return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]], dtype=float)
+
+
+def apply_orthogonal_dip_rotation(
+    xyz: np.ndarray,
+    azimuth_deg: float,
+    dip_deg: float,
+) -> np.ndarray:
+    """
+    Orthogonally rotate wellbore coordinates into a local formation dip frame.
+
+    R = R_y(dip) @ R_z(-azimuth)
+    applied as  xyz_dip = xyz @ R.T   (row-vector convention)
+
+    azimuth_deg: formation strike / lateral azimuth (deg from +X toward +Y)
+    dip_deg: formation dip (deg, positive dips toward azimuth direction)
+    """
+    xyz = np.asarray(xyz, dtype=float)
+    if xyz.ndim != 2 or xyz.shape[1] != 3:
+        raise ValueError("xyz must be (N, 3)")
+    az = np.radians(float(azimuth_deg))
+    dip = np.radians(float(dip_deg))
+    R_z = rotation_matrix_z(-az)
+    R_y = rotation_matrix_y(dip)
+    R = R_y @ R_z
+    # contiguous for SIMD matmul
+    xyz_c = np.ascontiguousarray(xyz, dtype=float)
+    return xyz_c @ R.T
+
+
+def estimate_lateral_azimuth_dip_deg(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+) -> tuple[float, float]:
+    """
+    Crude formation-frame estimate from trajectory: azimuth from horizontal
+    mean tangent; dip from mean |dZ|/dS along lateral body.
+    """
+    x, y, z = map(lambda a: np.asarray(a, float), (x, y, z))
+    if len(x) < 3:
+        return 0.0, 0.0
+    dx = np.diff(x)
+    dy = np.diff(y)
+    dz = np.diff(z)
+    ds = np.sqrt(dx * dx + dy * dy + dz * dz) + 1e-15
+    # use last 60% of path (lateral)
+    cut = max(1, int(0.4 * len(dx)))
+    ax = float(np.mean(dx[cut:]))
+    ay = float(np.mean(dy[cut:]))
+    az_deg = float(np.degrees(np.arctan2(ay, ax + 1e-15)))
+    horiz = np.sqrt(dx[cut:] ** 2 + dy[cut:] ** 2) + 1e-15
+    dip_deg = float(np.degrees(np.arctan2(np.mean(np.abs(dz[cut:])), np.mean(horiz))))
+    return az_deg, dip_deg
+
+
+def trajectory_in_dip_frame(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    *,
+    azimuth_deg: float | None = None,
+    dip_deg: float | None = None,
+) -> dict[str, np.ndarray | float]:
+    """Return dip-frame coordinates + estimated (or given) azimuth/dip."""
+    if azimuth_deg is None or dip_deg is None:
+        az_e, dip_e = estimate_lateral_azimuth_dip_deg(x, y, z)
+        azimuth_deg = az_e if azimuth_deg is None else azimuth_deg
+        dip_deg = dip_e if dip_deg is None else dip_deg
+    xyz = np.column_stack([np.asarray(x, float), np.asarray(y, float), np.asarray(z, float)])
+    # center before rotate (pure orthogonal frame, not origin-dependent)
+    origin = xyz[0].copy()
+    xyz0 = xyz - origin
+    xyz_d = apply_orthogonal_dip_rotation(xyz0, float(azimuth_deg), float(dip_deg))
+    return {
+        "x_dip": xyz_d[:, 0],
+        "y_dip": xyz_d[:, 1],
+        "z_dip": xyz_d[:, 2],
+        "azimuth_deg": float(azimuth_deg),
+        "dip_deg": float(dip_deg),
+    }
+
+
 def rot_between(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """Minimal SO(3) rotation taking unit vector u onto v (det = +1).
 
@@ -354,18 +452,17 @@ def station_local_geometry(
     dz = np.gradient(np.asarray(z, float))
     dx = np.gradient(np.asarray(x, float))
     dy = np.gradient(np.asarray(y, float))
+    from rwt.simd import as_f64_contig, vectorized_rolling_mean
+
     w = max(1, int(window))
-    ker = np.ones(w) / w
-    curv_roll = np.convolve(curv_s, ker, mode="same")
-    tors_roll = np.convolve(tors_s, ker, mode="same")
-    e_arr = np.asarray(eref["e_ref"], dtype=float)
+    e_arr = as_f64_contig(np.asarray(eref["e_ref"], dtype=float))
     return {
         "local_curv": curv_s,
-        "local_curv_roll": curv_roll,
+        "local_curv_roll": vectorized_rolling_mean(curv_s, w),
         "local_torsion": tors_s,
-        "local_torsion_roll": tors_roll,
+        "local_torsion_roll": vectorized_rolling_mean(tors_s, w),
         "e_ref": e_arr,
-        "e_ref_roll": np.convolve(e_arr, ker, mode="same"),
+        "e_ref_roll": vectorized_rolling_mean(e_arr, w),
         "d_z": dz,
         "d_horiz": np.sqrt(dx * dx + dy * dy),
     }

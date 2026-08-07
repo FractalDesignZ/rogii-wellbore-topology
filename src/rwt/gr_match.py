@@ -30,23 +30,25 @@ def ncc(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def best_ncc_lag(query: np.ndarray, template: np.ndarray, max_lag: int | None = None) -> dict[str, Any]:
-    """Slide query along template; return best NCC and lag."""
-    q = _zscore(np.asarray(query, float))
-    t = _zscore(np.asarray(template, float))
+    """
+    Slide query along template; return best NCC and lag.
+
+    Vectorized via np.correlate on float64 contiguous buffers (OpenBLAS/SIMD).
+    """
+    from rwt.simd import as_f64_contig, vectorized_ncc_template
+
+    q = as_f64_contig(np.asarray(query, float))
+    t = as_f64_contig(np.asarray(template, float))
     nq, nt = len(q), len(t)
     if nq < 3 or nt < nq:
         return {"ncc": 0.0, "lag": 0, "tvt_index": 0}
     max_lag = max_lag if max_lag is not None else nt - nq
     max_lag = max(0, min(max_lag, nt - nq))
-    best = -1e9
-    best_lag = 0
-    for lag in range(0, max_lag + 1):
-        window = t[lag : lag + nq]
-        score = float(np.dot(q, window) / max(nq, 1))
-        if score > best:
-            best = score
-            best_lag = lag
-    return {"ncc": float(best), "lag": int(best_lag), "tvt_index": int(best_lag)}
+    # restrict template to searchable region
+    t_use = t[: nq + max_lag] if max_lag + nq <= nt else t
+    ncc_v, lag = vectorized_ncc_template(q, t_use)
+    lag = int(min(lag, max_lag))
+    return {"ncc": float(ncc_v), "lag": lag, "tvt_index": lag}
 
 
 def multi_scale_ncc(

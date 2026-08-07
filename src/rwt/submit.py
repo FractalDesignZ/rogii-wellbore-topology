@@ -58,7 +58,11 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     preferred = model_blob.get("prior_column") or "prior_last_tvt"
     prior_col = resolve_prior_column(stations, preferred)
     prior = stations[prior_col].to_numpy(dtype=float)
-    preds = [m.predict(Xn) for m in model_blob["models"]]
+    models = model_blob.get("models") or []
+    use_residual = bool(model_blob.get("use_residual", True)) and len(models) > 0
+    if not use_residual:
+        return prior
+    preds = [m.predict(Xn) for m in models]
     res = np.mean(np.vstack(preds), axis=0)
     return prior + res
 

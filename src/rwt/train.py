@@ -188,6 +188,38 @@ def train_lgbm_residual(
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
+
+    # ── Gate 3: Residual Acceptance ─────────────────────────────────────
+    from rwt.gates import gate_ip_fence, gate_residual_acceptance
+    from rwt.simd import cpu_feature_report
+
+    prior_m = prior[row_m]
+    gate3 = gate_residual_acceptance(
+        y_m, oof_tvt[row_m], prior_m, prior_name=prior_col
+    )
+    gate1 = gate_ip_fence()
+    use_residual = bool(gate3.passed)
+    if use_residual:
+        print(
+            f"[GATE PASS] Residual head accepted: OOF {gate3.detail['oof_rmse_residual']:.3f} "
+            f"<= prior({prior_col}) {gate3.detail['oof_rmse_prior']:.3f}",
+            flush=True,
+        )
+        final_models = models
+        final_prior_type = f"{prior_col}_plus_lgbm_residual"
+        final_oof = oof_r
+    else:
+        print(
+            f"[GATE REJECT] Residual overfitted "
+            f"(OOF {gate3.detail['oof_rmse_residual']:.3f} > "
+            f"prior {gate3.detail['oof_rmse_prior']:.3f}). "
+            f"Falling back to pure prior '{prior_col}'.",
+            flush=True,
+        )
+        final_models = []  # empty → submit uses prior only
+        final_prior_type = f"pure_{prior_col}"
+        final_oof = float(gate3.detail["oof_rmse_prior"])
+
     report = {
         "ok": True,
         "n_stations": int(len(train_df)),
@@ -198,24 +230,30 @@ def train_lgbm_residual(
         "cv_rmse_mean": float(np.mean(fold_scores)),
         "cv_rmse_std": float(np.std(fold_scores)),
         "oof_rmse": oof_r,
+        "oof_rmse_selected": final_oof,
         "baseline_rmse": baseline_rmse,
         "beats_baselines": beats,
         "kernel_id": k.kernel_id(),
         "kernel_private": k.is_private(),
         "prior_column": prior_col,
+        "final_prior_type": final_prior_type,
+        "use_residual": use_residual,
+        "gates": [gate1.to_dict(), gate3.to_dict()],
+        "cpu": cpu_feature_report(),
         "law": (
-            "GroupKFold by well; residual on PF+last-known blend prior; "
-            "particle-filter typewell track is primary geosteering prior; "
-            "SE(3)/dual/spatial as features; toe residual zone; open-core public"
+            "GroupKFold by well; residual gated by prior OOF; "
+            "particle-filter typewell track; SO(3)/SE(3)/spatial features; "
+            "open-core public kernel fail-closed"
         ),
         "license": "AGPL-3.0-or-later",
     }
     report["provenance"] = seal_artifact(report, kind="cv_report")
     return {
         "report": report,
-        "models": models,
+        "models": final_models,
         "feature_cols": cols,
         "prior_column": prior_col,
+        "use_residual": use_residual,
     }
 
 
@@ -254,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
                 "models": result["models"],
                 "feature_cols": result["feature_cols"],
                 "prior_column": result["prior_column"],
+                "use_residual": result.get("use_residual", True),
             },
             out / "model.joblib",
         )

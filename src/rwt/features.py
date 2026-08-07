@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from rwt.geometry import station_local_geometry
+from rwt.geometry import station_local_geometry, trajectory_in_dip_frame
 from rwt.gr_match import multi_scale_ncc
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
@@ -38,6 +38,10 @@ def build_station_frame(
         df["Z"].to_numpy(),
     )
     local = station_local_geometry(
+        df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
+    )
+    # Phase 1: orthogonal dip-frame parse (formation-aligned coordinates)
+    dipf = trajectory_in_dip_frame(
         df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
     )
     dual = dual_transport_prior(df, split)
@@ -102,6 +106,11 @@ def build_station_frame(
             "e_ref_roll": float(local["e_ref_roll"][i]),
             "d_z": float(local["d_z"][i]),
             "d_horiz": float(local["d_horiz"][i]),
+            "x_dip": float(dipf["x_dip"][i]),
+            "y_dip": float(dipf["y_dip"][i]),
+            "z_dip": float(dipf["z_dip"][i]),
+            "form_azimuth_deg": float(dipf["azimuth_deg"]),
+            "form_dip_deg": float(dipf["dip_deg"]),
             "prior_last_tvt": float(dual["prior_last_tvt"]),
             "prior_mean_tvt": float(dual["prior_mean_tvt"]),
             "prior_tvt_plus_z": float(dual["prior_tvt_plus_z"]),
@@ -150,6 +159,11 @@ FEATURE_COLS_DEFAULT = [
     "e_ref_roll",
     "d_z",
     "d_horiz",
+    "x_dip",
+    "y_dip",
+    "z_dip",
+    "form_azimuth_deg",
+    "form_dip_deg",
     "well_mean_curv",
     "well_max_curv",
     "well_cum_twist",
