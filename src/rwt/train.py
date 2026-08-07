@@ -51,9 +51,24 @@ def _assemble_dataset(
         sp = resolve_middle_out(df, well_id=wid)
         tw_path = _typewell_for_well(root, wid, "train")
         tw = load_typewell(tw_path) if tw_path else None
-        # Train residual on known heel only (prior/mask honest); toe built at submit time
-        idx = sp.known_idx if sp.n_known else None
-        frames.append(build_station_frame(df, tw, sp, station_idx=idx))
+        # Prior from known heel (inside build_station_frame); residual trains on labeled toe
+        if not sp.n_predict:
+            continue
+        if "TVT" not in df.columns and "TVT_true" not in df.columns:
+            continue
+        tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
+        labeled_pred = [
+            int(i)
+            for i in sp.predict_idx
+            if pd.notna(df.iloc[int(i)][tvt_col])
+        ]
+        if not labeled_pred:
+            continue
+        frames.append(
+            build_station_frame(
+                df, tw, sp, station_idx=np.asarray(labeled_pred, dtype=int)
+            )
+        )
         n += 1
         if max_wells and n >= max_wells:
             break
@@ -70,10 +85,16 @@ def train_lgbm_residual(
     n_splits: int = 5,
     seed: int = 42,
 ) -> dict[str, Any]:
-    # train only on known stations with TVT
-    train_df = stations[stations["is_known"] & stations["TVT"].notna()].copy()
-    if len(train_df) < 50:
+    # Residual on prediction zone with labels (middle-out law); prior already heel-only
+    if "is_predict" in stations.columns:
+        train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
+    else:
         train_df = stations[stations["TVT"].notna()].copy()
+    if len(train_df) < 50:
+        raise ValueError(
+            f"Insufficient labeled prediction-zone rows for residual train "
+            f"(n={len(train_df)}). Need is_predict & TVT labels."
+        )
     X, cols = feature_matrix(train_df)
     y = train_df["TVT"].to_numpy(dtype=float)
     # residual vs flat prior

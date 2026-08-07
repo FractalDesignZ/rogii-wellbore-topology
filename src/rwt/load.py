@@ -55,13 +55,26 @@ def discover_layout(root: Path) -> dict[str, Any]:
     }
 
 
+_WELL_ID_SUFFIXES = (
+    "__horizontal_well",
+    "_horizontal_well",
+    "__lateral",
+    "_lateral",
+)
+
+
+def normalize_well_id_token(wid: str) -> str:
+    """Strip path-style suffixes from a well id token (does not invent ids)."""
+    s = str(wid).strip()
+    for suf in _WELL_ID_SUFFIXES:
+        if s.endswith(suf):
+            return s[: -len(suf)]
+    return s
+
+
 def well_id_from_path(path: Path) -> str:
     """Normalize ``000d7d20__horizontal_well`` → ``000d7d20`` (submission id prefix)."""
-    stem = path.stem
-    for suf in ("__horizontal_well", "_horizontal_well", "__lateral", "_lateral"):
-        if stem.endswith(suf):
-            return stem[: -len(suf)]
-    return stem
+    return normalize_well_id_token(path.stem)
 
 
 def read_well_csv(path: Path) -> pd.DataFrame:
@@ -69,12 +82,24 @@ def read_well_csv(path: Path) -> pd.DataFrame:
     df = _remap_columns(df)
     if "well_id" not in df.columns:
         df["well_id"] = well_id_from_path(path)
-    else:
-        # prefer path-derived short id when column is missing/empty-like
-        wid0 = str(df["well_id"].iloc[0])
-        if "__horizontal" in wid0 or wid0.endswith("_horizontal_well"):
-            df = df.copy()
-            df["well_id"] = well_id_from_path(path)
+        return df
+
+    # Normalize *values* (suffix strip). Only invent path id when column is entirely empty.
+    s = df["well_id"]
+    empty = s.isna() | (s.astype(str).str.strip() == "") | (s.astype(str).str.lower() == "nan")
+    if bool(empty.all()):
+        df = df.copy()
+        df["well_id"] = well_id_from_path(path)
+        return df
+
+    df = df.copy()
+    out = []
+    for v, is_empty in zip(s.tolist(), empty.tolist()):
+        if is_empty:
+            out.append(pd.NA)
+        else:
+            out.append(normalize_well_id_token(str(v)))
+    df["well_id"] = out
     return df
 
 

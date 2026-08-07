@@ -44,6 +44,29 @@ class TestMiddleOut(unittest.TestCase):
         self.assertEqual(sp.n_known, 8)
         self.assertEqual(sp.n_predict, 12)
 
+    def test_residual_zone_is_predict_not_heel(self) -> None:
+        """Labeled residual stations should sit in predict zone (toe), prior from heel."""
+        from rwt.features import build_station_frame
+
+        n = 20
+        df = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.arange(n, dtype=float),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": np.linspace(40, 80, n),
+                "TVT": 100 + np.arange(n, dtype=float),
+                "TVT_input": [100.0 + i if i < 8 else np.nan for i in range(n)],
+            }
+        )
+        sp = resolve_middle_out(df, well_id="w1")
+        st = build_station_frame(df, None, sp, station_idx=sp.predict_idx)
+        self.assertTrue(bool(st["is_predict"].all()))
+        self.assertFalse(bool(st["is_known"].any()))
+        # prior uses heel last TVT, not toe station TVT
+        self.assertAlmostEqual(float(st["prior_last_tvt"].iloc[0]), 107.0)
+
 
 if __name__ == "__main__":
     unittest.main()

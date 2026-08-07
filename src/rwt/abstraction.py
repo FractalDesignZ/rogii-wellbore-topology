@@ -20,7 +20,7 @@ from rwt.baselines import (
 )
 from rwt.features import build_station_frame, feature_matrix
 from rwt.geometry import trajectory_geometry_features
-from rwt.middle_out import MiddleOutSplit, known_prior_tvt, resolve_middle_out, split_by_mask
+from rwt.middle_out import MiddleOutSplit, known_prior_tvt, resolve_middle_out
 
 
 class Mode(str, Enum):

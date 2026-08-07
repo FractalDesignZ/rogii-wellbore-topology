@@ -49,15 +49,23 @@ def build_station_frame(
         else None
     )
     if "GR" in df.columns:
-        gr = np.nan_to_num(df["GR"].to_numpy(dtype=float), nan=0.0)
+        # Keep NaNs: NCC must not treat missing GR as measured zero
+        gr = df["GR"].to_numpy(dtype=float)
     else:
-        gr = np.zeros(n)
+        gr = np.full(n, np.nan, dtype=float)
     if tw_gr is not None:
-        tw_gr = np.nan_to_num(np.asarray(tw_gr, dtype=float), nan=0.0)
+        tw_gr = np.asarray(tw_gr, dtype=float)
 
     rows = []
     indices = range(n) if station_idx is None else [int(i) for i in station_idx]
+    is_predict_mask = np.zeros(n, dtype=bool)
+    is_known_mask = np.zeros(n, dtype=bool)
+    if len(split.predict_idx):
+        is_predict_mask[np.asarray(split.predict_idx, dtype=int)] = True
+    if len(split.known_idx):
+        is_known_mask[np.asarray(split.known_idx, dtype=int)] = True
     for i in indices:
+        gi = float(gr[i])
         row: dict[str, Any] = {
             "well_id": split.well_id,
             "station": i,
@@ -65,9 +73,9 @@ def build_station_frame(
             "X": float(df.loc[i, "X"]),
             "Y": float(df.loc[i, "Y"]),
             "Z": float(df.loc[i, "Z"]),
-            "GR": float(gr[i]),
-            "is_predict": bool(i in set(split.predict_idx.tolist())),
-            "is_known": bool(i in set(split.known_idx.tolist())),
+            "GR": gi if np.isfinite(gi) else np.nan,
+            "is_predict": bool(is_predict_mask[i]),
+            "is_known": bool(is_known_mask[i]),
             **{f"well_{k}": v for k, v in well_geom.items() if np.isscalar(v)},
             "local_curv": float(local["local_curv"][i]),
             "local_curv_roll": float(local["local_curv_roll"][i]),

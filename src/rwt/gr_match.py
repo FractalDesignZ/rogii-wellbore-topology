@@ -62,6 +62,7 @@ def multi_scale_ncc(
     """
     gr = np.asarray(lateral_gr, float)
     tw = np.asarray(typewell_gr, float)
+    tw_finite = tw[np.isfinite(tw)]
     center = int(center if center is not None else len(gr) // 2)
     out: dict[str, float] = {}
     tvt_hints = []
@@ -70,16 +71,25 @@ def multi_scale_ncc(
         lo = max(0, center - half)
         hi = min(len(gr), center + half)
         window = gr[lo:hi]
-        if len(window) < max(4, s // 4):
+        finite = np.isfinite(window)
+        # Missing GR is not measured zero: require enough finite samples
+        if finite.sum() < max(4, s // 4) or len(tw_finite) < 3:
             out[f"ncc_{s}"] = 0.0
             out[f"ncc_{s}_lag"] = 0.0
             continue
-        # resample window to fixed s for stable NCC
-        if len(window) != s:
-            xp = np.linspace(0, 1, len(window))
+        if finite.all():
+            win = window.astype(float)
+        else:
+            idx = np.arange(len(window), dtype=float)
+            win = np.interp(idx, idx[finite], window[finite])
+        if len(win) != s:
+            xp = np.linspace(0, 1, len(win))
             xq = np.linspace(0, 1, s)
-            window = np.interp(xq, xp, window)
-        r = best_ncc_lag(window, tw)
+            win = np.interp(xq, xp, win)
+        # Template: median-fill internal NaNs so lag search stays defined without zero-impute of lateral
+        med = float(np.median(tw_finite))
+        tw_f = np.where(np.isfinite(tw), tw, med)
+        r = best_ncc_lag(win, tw_f)
         out[f"ncc_{s}"] = r["ncc"]
         out[f"ncc_{s}_lag"] = float(r["lag"])
         if typewell_tvt is not None and len(typewell_tvt) > r["lag"]:
