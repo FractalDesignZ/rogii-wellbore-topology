@@ -288,12 +288,40 @@ def build_station_frame(
             if s in kset and "TVT" in stations.columns and pd.notna(stations.iloc[j].get("TVT")):
                 best[j] = float(stations.iloc[j]["TVT"])
     stations["prior_best"] = best
+
+    # ── Interaction / structure features (relative, non-leaky) ──────────
+    # These encode opportunity space without re-introducing the three traps.
+    pf_conf = stations["pf_confidence"].to_numpy(dtype=float) if "pf_confidence" in stations.columns else np.zeros(len(stations))
+    rel_md_arr = stations["relative_md"].to_numpy(dtype=float) if "relative_md" in stations.columns else np.zeros(len(stations))
+    curv = stations["local_curv"].to_numpy(dtype=float) if "local_curv" in stations.columns else np.zeros(len(stations))
+    pf_std = stations["pf_tvt_std"].to_numpy(dtype=float) if "pf_tvt_std" in stations.columns else np.zeros(len(stations))
+    stations["pf_conf_x_rel_md"] = pf_conf * rel_md_arr
+    stations["curv_x_pf_std"] = curv * pf_std
+
+    # NCC peak + lag consistency across scales
+    ncc16 = stations["ncc_16"].to_numpy(dtype=float) if "ncc_16" in stations.columns else np.zeros(len(stations))
+    ncc32 = stations["ncc_32"].to_numpy(dtype=float) if "ncc_32" in stations.columns else np.zeros(len(stations))
+    ncc64 = stations["ncc_64"].to_numpy(dtype=float) if "ncc_64" in stations.columns else np.zeros(len(stations))
+    stations["ncc_peak"] = np.nanmax(np.vstack([ncc16, ncc32, ncc64]), axis=0)
+    lag16 = stations["ncc_16_lag"].to_numpy(dtype=float) if "ncc_16_lag" in stations.columns else np.zeros(len(stations))
+    lag32 = stations["ncc_32_lag"].to_numpy(dtype=float) if "ncc_32_lag" in stations.columns else np.zeros(len(stations))
+    lag64 = stations["ncc_64_lag"].to_numpy(dtype=float) if "ncc_64_lag" in stations.columns else np.zeros(len(stations))
+    # consistency = 1 - normalized std of lags (high when scales agree)
+    lag_stack = np.vstack([lag16, lag32, lag64])
+    lag_std = np.nanstd(lag_stack, axis=0)
+    stations["ncc_lag_consistency"] = 1.0 / (1.0 + lag_std)
+
+    # Neighbor interaction
+    nb_off = stations["neighbor_offset"].to_numpy(dtype=float) if "neighbor_offset" in stations.columns else np.zeros(len(stations))
+    nb_ok = stations["neighbor_transfer_ok"].to_numpy(dtype=float) if "neighbor_transfer_ok" in stations.columns else np.zeros(len(stations))
+    stations["nb_offset_x_ok"] = nb_off * nb_ok
+
     stations = kernel.augment_station_frame(stations, df, typewell)
     stations = embed_column(stations)
     return stations
 
 
-# Tight residual X: relative kinematics + signal + strong priors only.
+# Tight residual X: relative kinematics + signal + strong priors + interactions.
 # Drop absolute map coords, well-azimuth lease encodings, dual-transport mid
 # (diag: mid/flat/extrap RMSE 100–1000 on toe — poison for residual trees).
 FEATURE_COLS_DEFAULT = [
@@ -346,6 +374,14 @@ FEATURE_COLS_DEFAULT = [
     "neighbor_count",
     "neighbor_min_dist",
     "neighbor_offset",
+    # multi-neighbor + interaction terms (feat/all-suggestions-integration)
+    "neighbor_tvt_wmean",
+    "neighbor_n_close",
+    "pf_conf_x_rel_md",
+    "curv_x_pf_std",
+    "ncc_peak",
+    "ncc_lag_consistency",
+    "nb_offset_x_ok",
 ]
 
 
