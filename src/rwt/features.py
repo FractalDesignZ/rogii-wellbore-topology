@@ -163,7 +163,11 @@ def finalize_after_spatial(
         else:
             kn = known_full[:n_st] if len(known_full) >= n_st else np.full(n_st, np.nan)
         a_cal, b_cal = fit_heel_gr_affine(tw_gr_arr, tw_tvt_arr, lat_gr, kn)
-        stack_tvt = stations["prior_stack"].to_numpy(dtype=float)
+        stack_tvt = (
+            stations["prior_stack"].to_numpy(dtype=float)
+            if "prior_stack" in stations.columns
+            else stack_pre_nb
+        )
         last_arr = stations["prior_last_tvt"].to_numpy(dtype=float)
         ncc_tvt = (
             stations["prior_ncc_tvt"].to_numpy(dtype=float)
@@ -214,17 +218,21 @@ def finalize_after_spatial(
         best = np.asarray(best, dtype=float).copy()
         if "station" in stations.columns:
             st_ids = stations["station"].to_numpy(dtype=int)
-            k_to_h = {int(ki): float(hv) for ki, hv in zip(k, heel_vals) if np.isfinite(hv)}
+            k_to_h = {
+                int(ki): float(hv)
+                for ki, hv in zip(k, heel_vals, strict=False)
+                if np.isfinite(hv)
+            }
             for row_i, sid in enumerate(st_ids):
                 hv = k_to_h.get(int(sid))
                 if hv is not None:
                     best[row_i] = hv
         else:
-            for ki, hv in zip(k, heel_vals):
+            for ki, hv in zip(k, heel_vals, strict=False):
                 if 0 <= int(ki) < len(best) and np.isfinite(hv):
                     best[int(ki)] = float(hv)
     stations["prior_best"] = best
-    # Signed stalk gap for residual trees (best − stack); nan → 0
+    # Signed stalk gap for residual trees (best - stack); nan -> 0
     stack_arr = (
         stations["prior_stack"].to_numpy(dtype=float)
         if "prior_stack" in stations.columns

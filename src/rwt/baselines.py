@@ -74,6 +74,7 @@ def smooth_residual_along_well(
     well_ids: np.ndarray | None = None,
     *,
     window: int = 21,
+    order_key: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Station-order rolling mean of residual ΔTVT within each well.
@@ -81,6 +82,11 @@ def smooth_residual_along_well(
     Reduces high-frequency LGBM chatter along MD without changing the
     per-well mean residual. ``window`` is odd (even values round up).
     When ``well_ids`` is None, treats the full array as one well.
+
+    Rows within each well must be in MD/station order for the rolling window
+    to be meaningful. Pass ``order_key`` (e.g. MD or station index, same length
+    as ``residual``) to sort each well's indices before smoothing when input
+    order is not guaranteed.
     """
     res = np.asarray(residual, dtype=float).copy()
     n = len(res)
@@ -92,12 +98,18 @@ def smooth_residual_along_well(
     if w <= 1:
         return res
     half = w // 2
+    order_arr: np.ndarray | None = None
+    if order_key is not None:
+        order_arr = np.asarray(order_key)
+        if len(order_arr) != n:
+            raise ValueError(
+                f"order_key length {len(order_arr)} != residual length {n}"
+            )
     if well_ids is None:
         groups = [np.arange(n, dtype=int)]
     else:
         wids = np.asarray(well_ids)
-        groups = []
-        # preserve first-seen well order; rows already station-sorted within well
+        # preserve first-seen well order; sort within well by order_key when given
         seen: dict[str, list[int]] = {}
         order: list[str] = []
         for i, wid in enumerate(wids):
@@ -107,6 +119,22 @@ def smooth_residual_along_well(
                 order.append(key)
             seen[key].append(i)
         groups = [np.asarray(seen[k], dtype=int) for k in order]
+    if order_arr is not None:
+        sorted_groups: list[np.ndarray] = []
+        for idx in groups:
+            ok = order_arr[idx]
+            # nan-safe: finite keys first by value, non-finite keep relative order at end
+            finite = np.isfinite(ok.astype(float, copy=False))
+            if finite.all():
+                sorted_groups.append(idx[np.argsort(ok, kind="mergesort")])
+            elif not finite.any():
+                sorted_groups.append(idx)
+            else:
+                fin_idx = idx[finite]
+                inf_idx = idx[~finite]
+                fin_sorted = fin_idx[np.argsort(ok[finite], kind="mergesort")]
+                sorted_groups.append(np.concatenate([fin_sorted, inf_idx]))
+        groups = sorted_groups
     out = res.copy()
     for idx in groups:
         if len(idx) < 3:

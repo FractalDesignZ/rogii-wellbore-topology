@@ -24,9 +24,11 @@ DEFAULT_PRIOR_COL = "prior_best"
 # Clamp law: pure prior candidates and residual Δ vs base stay within ±MAX_TVT_DEV.
 # Shared so PF bag, stack blend, NCC track, residual train/serve stay aligned.
 MAX_TVT_DEV = 18.0
+# Legacy blobs without stored prior_column: prefer stack (older residual base)
+# before prior_best so stack-trained models do not silently switch bases.
 PRIOR_FALLBACKS = (
-    "prior_best",
     "prior_stack",
+    "prior_best",
     "prior_last_tvt",
     "prior_ncc_tvt",
     "prior_pf_blend",

@@ -225,20 +225,38 @@ def assemble_wells_parallel(
 
         n_seal_threads = max(1, min(int(cfg.get("workers") or 1), len(seal_jobs) or 1))
         sealed_by_id: dict[str, dict[str, Any]] = {}
+        seal_errors: dict[str, str] = {}
         if n_seal_threads <= 1 or len(seal_jobs) <= 1:
             for job in seal_jobs:
-                sealed_by_id[job[0]] = _seal_one(job)
+                try:
+                    sealed_by_id[job[0]] = _seal_one(job)
+                except Exception as e:  # noqa: BLE001 — per-well continue like process pool
+                    seal_errors[job[0]] = str(e)[:400]
         else:
             with ThreadPoolExecutor(max_workers=n_seal_threads) as tex:
                 futs = {tex.submit(_seal_one, job): job[0] for job in seal_jobs}
                 for fut in as_completed(futs):
                     wid = futs[fut]
-                    sealed_by_id[wid] = fut.result()
+                    try:
+                        sealed_by_id[wid] = fut.result()
+                    except Exception as e:  # noqa: BLE001 — per-well continue
+                        seal_errors[wid] = str(e)[:400]
 
         # stable well order matching loaded
         for wid, _df, _sp, _tw in loaded:
             s = sealed_by_id.get(wid)
             if not s:
+                if wid in seal_errors:
+                    err = seal_errors[wid]
+                    for gr in gate2_results:
+                        if gr.get("well_id") == wid:
+                            gr["passed"] = False
+                            gr["detail"] = f"seal_failed: {err}"
+                            break
+                    if progress is not None:
+                        progress.tick(
+                            item=wid, ok=False, message=f"seal_failed {err}"
+                        )
                 continue
             seal_phase_s += float(s["seconds"])
             seal_per_well.append(
@@ -281,8 +299,7 @@ def assemble_wells_parallel(
         # parent-side attach_spatial + seal_station_frame cost (kernel visible)
         "seal_phase_seconds": round(seal_phase_s, 4),
         "seal_per_well": seal_per_well,
-        "seal_threads": int(
-            max(1, min(int(cfg.get("workers") or 1), len(seal_per_well) or 1))
-        ),
+        "seal_threads": int(n_seal_threads),
+        "seal_errors": dict(seal_errors),
     }
     return frames, gate2_meta

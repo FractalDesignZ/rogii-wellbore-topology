@@ -57,6 +57,12 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         medians = {str(k): float(v) for k, v in stored_med.items()}
     else:
         medians = {str(c): 0.0 for c in cols}
+    missing = [c for c in cols if c not in stations.columns]
+    if missing:
+        raise ValueError(
+            f"serving frame missing {len(missing)} trained feature columns: "
+            f"{missing[:10]} — refuse silent median fill; rebuild station frame"
+        )
     Xn = impute_feature_frame(
         stations.reindex(columns=cols), medians=medians
     ).to_numpy(dtype=float)
@@ -93,7 +99,14 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         if smooth_w > 1:
             from rwt.baselines import smooth_residual_along_well
 
-            res = smooth_residual_along_well(res, wids, window=smooth_w)
+            order_key = None
+            if "MD" in stations.columns:
+                order_key = stations["MD"].to_numpy(dtype=float)
+            elif "station" in stations.columns:
+                order_key = stations["station"].to_numpy(dtype=float)
+            res = smooth_residual_along_well(
+                res, wids, window=smooth_w, order_key=order_key
+            )
             res = np.clip(res, -max_dev, max_dev)
         return prior_arr + res
 

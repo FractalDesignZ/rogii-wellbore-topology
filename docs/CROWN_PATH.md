@@ -16,7 +16,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset; train/serve seal after attach; **stack soft-nb weight 0** (measure); neighbors in prior_best + features |
-| **Residual** | Single head **`prior_best` + deep LGBM** (set-17); pure floor **`prior_stack`**; dual residual opt-in only; toe-weighted L2; 3-seed bag; GR mismatch@stalk; Δ clip ±18; fold-safe medians; Gate3 |
+| **Residual** | Single head **`prior_best` + deep LGBM** (set-17); pure floor **`prior_stack`**; dual residual opt-in only; toe-weighted L2; **deep residual 3-seed mean bag** (OOF+serve `np.mean`, not PF bag); GR mismatch@stalk; Δ clip ±18; fold-safe medians; Gate3 |
 | **Clamp** | Published stack/prior_best/NCC/PF ≤ last±18 (`MAX_TVT_DEV`); residual Δ ≤ base±18 (may leave last band when G3 wins). Raw neighbor_tvt feature may still show ±40 offset before blend. |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
@@ -44,7 +44,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | last_known | 13.41 |
 
 Set-16 dual deep diluted the best head. Set-17: dual **off** by default; deep LGBM
-always on (`CROWN_DEEP_RESIDUAL`); `n_refit` floor 400 under deep.
+**enabled by default** via `CROWN_DEEP_RESIDUAL`; `n_refit` floor 400 under deep.
 
 ### Rejected A/B (set-5 / set-7)
 
@@ -55,7 +55,7 @@ always on (`CROWN_DEEP_RESIDUAL`); `n_refit` floor 400 under deep.
 | re-clamp residual to last±18 | 11.35 | truth can leave pure band |
 | md_frac + stack_minus_last feats | 11.34 | collinear noise |
 | seed-bag median + std shrink | 11.28 | over-shrinks residual |
-| 3-seed mean bag (default) | 11.25 | worse than dual seed |
+| 3-seed mean bag (historical shallow residual A/B; not the retained deep bag) | 11.25 | worse than dual seed |
 | denser NCC stride=5 | ~11.25 | no residual gain |
 | gr_mismatch delta \|stack\|−\|last\| | 11.14 | collinear noise |
 | max-precision LGBM on 12w set-8 | 11.21 | overfit small cohort |

@@ -466,7 +466,7 @@ class TestCrownPath(unittest.TestCase):
         st = pd.DataFrame(
             {
                 "prior_best": [100.0, 100.0],
-                "prior_stack": [100.0, 100.0],
+                "prior_stack": [120.0, 120.0],
                 "relative_md": [0.0, 1.0],
             }
         )
@@ -484,8 +484,9 @@ class TestCrownPath(unittest.TestCase):
             "feature_medians": {"relative_md": 0.0},
         }
         y = predict_stations(blob, st)
-        # 0.75*(100+4) + 0.25*(100+8) = 105
-        self.assertTrue(np.allclose(y, 105.0))
+        # Distinct bases prove per-head prior resolution:
+        # 0.75*(100+4) + 0.25*(120+8) = 110
+        self.assertTrue(np.allclose(y, 110.0))
 
     def test_compute_prior_disagreement_pure(self) -> None:
         """Unit: four-way nanstd matches helper (CR P2 contract)."""

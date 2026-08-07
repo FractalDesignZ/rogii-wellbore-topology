@@ -359,8 +359,16 @@ def train_lgbm_residual(
             pred_res = np.mean(np.vstack(preds_bag), axis=0)
             pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
             if RESIDUAL_SMOOTH_WINDOW > 1:
+                order_key = None
+                if "MD" in train_df.columns:
+                    order_key = train_df["MD"].to_numpy(dtype=float)[va]
+                elif "station" in train_df.columns:
+                    order_key = train_df["station"].to_numpy(dtype=float)[va]
                 pred_res = smooth_residual_along_well(
-                    pred_res, groups[va], window=RESIDUAL_SMOOTH_WINDOW
+                    pred_res,
+                    groups[va],
+                    window=RESIDUAL_SMOOTH_WINDOW,
+                    order_key=order_key,
                 )
                 pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
             oof_res_map[base][va] = pred_res
