@@ -1,0 +1,3 @@
+# Dashboard / parallel train extras (install into .venv-dash)
+-r requirements.txt
+matplotlib>=3.8
