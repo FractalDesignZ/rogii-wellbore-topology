@@ -115,8 +115,11 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         return prior_arr + res
 
     # Dual residual: mean over residual_heads (set-15); legacy uses models alone
+    from rwt.gates import adaptive_residual_mask, apply_adaptive_residual
+
     heads = model_blob.get("residual_heads") or []
     use_residual = bool(model_blob.get("use_residual", True))
+    out: np.ndarray | None = None
     if use_residual and heads:
         outs: list[np.ndarray] = []
         out_bases: list[str] = []
@@ -153,24 +156,33 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
                 out = np.average(stacked, axis=0, weights=ww)
             else:
                 out = np.mean(stacked, axis=0)
-            if not np.isfinite(out).all():
-                n_bad = int((~np.isfinite(out)).sum())
-                raise ValueError(
-                    f"non-finite residual predictions on {n_bad}/{len(out)} rows"
-                )
-            return out
-    models = model_blob.get("models") or []
-    if not use_residual or not models:
-        return prior
-    out = _head_tvt(prior, list(models))
-    # Adaptive serve: residual only where PF confidence is high enough
-    # (mirrors gate_residual_acceptance_per_well without well_fire map)
+    if out is None:
+        models = model_blob.get("models") or []
+        if not use_residual or not models:
+            return prior
+        out = _head_tvt(prior, list(models))
+
+    # Adaptive serve: shared mask contract with train adaptive_oof (station-conf
+    # by default; optional well_fire map if serialized on the blob).
     adaptive = bool(model_blob.get("adaptive_serve", False))
-    conf_thresh = float(model_blob.get("adaptive_conf_threshold", 0.35))
-    if adaptive and "pf_confidence" in stations.columns:
-        conf = stations["pf_confidence"].to_numpy(dtype=float)
-        fire = np.isfinite(conf) & (conf >= conf_thresh)
-        out = np.where(fire, out, prior)
+    if adaptive and use_residual:
+        conf_thresh = float(model_blob.get("adaptive_conf_threshold", 0.35))
+        conf = (
+            stations["pf_confidence"].to_numpy(dtype=float)
+            if "pf_confidence" in stations.columns
+            else None
+        )
+        wf_raw = model_blob.get("well_fire")
+        well_fire = wf_raw if isinstance(wf_raw, dict) and wf_raw else None
+        fire = adaptive_residual_mask(
+            len(out),
+            pf_confidence=conf if well_fire is None else None,
+            conf_threshold=conf_thresh,
+            well_ids=wids if well_fire is not None else None,
+            well_fire=well_fire,
+        )
+        # Fallback pure prior is the stored residual base (primary prior_column)
+        out = apply_adaptive_residual(out, prior, fire)
     if not np.isfinite(out).all():
         n_bad = int((~np.isfinite(out)).sum())
         raise ValueError(
