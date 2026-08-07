@@ -10,7 +10,7 @@ import pandas as pd
 from rwt.features import build_station_frame
 from rwt.load import iter_well_frames, load_typewell, typewell_path_for_well
 from rwt.middle_out import resolve_middle_out
-from rwt.priors import MAX_TVT_DEV, resolve_prior_column
+from rwt.priors import MAX_TVT_DEV, PRIOR_FALLBACKS, resolve_prior_column
 from rwt.spatial import build_spatial_index
 
 
@@ -72,7 +72,10 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     if stored_prior:
         prior_col = resolve_prior_column(stations, str(stored_prior), strict=True)
     else:
-        prior_col = resolve_prior_column(stations, "prior_last_tvt", strict=False)
+        # Legacy blob: walk PRIOR_FALLBACKS (stack before best); not last_tvt-first
+        prior_col = resolve_prior_column(
+            stations, PRIOR_FALLBACKS[0], strict=False
+        )
     prior = stations[prior_col].to_numpy(dtype=float)
     if not np.isfinite(prior).all():
         n_bad = int((~np.isfinite(prior)).sum())
@@ -116,6 +119,14 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     use_residual = bool(model_blob.get("use_residual", True))
     if use_residual and heads:
         outs: list[np.ndarray] = []
+        out_bases: list[str] = []
+        # Weights are aligned to residual_heads order at train time (by base name)
+        w_raw = model_blob.get("dual_residual_weights")
+        name_to_w: dict[str, float] = {}
+        if isinstance(w_raw, (list, tuple)):
+            for h, wi in zip(heads, w_raw, strict=False):
+                if isinstance(h, dict):
+                    name_to_w[str(h.get("prior_column") or "")] = float(wi)
         for h in heads:
             if not isinstance(h, dict):
                 continue
@@ -131,15 +142,13 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
                     f"non-finite serving prior '{h_col}' on {n_bad}/{len(h_prior)} rows"
                 )
             outs.append(_head_tvt(h_prior, list(h_models)))
+            out_bases.append(h_prior_name)
         if outs:
             stacked = np.vstack(outs)
-            w = model_blob.get("dual_residual_weights")
-            if (
-                isinstance(w, (list, tuple))
-                and len(w) == stacked.shape[0]
-                and float(np.sum(np.asarray(w, dtype=float))) > 0
-            ):
-                ww = np.asarray(w, dtype=float)
+            ww = np.asarray(
+                [name_to_w.get(b, float("nan")) for b in out_bases], dtype=float
+            )
+            if np.isfinite(ww).all() and float(np.sum(ww)) > 0:
                 ww = ww / ww.sum()
                 out = np.average(stacked, axis=0, weights=ww)
             else:

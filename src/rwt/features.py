@@ -536,8 +536,13 @@ def build_station_frame(
             v = float(arr[i])
             row[rk] = v if np.isfinite(v) else 0.0
         # INTENTIONAL: never add FORM_SURFACE_LEAK_COLS (ANCC..BUDA)
+        # Always emit NCC scale columns for train/serve schema parity (no typewell → 0)
         if int(i) in ncc_cache:
             row.update(ncc_cache[int(i)])
+        else:
+            for s in scales:
+                row[f"ncc_{s}"] = 0.0
+                row[f"ncc_{s}_lag"] = 0.0
         if "TVT" in df.columns and pd.notna(df.loc[i, "TVT"]):
             row["TVT"] = float(df.loc[i, "TVT"])
         elif "TVT_true" in df.columns:

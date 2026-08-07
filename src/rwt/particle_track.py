@@ -348,12 +348,23 @@ def particle_prior_for_well(
         # thread bag configs (numpy/Python mix); multi-well uses process pool outside
         from concurrent.futures import ThreadPoolExecutor
 
-        with ThreadPoolExecutor(max_workers=min(4, len(_PF_BAG_CONFIGS))) as ex:
+        single_cfg = {
+            "n_particles": n_particles,
+            "process_sigma": 0.22,
+            "gr_sigma": 18.0,
+            "tvt_span": 55.0,
+            "seed": 0,
+        }
+        with ThreadPoolExecutor(
+            max_workers=min(5, len(_PF_BAG_CONFIGS) + 1)
+        ) as ex:
             futs = [
                 ex.submit(_run_one, cfg, seed_offset=i * 17)
                 for i, cfg in enumerate(_PF_BAG_CONFIGS)
             ]
+            fut_single = ex.submit(_run_one, single_cfg, seed_offset=0)
             runs = [f.result() for f in futs]
+            single = fut_single.result()
         tracks = np.vstack([r["prior_pf_tvt"] for r in runs])
         # median bag resists outlier configs (mean bag RMSE was 35–80 on real toes)
         bag_arr = np.median(tracks, axis=0)
@@ -363,10 +374,6 @@ def particle_prior_for_well(
         disagree = np.std(tracks, axis=0)
         conf = conf * (1.0 / (1.0 + disagree / 8.0))
         # single default-config track for prior_pf_tvt (distinct from bag)
-        single = _run_one(
-            {"n_particles": n_particles, "process_sigma": 0.22, "gr_sigma": 18.0, "tvt_span": 55.0, "seed": 0},
-            seed_offset=0,
-        )
         pf_tvt = single["prior_pf_tvt"]
         n_bag = len(runs)
     else:

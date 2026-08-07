@@ -368,8 +368,10 @@ class TestCrownPath(unittest.TestCase):
         self.assertEqual(select_n_refit([40, 50, 60], 1200, floor=200), 200)
         # p75 beats median: [100, 100, 100, 400] → med 100, p75 175 → floor 200
         self.assertEqual(select_n_refit([100, 100, 100, 400], 1200, floor=200), 200)
-        # p75 above floor: [100, 200, 300, 800] → med 250, p75 425
+        # p75 above floor: [100, 200, 300, 800] → med 250, p75 425 (shallow: no p90)
         self.assertEqual(select_n_refit([100, 200, 300, 800], 1200, floor=200), 425)
+        # deep floor≥400 also uses p90 ≈ 650
+        self.assertEqual(select_n_refit([100, 200, 300, 800], 1200, floor=400), 650)
         # cap at n_rounds
         self.assertEqual(select_n_refit([900, 1000, 1100, 1500], 1000, floor=200), 1000)
         # empty → n_rounds
@@ -420,6 +422,59 @@ class TestCrownPath(unittest.TestCase):
         self.assertLess(float(np.std(np.diff(sm[:40]))), float(np.std(np.diff(res[:40]))))
         self.assertAlmostEqual(float(np.mean(sm[:40])), float(np.mean(res[:40])), places=5)
         self.assertAlmostEqual(float(np.mean(sm[40:])), float(np.mean(res[40:])), places=5)
+
+        # order_key recovers station order from shuffled rows
+        order = np.arange(40, dtype=float)
+        perm = rng.permutation(40)
+        res_sh = res[:40][perm]
+        sm_ord = smooth_residual_along_well(
+            res[:40], np.array(["a"] * 40), window=11, order_key=order
+        )
+        sm_sh = smooth_residual_along_well(
+            res_sh, np.array(["a"] * 40), window=11, order_key=order[perm]
+        )
+        # map shuffled result back to original positions
+        inv = np.empty(40, dtype=int)
+        inv[perm] = np.arange(40)
+        self.assertTrue(np.allclose(sm_sh[inv], sm_ord, atol=1e-9))
+        # mixed finite/non-finite order_key does not raise
+        ok_mix = order.copy()
+        ok_mix[5] = np.nan
+        sm_mix = smooth_residual_along_well(
+            res[:40], np.array(["a"] * 40), window=11, order_key=ok_mix
+        )
+        self.assertEqual(len(sm_mix), 40)
+
+    def test_finalize_missing_prior_stack_with_typewell(self) -> None:
+        """finalize_after_spatial tolerates missing prior_stack (GR mismatch path)."""
+        from rwt.features import build_station_frame, finalize_after_spatial
+
+        n = 40
+        lat = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(0, 100, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + np.sin(np.linspace(0, 4, n)),
+                "TVT_input": [100.0 if i < 10 else np.nan for i in range(n)],
+                "TVT": np.full(n, 100.0),
+            }
+        )
+        tw = pd.DataFrame(
+            {
+                "TVT": np.linspace(50, 150, 80),
+                "GR": 80 + np.sin(np.linspace(0, 8, 80)),
+            }
+        )
+        sp = resolve_middle_out(lat, well_id="m")
+        raw = build_station_frame(lat, tw, sp, seal=False)
+        raw = raw.drop(columns=["prior_stack"])
+        out = finalize_after_spatial(raw, lat, sp, tw)
+        self.assertIn("gr_mismatch_stack", out.columns)
+        self.assertIn("prior_disagreement", out.columns)
+        self.assertIn("prior_best", out.columns)
+        self.assertTrue(np.isfinite(out["prior_best"].to_numpy(dtype=float)).any())
 
     def test_serve_applies_residual_smooth_window(self) -> None:
         """predict_stations smooths residual when blob residual_smooth_window > 1."""
