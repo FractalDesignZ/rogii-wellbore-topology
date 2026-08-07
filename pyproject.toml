@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rwt"
+version = "0.1.0"
+description = "ROGII late entry — topology-sees-sequence lineage for wellbore TVT"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.11",
+  "pandas>=2.0",
+  "scikit-learn>=1.3",
+  "lightgbm>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+rwt-smoke = "rwt.cli:smoke_main"
