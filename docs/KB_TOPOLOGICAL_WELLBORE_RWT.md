@@ -212,7 +212,9 @@ Artifact: `artifacts/full_train_parallel/cv_report.json` (GroupKFold 5-fold, 773
 ### 5. Residue (not forced OPEN)
 
 * Gap **~14.5 → ~6–7** remains **RESIDUE**: better typewell stalk (public PF process model, private beam/DTW-class match), neighbor TVT quality, residual feature honesty.
-* A Kaggle **submit** MEASURES public score; it does **not** close a 2× gap by packaging a mid-teens residual.
+* **No Kaggle submit under current RESTRICT.** Public LB score is not pursued as glory.
+  Measure is in-repo only (GroupKFold OOF, Gate3, provenance seals). A CSV export would only
+  stamp mid-teens public score; it does **not** close the ~2× gap to LB ~6–7 and is **not** authorized.
 
 ---
 
@@ -233,9 +235,10 @@ Artifact: `artifacts/full_train_parallel/cv_report.json` (GroupKFold 5-fold, 773
 2. Non-finite prior or residual preds → hard fail (no silent fill).
 3. If `use_residual` false or empty models → pure prior only.
 
-### Submission schema
+### Submission schema (dormant — do not upload)
 
-* Columns: `id`, `tvt` with `id = {WELLNAME}_{row_index}` (station index from raw lateral).
+* If ever authorized: columns `id`, `tvt` with `id = {WELLNAME}_{row_index}`.
+* **Current law: do not build/upload competition CSVs for glory.** `scripts` / `rwt.submit` stay for schema tests only.
 
 ---
 

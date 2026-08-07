@@ -77,7 +77,7 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
 | GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
 | RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
-| First scored Kaggle submit | human upload only — OOF mid-teens; submit MEASURES, does not close LB ~6–7 |
+| Kaggle submit | **OFF** — measure in-repo only (OOF / Gate3 / seals); no competition upload under RESTRICT |
 
 ## Attribution
 
