@@ -76,14 +76,35 @@ def build_station_frame(
         lock = np.isfinite(full)
         stack = np.where(lock, full, stack)
 
-    # M1 kinematics: inclination + dogleg proxy from MD/Z
+    # M1 kinematics: inclination from dZ/dMD; dogleg from 3D tangent angle / dMD
     md_arr = df["MD"].to_numpy(dtype=float) if "MD" in df.columns else np.arange(n, dtype=float)
     z_arr = df["Z"].to_numpy(dtype=float) if "Z" in df.columns else np.zeros(n)
+    x_arr = df["X"].to_numpy(dtype=float) if "X" in df.columns else np.zeros(n)
+    y_arr = df["Y"].to_numpy(dtype=float) if "Y" in df.columns else np.zeros(n)
     d_z = np.diff(z_arr, prepend=z_arr[0] if n else 0.0)
     d_md = np.diff(md_arr, prepend=1.0 if n else 1.0)
     d_md = np.where(np.abs(d_md) < 1e-9, 1e-9, d_md)
     incl = np.degrees(np.arccos(np.clip(d_z / d_md, -1.0, 1.0)))
-    dls = np.diff(incl, prepend=float(incl[0]) if n else 0.0) / d_md * 100.0
+    # 3D segment tangents → dogleg severity (°/100ft), non-negative
+    dxyz = np.column_stack(
+        [
+            np.diff(x_arr, prepend=x_arr[0] if n else 0.0),
+            np.diff(y_arr, prepend=y_arr[0] if n else 0.0),
+            d_z,
+        ]
+    )
+    seg_len = np.linalg.norm(dxyz, axis=1)
+    seg_len = np.where(seg_len < 1e-12, 1e-12, seg_len)
+    tang = dxyz / seg_len[:, None]
+    dls = np.zeros(n, dtype=float)
+    if n >= 2:
+        dots = np.sum(tang[1:] * tang[:-1], axis=1)
+        dots = np.clip(dots, -1.0, 1.0)
+        ang = np.degrees(np.arccos(dots))
+        ds = 0.5 * (seg_len[1:] + seg_len[:-1])
+        ds = np.where(ds < 1e-9, 1e-9, ds)
+        dls[1:] = ang / ds * 100.0
+        dls[0] = dls[1]
 
     tw_gr = typewell["GR"].to_numpy(dtype=float) if typewell is not None and "GR" in typewell else None
     tw_tvt = (
@@ -228,7 +249,9 @@ def build_station_frame(
     return stations
 
 
-# Relative / prior / signal features only — no absolute X,Y map, no form surfaces.
+# Tight residual X: relative kinematics + signal + strong priors only.
+# Drop absolute map coords, well-azimuth lease encodings, dual-transport mid
+# (diag: mid/flat/extrap RMSE 100–1000 on toe — poison for residual trees).
 FEATURE_COLS_DEFAULT = [
     "relative_md",
     "relative_z",
@@ -245,9 +268,7 @@ FEATURE_COLS_DEFAULT = [
     "local_curv",
     "local_curv_roll",
     "local_torsion",
-    "local_torsion_roll",
     "e_ref",
-    "e_ref_roll",
     "d_z",
     "d_horiz",
     "x_dip",
@@ -256,29 +277,10 @@ FEATURE_COLS_DEFAULT = [
     "form_azimuth_deg",
     "form_dip_deg",
     "well_mean_curv",
-    "well_max_curv",
-    "well_cum_twist",
-    "well_abs_cum_twist",
-    "well_twist_std",
-    "well_mean_abs_torsion",
     "well_mean_e_ref",
-    "well_max_e_ref",
     "well_tortuosity_q3d_proxy",
-    "well_signed_azimuth",
-    "well_azimuth_x",
-    "well_azimuth_y",
-    "well_delta_z",
-    "well_md_span",
     "prior_last_tvt",
-    "prior_mean_tvt",
-    "prior_tvt_plus_z",
-    "prior_slope_tvt_md",
-    "prior_flat_tvt",
-    "prior_forward_tvt",
-    "prior_backward_tvt",
-    "prior_mid",
     "prior_local_dip",
-    "prior_dip_trend",
     "prior_dip_stack",
     "prior_pf_tvt",
     "prior_pf_blend",
@@ -286,9 +288,6 @@ FEATURE_COLS_DEFAULT = [
     "prior_stack",
     "pf_confidence",
     "pf_tvt_std",
-    "C_heel",
-    "dip_coef_x",
-    "dip_coef_y",
     "ncc_16",
     "ncc_32",
     "ncc_64",
@@ -296,7 +295,6 @@ FEATURE_COLS_DEFAULT = [
     "ncc_32_lag",
     "ncc_64_lag",
     "tvt_hint_median",
-    "tvt_hint_std",
     "neighbor_tvt",
     "neighbor_xy_dist",
     "neighbor_transfer_ok",

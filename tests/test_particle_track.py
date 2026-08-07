@@ -22,9 +22,12 @@ class TestParticleTrack(unittest.TestCase):
     def test_blend_respects_low_confidence(self) -> None:
         pf = np.array([100.0, 200.0, 300.0])
         conf = np.array([0.0, 0.5, 1.0])
-        out = blend_pf_last_known(pf, 50.0, conf, conf_floor=0.0, conf_ceil=1.0)
+        out = blend_pf_last_known(pf, 50.0, conf, conf_floor=0.0, conf_ceil=1.0, max_dev=18.0)
         self.assertAlmostEqual(out[0], 50.0)
-        self.assertAlmostEqual(out[2], 300.0)
+        # high conf still hard-clamped: last + max_dev, not raw PF runaway
+        self.assertAlmostEqual(out[2], 50.0 + 18.0)
+        out_wide = blend_pf_last_known(pf, 50.0, conf, conf_floor=0.0, conf_ceil=1.0, max_dev=500.0)
+        self.assertAlmostEqual(out_wide[2], 300.0)
 
     def test_pf_runs_and_shapes(self) -> None:
         # synthetic typewell GR sine in TVT

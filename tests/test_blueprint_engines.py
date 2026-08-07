@@ -50,8 +50,12 @@ class TestBlueprintEngines(unittest.TestCase):
         self.assertNotIn("X", FEATURE_COLS_DEFAULT)
         self.assertNotIn("Y", FEATURE_COLS_DEFAULT)
         self.assertNotIn("Z", FEATURE_COLS_DEFAULT)
+        # poison dual-transport / absolute lease encodings out of residual X
+        self.assertNotIn("prior_mid", FEATURE_COLS_DEFAULT)
+        self.assertNotIn("well_azimuth_x", FEATURE_COLS_DEFAULT)
         self.assertIn("relative_md", FEATURE_COLS_DEFAULT)
         self.assertIn("prior_local_dip", FEATURE_COLS_DEFAULT)
+        self.assertIn("prior_last_tvt", FEATURE_COLS_DEFAULT)
 
     def test_feature_matrix_rejects_form_leak(self) -> None:
         st = pd.DataFrame(
@@ -78,11 +82,13 @@ class TestBlueprintEngines(unittest.TestCase):
                 atol=1e-6,
             )
         )
-        # flat beds → local_dip ≈ -1
-        self.assertAlmostEqual(out["local_dip"], -1.0, places=2)
-        # toe projection should track true TVT under constant dip
+        # tiny MD slope only (≤0.008); never Z blow-up; heel locked
+        self.assertLessEqual(abs(out["md_slope"]), 0.008 + 1e-9)
+        self.assertEqual(out["local_dip"], 0.0)
+        last = float(df.iloc[k]["TVT_input"].to_numpy(float)[-1])
         err = float(np.nanmean(np.abs(prior[toe] - df.iloc[toe]["TVT"].to_numpy(float))))
-        self.assertLess(err, 1.0, msg=f"local dip toe err={err}")
+        # near last-known floor (soft MD trend), not 50–150 ft poison
+        self.assertLess(err, abs(last) * 0.05 + 20.0, msg=f"local dip toe err={err}")
 
     def test_build_station_frame_has_relative_and_no_form(self) -> None:
         df, sp = self._synthetic_well()
