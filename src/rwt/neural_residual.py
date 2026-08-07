@@ -356,11 +356,19 @@ def train_neural_residual(
             flush=True,
         )
     else:
-        # pure best floor
-        selected = min(floor_rmses.values()) if floor_rmses else float(gate3.detail["oof_rmse_prior"])
+        # Prefer Gate3's best floor on residual OOF rows (comparable), not min of
+        # per-column subsets with different missingness.
+        g3_best = gate3.detail.get("oof_rmse_best_floor")
+        if g3_best is not None and np.isfinite(float(g3_best)):
+            selected = float(g3_best)
+        elif floor_rmses:
+            selected = float(min(floor_rmses.values()))
+        else:
+            selected = float(gate3.detail.get("oof_rmse_prior") or oof_r)
         print(
             f"[GATE REJECT] Neural residual OOF {oof_r:.3f} loses floors; "
-            f"selected pure floor {selected:.3f}",
+            f"selected pure floor {selected:.3f} "
+            f"({gate3.detail.get('best_floor_name') or 'prior'})",
             flush=True,
         )
 

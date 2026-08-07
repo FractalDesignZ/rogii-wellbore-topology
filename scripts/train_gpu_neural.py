@@ -34,6 +34,12 @@ def main() -> int:
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--export-onnx", action="store_true")
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="assemble workers (0=RWT_WORKERS env or auto)",
+    )
     a = ap.parse_args()
 
     from rwt.neural_residual import train_neural_residual
@@ -42,6 +48,12 @@ def main() -> int:
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
+    workers = a.workers if a.workers > 0 else None
+    if workers is None and os.environ.get("RWT_WORKERS"):
+        try:
+            workers = max(1, int(os.environ["RWT_WORKERS"]))
+        except ValueError:
+            workers = None
     print(
         json.dumps(
             {
@@ -49,12 +61,17 @@ def main() -> int:
                 "path": "CUDA_neural_residual",
                 "target_ft": 5.0,
                 "max_wells": a.max_wells,
+                "workers": workers,
+                "restrict": "no_kaggle_submit",
             }
         ),
         flush=True,
     )
     stations, gate2 = _assemble_dataset(
-        Path(a.data), synthetic=False, max_wells=a.max_wells
+        Path(a.data),
+        synthetic=False,
+        max_wells=a.max_wells,
+        workers=workers,
     )
     print(
         f"assembled n={len(stations)} wells={stations['well_id'].nunique()} "

@@ -144,11 +144,19 @@ def train_lgbm_residual(
     fold_scores: list[float] = []
     # Residual head: shallow default; max_precision deepens trees for score war.
     # Thread count from RWT_LGBM_THREADS / OMP (dashboard parallel train sets these).
-    lgb_threads = int(
-        os.environ.get("RWT_LGBM_THREADS")
-        or os.environ.get("OMP_NUM_THREADS")
-        or os.environ.get("RWT_NUM_THREADS")
-        or max(1, (os.cpu_count() or 4))
+    def _env_threads(*keys: str, default: int | None = None) -> int:
+        for k in keys:
+            v = os.environ.get(k)
+            if v is None or not str(v).strip():
+                continue
+            try:
+                return max(1, int(v))
+            except ValueError:
+                continue
+        return max(1, default if default is not None else (os.cpu_count() or 4))
+
+    lgb_threads = _env_threads(
+        "RWT_LGBM_THREADS", "OMP_NUM_THREADS", "RWT_NUM_THREADS"
     )
     # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
     if max_precision:

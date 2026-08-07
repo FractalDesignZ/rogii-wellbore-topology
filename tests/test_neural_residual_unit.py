@@ -53,6 +53,19 @@ class TestNeuralResidualUnit(unittest.TestCase):
         self.assertEqual(len(packs), 2)
         self.assertEqual({p["well_id"] for p in packs}, {"A", "B"})
 
+    def test_y_res_is_tvt_minus_prior(self):
+        df = pd.DataFrame(
+            {
+                "well_id": ["W"] * 5,
+                "station": range(5),
+                "TVT": [10.0, 11.0, 12.0, 13.0, 14.0],
+                "prior_stack": [9.0, 10.0, 11.0, 12.0, 13.0],
+                "f0": 0.0,
+            }
+        )
+        p = _well_tensors(df, ["f0"], "prior_stack", max_len=64)[0]
+        np.testing.assert_allclose(p["y_res"], np.ones(5))
+
 
 if __name__ == "__main__":
     unittest.main()

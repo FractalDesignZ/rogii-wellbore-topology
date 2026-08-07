@@ -111,7 +111,18 @@ def main() -> int:
     selected = float(rep.get("oof_rmse_selected") or rep.get("oof_rmse") or 1e9)
     residual_oof = float(rep.get("oof_rmse") or 1e9)
     floors = rep.get("baseline_rmse") or {}
-    best_floor = min(floors.values()) if floors else None
+    # Prefer Gate3 best floor when present (comparable OOF row set)
+    g3 = None
+    for g in rep.get("gates") or []:
+        if g.get("name") == "RESIDUAL_ACCEPTANCE":
+            g3 = g
+            break
+    if g3 and g3.get("oof_rmse_best_floor") is not None:
+        best_floor = float(g3["oof_rmse_best_floor"])
+    elif floors:
+        best_floor = float(min(floors.values()))
+    else:
+        best_floor = None
     use_res = bool(rep.get("use_residual"))
 
     beats_5 = selected < TARGET_FT
@@ -121,7 +132,10 @@ def main() -> int:
         "oof_rmse_selected": selected,
         "oof_rmse_residual": residual_oof,
         "best_floor_rmse": best_floor,
+        "best_floor_name": (g3 or {}).get("best_floor_name"),
         "use_residual": use_res,
+        "max_precision": not a.no_max_precision,
+        "restrict": "no_kaggle_submit",
         "beats_5ft": beats_5,
         "delta_vs_5ft": selected - TARGET_FT,
         "n_stations": int(rep.get("n_stations") or 0),
