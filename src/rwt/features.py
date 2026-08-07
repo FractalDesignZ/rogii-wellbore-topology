@@ -11,7 +11,11 @@ from rwt.gr_match import multi_scale_ncc
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
 from rwt.particle_track import particle_prior_for_well
-from rwt.priors import blend_stack_priors, compute_heel_fitted_dip_prior
+from rwt.priors import (
+    _heel_tvt_values,
+    blend_stack_priors,
+    compute_heel_fitted_dip_prior,
+)
 from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
 
@@ -57,17 +61,10 @@ def build_station_frame(
         pf["prior_pf_bag"],
         pf["pf_confidence"],
     )
-    # lock heel on stack
+    # lock heel on stack via shared heel TVT helper
     if len(split.known_idx):
         k = np.asarray(split.known_idx, dtype=int)
-        if "TVT_input" in df.columns:
-            heel_tvt = np.asarray(df.iloc[k]["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
-        else:
-            heel_tvt = np.full(len(k), np.nan, dtype=float)
-        if "TVT" in df.columns:
-            t = np.asarray(df.iloc[k]["TVT"].to_numpy(dtype=float), dtype=float)
-            miss = ~np.isfinite(heel_tvt)
-            heel_tvt[miss] = t[miss]
+        heel_tvt = _heel_tvt_values(df, k)
         full = np.full(n, np.nan, dtype=float)
         full[k] = heel_tvt
         lock = np.isfinite(full)
@@ -87,7 +84,8 @@ def build_station_frame(
         tw_gr = np.asarray(tw_gr, dtype=float)
 
     rows = []
-    indices = range(n) if station_idx is None else [int(i) for i in station_idx]
+    idx_list = list(range(n) if station_idx is None else [int(i) for i in station_idx])
+    indices = idx_list
     is_predict_mask = np.zeros(n, dtype=bool)
     is_known_mask = np.zeros(n, dtype=bool)
     if len(split.predict_idx):
@@ -95,20 +93,29 @@ def build_station_frame(
     if len(split.known_idx):
         is_known_mask[np.asarray(split.known_idx, dtype=int)] = True
 
-    # Sparse multi-scale NCC (every 8th station) — PF is primary correlation; NCC is auxiliary
+    # Sparse multi-scale NCC (every 8th station) — O(n) sample + O(log n) nearest fill
     ncc_cache: dict[int, dict[str, float]] = {}
-    if tw_gr is not None:
-        for i in indices:
-            if int(i) % 8 == 0 or int(i) == int(indices[0]) or int(i) == int(list(indices)[-1]):
-                ncc_cache[int(i)] = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=int(i))
-        # fill gaps by nearest cached
+    if tw_gr is not None and idx_list:
+        first_i, last_i = idx_list[0], idx_list[-1]
+        sample_idx = [i for i in idx_list if (i % 8 == 0 or i == first_i or i == last_i)]
+        for i in sample_idx:
+            ncc_cache[i] = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=i)
         if ncc_cache:
-            keys = sorted(ncc_cache.keys())
-            for i in indices:
-                ii = int(i)
-                if ii not in ncc_cache:
-                    nearest = min(keys, key=lambda k: abs(k - ii))
-                    ncc_cache[ii] = ncc_cache[nearest]
+            keys = np.asarray(sorted(ncc_cache.keys()), dtype=int)
+            for i in idx_list:
+                if i not in ncc_cache:
+                    j = int(np.searchsorted(keys, i))
+                    if j <= 0:
+                        nearest = int(keys[0])
+                    elif j >= len(keys):
+                        nearest = int(keys[-1])
+                    else:
+                        nearest = int(
+                            keys[j - 1]
+                            if abs(int(keys[j - 1]) - i) <= abs(int(keys[j]) - i)
+                            else keys[j]
+                        )
+                    ncc_cache[i] = ncc_cache[nearest]
 
     for i in indices:
         gi = float(gr[i])

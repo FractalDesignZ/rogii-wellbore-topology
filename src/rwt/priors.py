@@ -32,9 +32,21 @@ PRIOR_FALLBACKS = (
 def resolve_prior_column(
     df: pd.DataFrame,
     preferred: str = DEFAULT_PRIOR_COL,
+    *,
+    strict: bool = False,
 ) -> str:
+    """
+    Resolve residual prior column name.
+
+    strict=True: preferred must exist (train/serve contract — no silent swap).
+    strict=False: fall back through PRIOR_FALLBACKS for exploratory paths.
+    """
     if preferred in df.columns:
         return preferred
+    if strict:
+        raise KeyError(
+            f"strict prior column '{preferred}' missing; have {list(df.columns)[:24]}"
+        )
     for c in PRIOR_FALLBACKS:
         if c in df.columns:
             return c
@@ -80,38 +92,32 @@ def compute_heel_fitted_dip_prior(
     y = df["Y"].to_numpy(dtype=float) if "Y" in df.columns else np.zeros(n)
 
     k = np.asarray(split.known_idx, dtype=int)
-    if len(k) < 3:
-        # degrade to last-known constant if heel too short
-        last = 0.0
-        ht = _heel_tvt_values(df, k, tvt_col=tvt_col, tvt_input_col=tvt_input_col)
-        if np.isfinite(ht).any():
-            last = float(ht[np.isfinite(ht)][-1])
-        arr = np.full(n, last, dtype=float)
+    def _const_fallback(last: float) -> dict[str, Any]:
+        # never invent TVT=0; prefer last heel TVT or nanmedian Z-independent constant
+        if not np.isfinite(last):
+            last = float("nan")
+        arr = np.full(n, last if np.isfinite(last) else np.nan, dtype=float)
         return {
             "prior_flat_tvt": arr.copy(),
             "prior_dip_trend": np.zeros(n),
             "prior_dip_stack": arr,
-            "C_heel": float(last),
+            "C_heel": float(last) if np.isfinite(last) else float("nan"),
             "dip_coef_x": 0.0,
             "dip_coef_y": 0.0,
             "dip_intercept": 0.0,
         }
 
+    if len(k) < 3:
+        ht = _heel_tvt_values(df, k, tvt_col=tvt_col, tvt_input_col=tvt_input_col)
+        last = float(ht[np.isfinite(ht)][-1]) if np.isfinite(ht).any() else float("nan")
+        return _const_fallback(last)
+
     heel_tvt = _heel_tvt_values(df, k, tvt_col=tvt_col, tvt_input_col=tvt_input_col)
     heel_z = z[k]
     m = np.isfinite(heel_tvt) & np.isfinite(heel_z)
     if m.sum() < 3:
-        last = float(np.nanmedian(heel_tvt)) if np.isfinite(heel_tvt).any() else 0.0
-        arr = np.full(n, last, dtype=float)
-        return {
-            "prior_flat_tvt": arr.copy(),
-            "prior_dip_trend": np.zeros(n),
-            "prior_dip_stack": arr,
-            "C_heel": last,
-            "dip_coef_x": 0.0,
-            "dip_coef_y": 0.0,
-            "dip_intercept": 0.0,
-        }
+        last = float(np.nanmedian(heel_tvt)) if np.isfinite(heel_tvt).any() else float("nan")
+        return _const_fallback(last)
 
     C_heel = float(np.mean(heel_tvt[m] + heel_z[m]))
     flat_full = C_heel - z

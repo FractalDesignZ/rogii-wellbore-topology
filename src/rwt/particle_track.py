@@ -98,9 +98,10 @@ def particle_filter_tvt(
         try:
             coef, _, _, _ = np.linalg.lstsq(A, lat_k, rcond=None)
             a_cal, b_cal = float(coef[0]), float(coef[1])
-            if not np.isfinite(a_cal) or abs(a_cal) < 1e-3:
+            # reject inverted or degenerate GR calibration
+            if not np.isfinite(a_cal) or a_cal <= 1e-3 or not np.isfinite(b_cal):
                 a_cal, b_cal = 1.0, 0.0
-        except Exception:
+        except np.linalg.LinAlgError:
             a_cal, b_cal = 1.0, 0.0
     else:
         a_cal, b_cal = 1.0, 0.0
@@ -113,8 +114,11 @@ def particle_filter_tvt(
     def gr_at(tvt: np.ndarray) -> np.ndarray:
         return np.interp(tvt, grid, gr_grid, left=gr_grid[0], right=gr_grid[-1])
 
-    lo = max(t_min, seed_tvt - tvt_span)
-    hi = min(t_max, seed_tvt + tvt_span)
+    seed_c = float(np.clip(seed_tvt, t_min, t_max)) if np.isfinite(seed_tvt) else 0.5 * (t_min + t_max)
+    lo = max(t_min, seed_c - tvt_span)
+    hi = min(t_max, seed_c + tvt_span)
+    if lo > hi:
+        lo, hi = t_min, t_max
     particles = rng.uniform(lo, hi, size=n_particles)
     weights = np.ones(n_particles) / n_particles
 
@@ -216,38 +220,47 @@ def particle_prior_for_well(
     n = len(lateral)
     stats = known_prior_tvt(lateral, split)
     last = float(stats["prior_last_tvt"])
-    if typewell is None or "GR" not in typewell.columns or "TVT" not in typewell.columns:
-        arr = np.full(n, last, dtype=float)
-        return {
-            "prior_pf_tvt": arr,
-            "prior_pf_blend": arr.copy(),
-            "prior_pf_bag": arr.copy(),
-            "pf_confidence": np.zeros(n),
-            "pf_tvt_std": np.full(n, np.nan),
-            "prior_last_tvt": last,
-            "n_pf_bag": 0,
-        }
-
-    gr = lateral["GR"].to_numpy(dtype=float) if "GR" in lateral.columns else np.full(n, np.nan)
-
-    known_tvt = np.full(n, np.nan)
+    known_tvt = np.full(n, np.nan, dtype=float)
     if "TVT_input" in lateral.columns:
-        known_tvt = np.asarray(lateral["TVT_input"].to_numpy(dtype=float), copy=True)
+        known_tvt = np.asarray(lateral["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
     if "TVT" in lateral.columns:
-        tcol = lateral["TVT"].to_numpy(dtype=float)
+        tcol = np.asarray(lateral["TVT"].to_numpy(dtype=float), dtype=float)
         kidx = np.asarray(split.known_idx, dtype=int)
         if len(kidx):
             miss = ~np.isfinite(known_tvt[kidx]) & np.isfinite(tcol[kidx])
             known_tvt[kidx[miss]] = tcol[kidx[miss]]
 
-    seed_tvt = last if np.isfinite(last) else float(np.nanmedian(typewell["TVT"]))
+    # safe constant if no typewell / no heel TVT
+    last_f = last if np.isfinite(last) else (
+        float(known_tvt[np.isfinite(known_tvt)][-1]) if np.isfinite(known_tvt).any() else float("nan")
+    )
+    if typewell is None or "GR" not in typewell.columns or "TVT" not in typewell.columns:
+        fill = last_f if np.isfinite(last_f) else 0.0  # only true last resort
+        if np.isfinite(known_tvt).any():
+            fill = float(known_tvt[np.isfinite(known_tvt)][-1])
+        arr = np.full(n, fill, dtype=float)
+        arr = np.where(np.isfinite(known_tvt), known_tvt, arr)
+        return {
+            "prior_pf_tvt": arr.copy(),
+            "prior_pf_blend": arr.copy(),
+            "prior_pf_bag": arr.copy(),
+            "pf_confidence": np.zeros(n),
+            "pf_tvt_std": np.full(n, np.nan),
+            "prior_last_tvt": fill,
+            "n_pf_bag": 0,
+        }
+
+    gr = lateral["GR"].to_numpy(dtype=float) if "GR" in lateral.columns else np.full(n, np.nan)
+
+    seed_tvt = last_f if np.isfinite(last_f) else float(np.nanmedian(typewell["TVT"]))
     if np.isfinite(known_tvt).any():
         seed_tvt = float(known_tvt[np.isfinite(known_tvt)][-1])
 
     tw_gr = typewell["GR"].to_numpy(dtype=float)
     tw_tvt = typewell["TVT"].to_numpy(dtype=float)
+    rng_seed = int(seed)  # caller seed (not shadowed by TVT seed)
 
-    def _run_one(cfg: dict[str, Any]) -> dict[str, np.ndarray]:
+    def _run_one(cfg: dict[str, Any], seed_offset: int = 0) -> dict[str, np.ndarray]:
         return particle_filter_tvt(
             gr,
             tw_gr,
@@ -258,14 +271,20 @@ def particle_prior_for_well(
             tvt_span=float(cfg.get("tvt_span", 80.0)),
             process_sigma=float(cfg.get("process_sigma", 0.35)),
             gr_sigma=float(cfg.get("gr_sigma", 22.0)),
-            rng=np.random.default_rng(int(cfg.get("seed", seed))),
+            rng=np.random.default_rng(rng_seed + int(cfg.get("seed", 0)) + seed_offset),
         )
 
     if bag:
-        runs = [_run_one(cfg) for cfg in _PF_BAG_CONFIGS]
-        pf_tvt = np.mean(np.vstack([r["prior_pf_tvt"] for r in runs]), axis=0)
+        runs = [_run_one(cfg, seed_offset=i * 17) for i, cfg in enumerate(_PF_BAG_CONFIGS)]
+        bag_arr = np.mean(np.vstack([r["prior_pf_tvt"] for r in runs]), axis=0)
         conf = np.mean(np.vstack([r["pf_confidence"] for r in runs]), axis=0)
         stds = np.mean(np.vstack([r["pf_tvt_std"] for r in runs]), axis=0)
+        # single default-config track for prior_pf_tvt (distinct from bag)
+        single = _run_one(
+            {"n_particles": n_particles, "process_sigma": 0.35, "gr_sigma": 22.0, "tvt_span": 80.0, "seed": 0},
+            seed_offset=0,
+        )
+        pf_tvt = single["prior_pf_tvt"]
         n_bag = len(runs)
     else:
         single = _run_one(
@@ -274,27 +293,22 @@ def particle_prior_for_well(
                 "process_sigma": 0.35,
                 "gr_sigma": 22.0,
                 "tvt_span": 80.0,
-                "seed": seed,
+                "seed": 0,
             }
         )
-        pf_tvt, conf, stds = single["prior_pf_tvt"], single["pf_confidence"], single["pf_tvt_std"]
+        pf_tvt = bag_arr = single["prior_pf_tvt"]
+        conf, stds = single["pf_confidence"], single["pf_tvt_std"]
         n_bag = 1
 
-    last_f = last if np.isfinite(last) else seed_tvt
-    blend = blend_pf_last_known(
-        pf_tvt,
-        last_f,
-        conf,
-        conf_floor=0.25,
-        conf_ceil=0.70,
-    )
+    fill = last_f if np.isfinite(last_f) else seed_tvt
+    blend = blend_pf_last_known(bag_arr if bag else pf_tvt, fill, conf, conf_floor=0.25, conf_ceil=0.70)
     is_known = np.zeros(n, dtype=bool)
     if len(split.known_idx):
         is_known[np.asarray(split.known_idx, dtype=int)] = True
     lock = is_known & np.isfinite(known_tvt)
     blend = np.where(lock, known_tvt, blend)
     pf_tvt = np.where(lock, known_tvt, pf_tvt)
-    bag_arr = pf_tvt.copy()
+    bag_arr = np.where(lock, known_tvt, bag_arr)
 
     return {
         "prior_pf_tvt": pf_tvt,
@@ -302,6 +316,6 @@ def particle_prior_for_well(
         "prior_pf_bag": bag_arr,
         "pf_confidence": conf,
         "pf_tvt_std": stds,
-        "prior_last_tvt": last_f,
+        "prior_last_tvt": fill,
         "n_pf_bag": n_bag,
     }

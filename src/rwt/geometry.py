@@ -80,7 +80,8 @@ def estimate_lateral_azimuth_dip_deg(
     ay = float(np.mean(dy[cut:]))
     az_deg = float(np.degrees(np.arctan2(ay, ax + 1e-15)))
     horiz = np.sqrt(dx[cut:] ** 2 + dy[cut:] ** 2) + 1e-15
-    dip_deg = float(np.degrees(np.arctan2(np.mean(np.abs(dz[cut:])), np.mean(horiz))))
+    # signed dip: preserve rising vs falling (do not abs)
+    dip_deg = float(np.degrees(np.arctan2(float(np.mean(dz[cut:])), float(np.mean(horiz)))))
     return az_deg, dip_deg
 
 

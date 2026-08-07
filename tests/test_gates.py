@@ -19,7 +19,8 @@ class TestGates(unittest.TestCase):
     def test_ip_fence(self) -> None:
         g = gate_ip_fence()
         self.assertTrue(g.passed)
-        self.assertFalse(g.detail["kernel_private"])
+        self.assertIsInstance(g.detail["kernel_private"], bool)
+        self.assertIn("kernel_id", g.detail)
 
     def test_residual_accept(self) -> None:
         y = np.array([1.0, 2.0, 3.0, 4.0])

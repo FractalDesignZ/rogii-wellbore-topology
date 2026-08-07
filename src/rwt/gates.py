@@ -1,5 +1,5 @@
 """
-Logic quality gates (M0–M6 operational law).
+Logic quality gates (M0-M6 operational law).
 
 Gate 1 — IP fence: public vs private kernel (fail-closed).
 Gate 2 — Middle-out mask: heel prior / toe predict.

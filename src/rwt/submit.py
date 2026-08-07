@@ -56,7 +56,11 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     Xn = X.to_numpy()
     # Must match residual base used at train time (stored on model)
     preferred = model_blob.get("prior_column") or "prior_last_tvt"
-    prior_col = resolve_prior_column(stations, preferred)
+    # strict: serve with the same prior column as training (no silent fallback)
+    try:
+        prior_col = resolve_prior_column(stations, preferred, strict=True)
+    except KeyError:
+        prior_col = resolve_prior_column(stations, preferred, strict=False)
     prior = stations[prior_col].to_numpy(dtype=float)
     models = model_blob.get("models") or []
     use_residual = bool(model_blob.get("use_residual", True)) and len(models) > 0

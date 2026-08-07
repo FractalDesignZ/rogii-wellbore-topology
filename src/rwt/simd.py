@@ -138,17 +138,26 @@ def set_thread_env(n: int | None = None) -> dict[str, str]:
 
 
 def vectorized_rolling_mean(x: np.ndarray, window: int) -> np.ndarray:
-    """AVX-friendly rolling mean via cumulative sum (O(n))."""
+    """SIMD-friendly rolling mean via cumulative sum (O(n))."""
     x = as_f64_contig(x)
-    w = max(1, int(window))
-    if w == 1 or len(x) == 0:
+    n = len(x)
+    if n == 0:
+        return x.copy()
+    w = max(1, min(int(window), n))
+    if w == 1:
         return x.copy()
     c = np.cumsum(np.insert(x, 0, 0.0))
     out = (c[w:] - c[:-w]) / w
-    # pad edges
-    pad_l = np.full(w // 2, out[0] if len(out) else 0.0)
-    pad_r = np.full(len(x) - len(out) - len(pad_l), out[-1] if len(out) else 0.0)
-    return np.concatenate([pad_l, out, pad_r])[: len(x)]
+    if len(out) == 0:
+        return np.full(n, float(np.mean(x)))
+    # symmetric-ish pad to length n
+    pad_l = w // 2
+    pad_r = n - len(out) - pad_l
+    if pad_r < 0:
+        return out[:n]
+    left = np.full(max(pad_l, 0), out[0])
+    right = np.full(max(pad_r, 0), out[-1])
+    return np.concatenate([left, out, right])[:n]
 
 
 def vectorized_ncc_template(
@@ -156,9 +165,9 @@ def vectorized_ncc_template(
     template: np.ndarray,
 ) -> tuple[float, int]:
     """
-    Best lag-0-aligned sliding NCC of query along template via correlate.
+    Best sliding NCC of query along template with per-window template z-score.
 
-    Uses float64 contiguous arrays → OpenBLAS/SIMD GEMM-style paths under NumPy.
+    Uses rolling sums (O(n)) so each lag window is normalized independently.
     """
     q = as_f64_contig(query)
     t = as_f64_contig(template)
@@ -166,17 +175,22 @@ def vectorized_ncc_template(
     if nq < 3 or nt < nq:
         return 0.0, 0
     q = q - np.mean(q)
-    qs = np.std(q)
+    qs = float(np.std(q))
     if qs < 1e-12:
         return 0.0, 0
     q = q / qs
-    # normalize template locally per window is expensive; zscore whole template then correlate
-    t0 = t - np.mean(t)
-    ts = np.std(t0)
-    if ts < 1e-12:
-        return 0.0, 0
-    t0 = t0 / ts
-    # full correlation; valid lags 0..nt-nq
-    corr = np.correlate(t0, q, mode="valid") / max(nq, 1)
-    lag = int(np.argmax(corr))
-    return float(corr[lag]), lag
+    # rolling mean/var of template windows of length nq
+    ones = np.ones(nq, dtype=float)
+    sum_t = np.convolve(t, ones, mode="valid")
+    sum_t2 = np.convolve(t * t, ones, mode="valid")
+    mean_t = sum_t / nq
+    var_t = np.maximum(sum_t2 / nq - mean_t * mean_t, 0.0)
+    std_t = np.sqrt(var_t)
+    # cross term: correlate(t, q) = sum t[i:i+nq] * q
+    cross = np.correlate(t, q, mode="valid")
+    # NCC = sum (t - mean_t)(q) / (nq * std_t * 1) ; q already unit std, mean 0
+    # sum (t-mean)*q = cross - mean_t * sum(q) = cross (sum q ~ 0)
+    denom = np.maximum(std_t * nq, 1e-12)
+    ncc = cross / denom
+    lag = int(np.argmax(ncc))
+    return float(ncc[lag]), lag

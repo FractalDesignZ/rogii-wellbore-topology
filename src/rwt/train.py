@@ -54,8 +54,14 @@ def _assemble_dataset(
         raise FileNotFoundError(f"No wells under {root}")
     spatial: SpatialIndex = build_spatial_index([(w, d) for w, d, _s, _t in loaded])
 
+    from rwt.gates import gate_middle_out_mask
+
     n = 0
     for wid, df, sp, tw in loaded:
+        g2 = gate_middle_out_mask(df, wid)
+        if not g2.passed:
+            print(f"[GATE2 SKIP] {wid}: {g2.detail}", flush=True)
+            continue
         tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
         tvt_arr = df[tvt_col].to_numpy()
         pred_idx = np.asarray(sp.predict_idx, dtype=int)
@@ -101,7 +107,7 @@ def train_lgbm_residual(
             f"Insufficient labeled prediction-zone rows for residual train "
             f"(n={len(train_df)}). Need is_predict & TVT labels."
         )
-    prior_col = resolve_prior_column(train_df, prior_col)
+    prior_col = resolve_prior_column(train_df, prior_col, strict=False)
     X, cols = feature_matrix(train_df)
     y = train_df["TVT"].to_numpy(dtype=float)
     prior = train_df[prior_col].to_numpy(dtype=float)
@@ -192,7 +198,7 @@ def train_lgbm_residual(
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
 
-    # ── Gate 3: Residual Acceptance ─────────────────────────────────────
+    # ── Gates 1+3 (Gate 2 is structural at assemble time) ───────────────
     from rwt.gates import gate_ip_fence, gate_residual_acceptance
     from rwt.simd import cpu_feature_report
 
@@ -209,6 +215,8 @@ def train_lgbm_residual(
     )
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
+    # On reject: choose pure prior with best OOF among prior_col and last_known
+    serve_prior_col = prior_col
     if use_residual:
         print(
             f"[GATE PASS] Residual head accepted: OOF {gate3.detail['oof_rmse_residual']:.3f} "
@@ -219,16 +227,19 @@ def train_lgbm_residual(
         final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
     else:
+        cand = {prior_col: float(gate3.detail["oof_rmse_prior"])}
+        if lk_m is not None and np.isfinite(gate3.detail.get("oof_rmse_last_known") or np.nan):
+            cand["prior_last_tvt"] = float(gate3.detail["oof_rmse_last_known"])
+        serve_prior_col = min(cand, key=cand.get)
+        final_oof = cand[serve_prior_col]
+        final_models = []
+        final_prior_type = f"pure_{serve_prior_col}"
         print(
             f"[GATE REJECT] Residual overfitted "
-            f"(OOF {gate3.detail['oof_rmse_residual']:.3f} > "
-            f"prior {gate3.detail['oof_rmse_prior']:.3f}). "
-            f"Falling back to pure prior '{prior_col}'.",
+            f"(OOF {gate3.detail['oof_rmse_residual']:.3f}). "
+            f"Falling back to pure prior '{serve_prior_col}' (OOF {final_oof:.3f}).",
             flush=True,
         )
-        final_models = []  # empty → submit uses prior only
-        final_prior_type = f"pure_{prior_col}"
-        final_oof = float(gate3.detail["oof_rmse_prior"])
 
     report = {
         "ok": True,
@@ -245,7 +256,8 @@ def train_lgbm_residual(
         "beats_baselines": beats,
         "kernel_id": k.kernel_id(),
         "kernel_private": k.is_private(),
-        "prior_column": prior_col,
+        "prior_column": serve_prior_col if not use_residual else prior_col,
+        "train_prior_column": prior_col,
         "final_prior_type": final_prior_type,
         "use_residual": use_residual,
         "gates": [gate1.to_dict(), gate3.to_dict()],
@@ -262,7 +274,7 @@ def train_lgbm_residual(
         "report": report,
         "models": final_models,
         "feature_cols": cols,
-        "prior_column": prior_col,
+        "prior_column": report["prior_column"],
         "use_residual": use_residual,
     }
 
