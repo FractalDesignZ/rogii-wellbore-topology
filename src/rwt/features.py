@@ -13,6 +13,7 @@ from rwt.middle_out import MiddleOutSplit, dual_transport_prior
 from rwt.particle_track import particle_prior_for_well
 from rwt.priors import (
     FORM_SURFACE_LEAK_COLS,
+    MAX_TVT_DEV,
     _heel_tvt_values,
     blend_prior_best,
     blend_stack_priors,
@@ -316,7 +317,8 @@ def build_station_frame(
         if "neighbor_transfer_ok" in stations.columns
         else None
     )
-    # Soft neighbor into residual base (stack) *before* prior_best so ensemble sees it
+    # Soft neighbor into residual base (stack) *before* prior_best so ensemble sees it.
+    # Exclude known heel: stack was already locked to observed TVT (lines above).
     if (
         "prior_stack" in stations.columns
         and nb is not None
@@ -326,12 +328,17 @@ def build_station_frame(
         st = stations["prior_stack"].to_numpy(dtype=float).copy()
         ok = np.asarray(nb_ok, dtype=float)
         nbt = np.asarray(nb, dtype=float)
-        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st)
+        known = (
+            stations["is_known"].to_numpy(dtype=bool)
+            if "is_known" in stations.columns
+            else np.zeros(len(st), dtype=bool)
+        )
+        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st) & ~known
         if m.any():
-            nb_c = last_f + np.clip(nbt - last_f, -18.0, 18.0)
+            nb_c = last_f + np.clip(nbt - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
             w = 0.12 * np.clip(ok, 0.0, 1.0)
             st = np.where(m, (1.0 - w) * st + w * nb_c, st)
-            st = last_f + np.clip(st - last_f, -18.0, 18.0)
+            st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
             stations["prior_stack"] = st
 
     best = blend_prior_best(

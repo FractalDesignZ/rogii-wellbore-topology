@@ -270,7 +270,7 @@ class TestCrownPath(unittest.TestCase):
 
         class _M:
             def predict(self, X):
-                # assert impute used stored median 7.0 not batch median of [7,99]
+                # batch values [99, nan] would fit median 99 if serve re-fit; stored is 7.0
                 self.last_x = float(X[1, 0])
                 return np.full(len(X), 50.0)  # runaway residual
 
@@ -278,7 +278,8 @@ class TestCrownPath(unittest.TestCase):
         st = pd.DataFrame(
             {
                 "prior_stack": [100.0, 100.0],
-                "relative_md": [7.0, np.nan],
+                # finite 99 differs from stored median 7 so batch-fit would fail assert
+                "relative_md": [99.0, np.nan],
             }
         )
         blob = {
@@ -321,24 +322,63 @@ class TestCrownPath(unittest.TestCase):
         self.assertTrue(np.allclose(y, 128.0))
 
     def test_serve_blob_medians_match_refit_contract(self) -> None:
-        """Serialized blob must carry single full-train medians for serve ensemble."""
-        # contract unit: not full LGBM fit — documents expected keys after Gate3 accept
+        """predict_stations reads feature_medians / residual_max_dev / prior_column."""
+        from rwt.submit import predict_stations
+
+        class _M:
+            def predict(self, X):
+                self.seen = float(X[0, 0])
+                return np.zeros(len(X))
+
+        m = _M()
+        # keys the train.py blob writer / predict_stations consumer share
         blob = {
-            "models": ["placeholder"],
+            "models": [m],
             "feature_cols": ["a"],
             "feature_medians": {"a": 1.5},
             "residual_max_dev": 18.0,
             "use_residual": True,
             "prior_column": "prior_stack",
         }
-        self.assertIn("feature_medians", blob)
-        self.assertEqual(blob["feature_medians"]["a"], 1.5)
-        # serve must not re-fit medians from batch when keys present
-        from rwt.features import impute_feature_frame
+        for key in ("feature_medians", "residual_max_dev", "prior_column", "use_residual"):
+            self.assertIn(key, blob)
+        batch = pd.DataFrame(
+            {
+                "a": [np.nan, 99.0],
+                "prior_stack": [10.0, 10.0],
+            }
+        )
+        y = predict_stations(blob, batch)
+        self.assertAlmostEqual(m.seen, 1.5)  # stored median, not batch 99
+        self.assertTrue(np.allclose(y, 10.0))
 
-        batch = pd.DataFrame({"a": [np.nan, 99.0]})
-        out = impute_feature_frame(batch, medians=blob["feature_medians"])
-        self.assertAlmostEqual(float(out["a"].iloc[0]), 1.5)
+    def test_serve_legacy_blob_zero_fill_not_batch_median(self) -> None:
+        """Legacy blobs without feature_medians use zero-fill, not batch medians."""
+        from rwt.submit import predict_stations
+
+        class _M:
+            def predict(self, X):
+                self.seen = list(X[:, 0])
+                return np.zeros(len(X))
+
+        m = _M()
+        blob = {
+            "models": [m],
+            "feature_cols": ["a"],
+            "use_residual": True,
+            "prior_column": "prior_stack",
+            # no feature_medians key
+        }
+        batch = pd.DataFrame(
+            {
+                "a": [np.nan, 99.0],
+                "prior_stack": [5.0, 5.0],
+            }
+        )
+        predict_stations(blob, batch)
+        # zero-fill nan; leave 99 as observed — never fit median=99 then fill nan→99
+        self.assertAlmostEqual(m.seen[0], 0.0)
+        self.assertAlmostEqual(m.seen[1], 99.0)
 
     def test_process_bias_near_ps_clipped(self) -> None:
         """Build-section large dTVT must not set toe process_bias outside ±0.05."""

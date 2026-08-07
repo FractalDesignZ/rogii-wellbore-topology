@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from rwt.middle_out import MiddleOutSplit, known_prior_tvt
+from rwt.priors import MAX_TVT_DEV
 
 
 def _prep_typewell(
@@ -74,6 +75,9 @@ def particle_filter_tvt(
       - process bias = median heel ΔTVT/station (formation walk, not pure noise)
       - likelihood: GR level × ΔGR match (shape, not only level)
       - GR dropout: inflate process noise, no false high confidence
+
+    Caller-supplied ``process_bias`` is clipped to the inclusive range
+    [-0.05, 0.05] (same bound as the heel-calibrated estimate).
     """
     rng = rng or np.random.default_rng(0)
     gr = np.asarray(lateral_gr, dtype=float)
@@ -226,7 +230,7 @@ def blend_pf_last_known(
     *,
     conf_floor: float = 0.20,
     conf_ceil: float = 0.65,
-    max_dev: float = 18.0,
+    max_dev: float = MAX_TVT_DEV,
 ) -> np.ndarray:
     """
     Confidence-weighted blend: low PF confidence → last-known; high → PF.
@@ -381,7 +385,7 @@ def particle_prior_for_well(
 
     fill = last_f if np.isfinite(last_f) else seed_tvt
     # clamp raw bag/track before blend so feature columns are not poison
-    max_dev = 18.0
+    max_dev = float(MAX_TVT_DEV)
     if np.isfinite(fill):
         bag_arr = fill + np.clip(bag_arr - fill, -max_dev, max_dev)
         pf_tvt = fill + np.clip(pf_tvt - fill, -max_dev, max_dev)

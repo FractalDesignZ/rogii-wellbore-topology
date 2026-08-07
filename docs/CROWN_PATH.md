@@ -15,9 +15,9 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **NCC stalk** | `prior_ncc_tvt` seed-local multi-scale track; TVT-sorted typewell; conf no heel→toe bleed; clamp_origin law |
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
-| **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft) |
+| **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft raw; clamped to last±18 inside stack/prior_best) |
 | **Residual** | Default base **`prior_stack`**; toe-weighted L2; dual seed bag; Δ clip vs base ±18; fold-safe medians; Gate3 |
-| **Clamp** | Pure priors ≤ last±18; residual Δ ≤ base±18 (may leave last band when G3 wins) |
+| **Clamp** | Published stack/prior_best/NCC/PF ≤ last±18 (`MAX_TVT_DEV`); residual Δ ≤ base±18 (may leave last band when G3 wins). Raw neighbor_tvt feature may still show ±40 offset before blend. |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
 ## What still is RESIDUE

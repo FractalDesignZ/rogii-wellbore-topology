@@ -20,6 +20,10 @@ from rwt.middle_out import MiddleOutSplit
 # stack beats residual on last_known (11.49 vs 12.30). last_known remains a
 # Gate3 floor + fallback. prior_best is the crown ensemble feature.
 DEFAULT_PRIOR_COL = "prior_stack"
+
+# Clamp law: pure prior candidates and residual Δ vs base stay within ±MAX_TVT_DEV.
+# Shared so PF bag, stack blend, NCC track, residual train/serve stay aligned.
+MAX_TVT_DEV = 18.0
 PRIOR_FALLBACKS = (
     "prior_stack",
     "prior_best",
@@ -308,7 +312,7 @@ def blend_stack_priors(
     ncc_conf: np.ndarray | None = None,
     conf_floor: float = 0.25,
     conf_ceil: float = 0.70,
-    max_dev: float = 18.0,
+    max_dev: float = MAX_TVT_DEV,
 ) -> np.ndarray:
     """
     Best pure residual base (12w ~12.35 with median-bag PF arm).
@@ -355,7 +359,7 @@ def blend_prior_best(
     neighbor_ok: np.ndarray | None = None,
     prior_ncc: np.ndarray | None = None,
     ncc_conf: np.ndarray | None = None,
-    max_dev: float = 18.0,
+    max_dev: float = MAX_TVT_DEV,
 ) -> np.ndarray:
     """
     Crown-path pure prior: confidence-weighted ensemble of clamped candidates.

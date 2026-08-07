@@ -15,7 +15,7 @@ from rwt.baselines import rmse
 from rwt.features import build_station_frame, feature_matrix
 from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
 from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
-from rwt.priors import DEFAULT_PRIOR_COL, resolve_prior_column
+from rwt.priors import DEFAULT_PRIOR_COL, MAX_TVT_DEV, resolve_prior_column
 from rwt.spatial import SpatialIndex, build_spatial_index
 
 
@@ -169,7 +169,7 @@ def train_lgbm_residual(
         "RWT_LGBM_THREADS", "OMP_NUM_THREADS", "RWT_NUM_THREADS"
     )
     # Clamp residual Δ so head cannot leave pure-prior band (clamp law parity)
-    residual_max_dev = 18.0
+    residual_max_dev = float(MAX_TVT_DEV)
     # Dual seed bag per fold (reduces fold variance on heterogeneous wells)
     n_seed_bag = 3 if max_precision else 2
     # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
@@ -365,7 +365,12 @@ def train_lgbm_residual(
             try:
                 bests = [int(m.best_iteration or n_rounds) for m in models]
                 n_refit = max(50, int(np.median(bests)))
-            except Exception:
+            except (TypeError, ValueError, AttributeError) as e:
+                print(
+                    f"[WARN] n_refit from fold best_iteration failed "
+                    f"({type(e).__name__}: {e}); fallback n_rounds={n_rounds}",
+                    flush=True,
+                )
                 n_refit = n_rounds
         final_models = []
         for b in range(n_seed_bag):
@@ -377,6 +382,7 @@ def train_lgbm_residual(
         final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
     else:
+        n_refit = None
         cand: dict[str, float] = {prior_col: float(gate3.detail["oof_rmse_prior"])}
         for n, s in floor_rmses.items():
             col = _floor_col.get(n, n)
@@ -408,6 +414,7 @@ def train_lgbm_residual(
         "max_precision": bool(max_precision),
         "lgb_threads": int(lgb_threads),
         "n_rounds_cap": int(n_rounds),
+        "n_refit": int(n_refit) if use_residual and n_refit is not None else None,
         "n_seed_bag": int(n_seed_bag),
         "residual_max_dev": float(residual_max_dev),
         "feature_medians": {k: float(v) for k, v in feature_medians.items()},
@@ -527,7 +534,7 @@ def main(argv: list[str] | None = None) -> int:
                     "prior_column": result["prior_column"],
                     "use_residual": result.get("use_residual", True),
                     "residual_max_dev": float(
-                        result.get("residual_max_dev", 18.0)
+                        result.get("residual_max_dev", MAX_TVT_DEV)
                     ),
                     "feature_medians": result.get("feature_medians") or {},
                 },

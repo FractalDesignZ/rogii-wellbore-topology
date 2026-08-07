@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 
+from rwt.priors import MAX_TVT_DEV
+
 
 def _zscore(a: np.ndarray) -> np.ndarray:
     a = np.asarray(a, dtype=float)
@@ -69,6 +71,10 @@ def multi_scale_ncc(
     typewell indices whose TVT lies in [seed−r, seed+r] (plus a half-window
     pad). Full-well lag search aliases on cyclic GR and produced pure NCC RMSE
     ~22 on 12w; seed-local search keeps the stalk on-formation.
+
+    Seed-local band uses ``in_band[0]``/``in_band[-1]`` as a contiguous index
+    range, so ``typewell_tvt`` must be monotonically increasing by index.
+    Callers must pass TVT-sorted typewell rows (same order as ``typewell_gr``).
     """
     gr = np.asarray(lateral_gr, float)
     tw = np.asarray(typewell_gr, float)
@@ -170,7 +176,7 @@ def ncc_tvt_track(
     seed_tvt: float | None = None,
     stride: int = 8,
     scales: tuple[int, ...] = (32, 64),
-    max_dev: float = 18.0,
+    max_dev: float = MAX_TVT_DEV,
     min_peak: float = 0.15,
 ) -> dict[str, np.ndarray]:
     """

@@ -10,7 +10,7 @@ import pandas as pd
 from rwt.features import build_station_frame
 from rwt.load import iter_well_frames, load_typewell, typewell_path_for_well
 from rwt.middle_out import resolve_middle_out
-from rwt.priors import resolve_prior_column
+from rwt.priors import MAX_TVT_DEV, resolve_prior_column
 from rwt.spatial import build_spatial_index
 
 
@@ -49,13 +49,14 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     from rwt.features import impute_feature_frame
 
     cols = model_blob["feature_cols"]
-    # Train/serve parity: use *stored* train medians (never batch-fit on serve)
+    # Train/serve parity: use *stored* train medians (never batch-fit on serve).
+    # Legacy blobs without feature_medians get deterministic zero-fill so results
+    # do not depend on serving-batch composition.
     stored_med = model_blob.get("feature_medians")
-    medians = (
-        {str(k): float(v) for k, v in stored_med.items()}
-        if isinstance(stored_med, dict) and stored_med
-        else None
-    )
+    if isinstance(stored_med, dict) and stored_med:
+        medians = {str(k): float(v) for k, v in stored_med.items()}
+    else:
+        medians = {str(c): 0.0 for c in cols}
     Xn = impute_feature_frame(
         stations.reindex(columns=cols), medians=medians
     ).to_numpy(dtype=float)
@@ -81,7 +82,7 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     res = np.mean(np.vstack(preds), axis=0)
     # Clamp residual Δ vs residual *base* only (prior_stack). Do not re-clamp to
     # last_known: Gate3 residual may leave the pure-prior band when it wins OOF.
-    max_dev = float(model_blob.get("residual_max_dev", 18.0))
+    max_dev = float(model_blob.get("residual_max_dev", MAX_TVT_DEV))
     res = np.clip(res, -max_dev, max_dev)
     out = prior + res
     if not np.isfinite(out).all():
