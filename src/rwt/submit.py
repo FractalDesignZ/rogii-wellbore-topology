@@ -56,14 +56,11 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     Xn = X.to_numpy()
     # Train-serve contract: stored prior_column is strict (no silent swap).
     # Legacy blobs without the key fall back through PRIOR_FALLBACKS.
-    if "prior_column" in model_blob and model_blob["prior_column"]:
-        prior_col = resolve_prior_column(
-            stations, str(model_blob["prior_column"]), strict=True
-        )
+    stored_prior = model_blob.get("prior_column")
+    if stored_prior:
+        prior_col = resolve_prior_column(stations, str(stored_prior), strict=True)
     else:
-        prior_col = resolve_prior_column(
-            stations, "prior_last_tvt", strict=False
-        )
+        prior_col = resolve_prior_column(stations, "prior_last_tvt", strict=False)
     prior = stations[prior_col].to_numpy(dtype=float)
     models = model_blob.get("models") or []
     use_residual = bool(model_blob.get("use_residual", True)) and len(models) > 0

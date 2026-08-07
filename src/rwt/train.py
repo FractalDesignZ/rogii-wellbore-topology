@@ -102,12 +102,16 @@ def train_lgbm_residual(
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
     else:
         train_df = stations[stations["TVT"].notna()].copy()
+    prior_col = resolve_prior_column(train_df, prior_col, strict=False)
+    # drop rows where selected prior is non-finite (PF NaN when no TVT ref)
+    train_df = train_df.loc[
+        np.isfinite(train_df[prior_col].to_numpy(dtype=float))
+    ].copy()
     if len(train_df) < 50:
         raise ValueError(
             f"Insufficient labeled prediction-zone rows for residual train "
-            f"(n={len(train_df)}). Need is_predict & TVT labels."
+            f"(n={len(train_df)}). Need finite TVT and {prior_col} values."
         )
-    prior_col = resolve_prior_column(train_df, prior_col, strict=False)
     X, cols = feature_matrix(train_df)
     y = train_df["TVT"].to_numpy(dtype=float)
     prior = train_df[prior_col].to_numpy(dtype=float)
