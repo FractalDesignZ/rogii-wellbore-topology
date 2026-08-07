@@ -103,7 +103,7 @@ def train_lgbm_residual(
     """
     Residual learner on labeled *toe* (is_predict).
 
-    Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (pf_blend).
+    Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (prior_stack).
     Explicit prior_col is strict (must exist); omitted uses DEFAULT with fallbacks.
 
     max_precision=True: deeper trees, more rounds, more leaves — for 24c/32GB kits

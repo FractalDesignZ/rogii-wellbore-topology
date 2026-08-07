@@ -16,13 +16,14 @@ import pandas as pd
 
 from rwt.middle_out import MiddleOutSplit
 
-# Residual base: last_known is still strongest pure floor on many cohorts;
-# prior_best is the crown ensemble feature + optional residual base when it wins.
-DEFAULT_PRIOR_COL = "prior_last_tvt"
+# Residual base: 12w measure — prior_stack best pure (~12.35) and residual on
+# stack beats residual on last_known (11.49 vs 12.30). last_known remains a
+# Gate3 floor + fallback. prior_best is the crown ensemble feature.
+DEFAULT_PRIOR_COL = "prior_stack"
 PRIOR_FALLBACKS = (
-    "prior_last_tvt",
-    "prior_best",
     "prior_stack",
+    "prior_best",
+    "prior_last_tvt",
     "prior_ncc_tvt",
     "prior_pf_blend",
     "prior_local_dip",

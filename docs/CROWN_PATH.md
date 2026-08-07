@@ -15,7 +15,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **NCC stalk** | `prior_ncc_tvt` sparse multi-scale template track; conf-gated in ensemble; heel lock = TVT_input∪known TVT |
 | **Prior ensemble** | `prior_best` last-dominated clamp of stack/PF/local/neighbor/**NCC** (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft) |
-| **Residual** | Default base `prior_last_tvt`; Gate3 vs all floors; LGBM + optional CUDA TCN |
+| **Residual** | Default base **`prior_stack`** (12w: 11.49 OOF vs 12.30 on last); Gate3 vs all floors; LGBM + CUDA TCN |
 | **Clamp** | All pure candidates ≤ last_known ± 18 ft |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
@@ -29,7 +29,8 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| residual (Gate3 ACCEPT) | **12.30** |
+| residual on **prior_stack** (Gate3 ACCEPT) | **11.49** |
+| residual on prior_last_tvt | 12.30 |
 | prior_stack (best pure) | 12.35 |
 | prior_best (stack-led) | **12.62** (was 13.21) |
 | pf_blend_last_known | 12.92 |
