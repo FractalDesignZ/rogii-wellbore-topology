@@ -49,8 +49,16 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     from rwt.features import impute_feature_frame
 
     cols = model_blob["feature_cols"]
-    # Train/serve parity: median impute (not zero-fill) for residual features
-    Xn = impute_feature_frame(stations.reindex(columns=cols)).to_numpy(dtype=float)
+    # Train/serve parity: use *stored* train medians (never batch-fit on serve)
+    stored_med = model_blob.get("feature_medians")
+    medians = (
+        {str(k): float(v) for k, v in stored_med.items()}
+        if isinstance(stored_med, dict) and stored_med
+        else None
+    )
+    Xn = impute_feature_frame(
+        stations.reindex(columns=cols), medians=medians
+    ).to_numpy(dtype=float)
     # Train-serve contract: stored prior_column is strict (no silent swap).
     # Legacy blobs without the key fall back through PRIOR_FALLBACKS.
     stored_prior = model_blob.get("prior_column")

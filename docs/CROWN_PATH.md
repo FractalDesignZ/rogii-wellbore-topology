@@ -30,7 +30,8 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| residual on **prior_stack** (Gate3 ACCEPT) | **11.03** (was 11.27 / 11.49) |
+| residual on **prior_stack** (Gate3 ACCEPT) | **11.08** honest OOF (fold-safe impute) |
+| residual set-4 pre-P1 (leaky median) | 11.03 |
 | residual set-3 default | 11.27 |
 | residual on prior_last_tvt | 12.30 |
 | prior_stack (best pure) | **12.33** |

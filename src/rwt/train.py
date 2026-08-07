@@ -127,7 +127,10 @@ def train_lgbm_residual(
             f"Insufficient labeled prediction-zone rows for residual train "
             f"(n={len(train_df)}). Need finite TVT and {prior_col} values."
         )
-    X, cols = feature_matrix(train_df)
+    from rwt.features import compute_feature_medians, impute_feature_frame
+
+    # Raw features (NaN kept) — impute fold-local medians only (no OOF leak)
+    X_raw, cols = feature_matrix(train_df, impute=False)
     y = train_df["TVT"].to_numpy(dtype=float)
     prior = train_df[prior_col].to_numpy(dtype=float)
     y_res = y - prior
@@ -209,11 +212,17 @@ def train_lgbm_residual(
         n_rounds, early = 1200, 80
 
     def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int) -> None:
+        # Medians from train fold only — never validation wells (CR P1)
+        tr_frame = pd.DataFrame(X_raw[tr], columns=cols)
+        va_frame = pd.DataFrame(X_raw[va], columns=cols)
+        fold_med = compute_feature_medians(tr_frame)
+        Xtr = impute_feature_frame(tr_frame, medians=fold_med).to_numpy(dtype=float)
+        Xva = impute_feature_frame(va_frame, medians=fold_med).to_numpy(dtype=float)
         dtr = lgb.Dataset(
-            X[tr], label=y_res[tr], weight=sample_w[tr], feature_name=cols
+            Xtr, label=y_res[tr], weight=sample_w[tr], feature_name=cols
         )
         dva = lgb.Dataset(
-            X[va], label=y_res[va], weight=sample_w[va], feature_name=cols, reference=dtr
+            Xva, label=y_res[va], weight=sample_w[va], feature_name=cols, reference=dtr
         )
         preds_bag: list[np.ndarray] = []
         for b in range(n_seed_bag):
@@ -226,7 +235,7 @@ def train_lgbm_residual(
                 valid_sets=[dva],
                 callbacks=[lgb.early_stopping(early, verbose=False)],
             )
-            preds_bag.append(np.asarray(model.predict(X[va]), dtype=float))
+            preds_bag.append(np.asarray(model.predict(Xva), dtype=float))
             models.append(model)
         pred_res = np.mean(np.vstack(preds_bag), axis=0)
         pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
@@ -246,10 +255,12 @@ def train_lgbm_residual(
         oof_mask[va] = True
     else:
         gkf = GroupKFold(n_splits=min(n_splits, n_groups))
-        for fold, (tr, va) in enumerate(gkf.split(X, y_res, groups)):
+        for fold, (tr, va) in enumerate(gkf.split(X_raw, y_res, groups)):
             _fit_fold(tr, va, fold)
             oof_mask[va] = True
 
+    # Serve medians: full labeled toe set (no test leakage); stored on model blob
+    feature_medians = compute_feature_medians(pd.DataFrame(X_raw, columns=cols))
     oof = np.clip(oof, -residual_max_dev, residual_max_dev)
     oof_tvt = prior + oof
     from rwt.kernel_api import resolve_kernel
@@ -374,6 +385,7 @@ def train_lgbm_residual(
         "n_rounds_cap": int(n_rounds),
         "n_seed_bag": int(n_seed_bag),
         "residual_max_dev": float(residual_max_dev),
+        "feature_medians": {k: float(v) for k, v in feature_medians.items()},
         "baseline_rmse": baseline_rmse,
         "beats_baselines": beats,
         "kernel_id": k.kernel_id(),
@@ -409,6 +421,8 @@ def train_lgbm_residual(
         "feature_cols": cols,
         "prior_column": report["prior_column"],
         "use_residual": use_residual,
+        "feature_medians": feature_medians,
+        "residual_max_dev": residual_max_dev,
     }
 
 
@@ -488,8 +502,9 @@ def main(argv: list[str] | None = None) -> int:
                     "prior_column": result["prior_column"],
                     "use_residual": result.get("use_residual", True),
                     "residual_max_dev": float(
-                        result.get("report", {}).get("residual_max_dev", 18.0)
+                        result.get("residual_max_dev", 18.0)
                     ),
+                    "feature_medians": result.get("feature_medians") or {},
                 },
                 out / "model.joblib",
             )

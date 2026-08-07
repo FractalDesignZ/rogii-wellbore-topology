@@ -252,28 +252,45 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(float(out["a"].iloc[1]), 15.0)
         self.assertTrue(np.allclose(out["b"].to_numpy(), 0.0))
 
+    def test_fold_medians_do_not_use_holdout(self) -> None:
+        """Train-fold medians ignore validation rows (CR P1)."""
+        from rwt.features import compute_feature_medians, impute_feature_frame
+
+        # train fold all ~10; holdout has 1000 — must not pull train median
+        tr = pd.DataFrame({"x": [10.0, 10.0, np.nan]})
+        va = pd.DataFrame({"x": [1000.0, np.nan]})
+        med = compute_feature_medians(tr)
+        self.assertAlmostEqual(med["x"], 10.0)
+        va_i = impute_feature_frame(va, medians=med)
+        self.assertAlmostEqual(float(va_i["x"].iloc[1]), 10.0)
+
     def test_serve_residual_clip(self) -> None:
-        """Serve path clamps residual Δ and uses median impute."""
+        """Serve path clamps residual Δ and uses stored train medians."""
         from rwt.submit import predict_stations
 
         class _M:
             def predict(self, X):
+                # assert impute used stored median 7.0 not batch median of [7,99]
+                self.last_x = float(X[1, 0])
                 return np.full(len(X), 50.0)  # runaway residual
 
+        m = _M()
         st = pd.DataFrame(
             {
                 "prior_stack": [100.0, 100.0],
-                "relative_md": [0.0, np.nan],
+                "relative_md": [7.0, np.nan],
             }
         )
         blob = {
-            "models": [_M()],
+            "models": [m],
             "feature_cols": ["relative_md"],
             "prior_column": "prior_stack",
             "use_residual": True,
             "residual_max_dev": 18.0,
+            "feature_medians": {"relative_md": 7.0},
         }
         y = predict_stations(blob, st)
+        self.assertAlmostEqual(m.last_x, 7.0)
         self.assertTrue(np.allclose(y, 118.0))
 
     def test_process_bias_near_ps_clipped(self) -> None:

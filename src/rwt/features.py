@@ -434,6 +434,9 @@ FEATURE_COLS_DEFAULT = [
 def feature_matrix(
     stations: pd.DataFrame,
     cols: list[str] | None = None,
+    *,
+    medians: dict[str, float] | None = None,
+    impute: bool = True,
 ) -> tuple[np.ndarray, list[str]]:
     cols = cols or [c for c in FEATURE_COLS_DEFAULT if c in stations.columns]
     # Trap 1: refuse train-only form surfaces if a caller tries to inject them
@@ -454,21 +457,42 @@ def feature_matrix(
             f"structural leak: refuse form-surface features {leak} "
             f"(train-only ANCC..BUDA; drop before residual train)"
         )
-    frame = impute_feature_frame(stations[cols])
+    frame = stations[cols].astype(float).replace([np.inf, -np.inf], np.nan)
+    if impute:
+        frame = impute_feature_frame(frame, medians=medians)
     X = frame.to_numpy(dtype=float)
     return X, cols
 
 
-def impute_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    """
-    Median impute per column (train/serve parity). Zero-fill biases residual
-    when features are sparse (max-op set-5 / crown set-3/4).
-    """
-    out = frame.astype(float).replace([np.inf, -np.inf], np.nan).copy()
-    for c in out.columns:
-        s = out[c]
-        med = float(np.nanmedian(s.to_numpy(dtype=float))) if s.notna().any() else 0.0
+def compute_feature_medians(frame: pd.DataFrame) -> dict[str, float]:
+    """Fit per-column medians (train fold only — never on validation rows)."""
+    out: dict[str, float] = {}
+    arr = frame.astype(float).replace([np.inf, -np.inf], np.nan)
+    for c in arr.columns:
+        s = arr[c].to_numpy(dtype=float)
+        med = float(np.nanmedian(s)) if np.isfinite(s).any() else 0.0
         if not np.isfinite(med):
             med = 0.0
-        out[c] = s.fillna(med)
+        out[str(c)] = med
+    return out
+
+
+def impute_feature_frame(
+    frame: pd.DataFrame,
+    medians: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """
+    Median impute per column.
+
+    If ``medians`` is provided, apply those values only (serve / fold apply).
+    If omitted, fit medians from this frame (legacy / exploratory paths).
+    """
+    out = frame.astype(float).replace([np.inf, -np.inf], np.nan).copy()
+    if medians is None:
+        medians = compute_feature_medians(out)
+    for c in out.columns:
+        med = float(medians.get(str(c), 0.0))
+        if not np.isfinite(med):
+            med = 0.0
+        out[c] = out[c].fillna(med)
     return out
