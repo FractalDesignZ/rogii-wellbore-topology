@@ -230,15 +230,14 @@ def particle_prior_for_well(
             miss = ~np.isfinite(known_tvt[kidx]) & np.isfinite(tcol[kidx])
             known_tvt[kidx[miss]] = tcol[kidx[miss]]
 
-    # safe constant if no typewell / no heel TVT
+    # Finite heel/reference TVT only — never invent 0.0 as a TVT prior
     last_f = last if np.isfinite(last) else (
         float(known_tvt[np.isfinite(known_tvt)][-1]) if np.isfinite(known_tvt).any() else float("nan")
     )
-    if typewell is None or "GR" not in typewell.columns or "TVT" not in typewell.columns:
-        fill = last_f if np.isfinite(last_f) else 0.0  # only true last resort
-        if np.isfinite(known_tvt).any():
-            fill = float(known_tvt[np.isfinite(known_tvt)][-1])
-        arr = np.full(n, fill, dtype=float)
+
+    def _nan_pf_result(fill: float) -> dict[str, Any]:
+        """No valid reference: NaN priors (caller skips / residual masks). Heel still locked."""
+        arr = np.full(n, fill if np.isfinite(fill) else np.nan, dtype=float)
         arr = np.where(np.isfinite(known_tvt), known_tvt, arr)
         return {
             "prior_pf_tvt": arr.copy(),
@@ -246,18 +245,33 @@ def particle_prior_for_well(
             "prior_pf_bag": arr.copy(),
             "pf_confidence": np.zeros(n),
             "pf_tvt_std": np.full(n, np.nan),
-            "prior_last_tvt": fill,
+            "prior_last_tvt": float(fill) if np.isfinite(fill) else float("nan"),
             "n_pf_bag": 0,
         }
 
+    if typewell is None or "GR" not in typewell.columns or "TVT" not in typewell.columns:
+        if not np.isfinite(last_f) and not np.isfinite(known_tvt).any():
+            return _nan_pf_result(float("nan"))
+        fill = last_f if np.isfinite(last_f) else float(known_tvt[np.isfinite(known_tvt)][-1])
+        return _nan_pf_result(fill)
+
     gr = lateral["GR"].to_numpy(dtype=float) if "GR" in lateral.columns else np.full(n, np.nan)
-
-    seed_tvt = last_f if np.isfinite(last_f) else float(np.nanmedian(typewell["TVT"]))
-    if np.isfinite(known_tvt).any():
-        seed_tvt = float(known_tvt[np.isfinite(known_tvt)][-1])
-
     tw_gr = typewell["GR"].to_numpy(dtype=float)
     tw_tvt = typewell["TVT"].to_numpy(dtype=float)
+    tw_ok = tw_tvt[np.isfinite(tw_tvt)]
+    if tw_ok.size == 0:
+        # typewell present but no finite TVT grid — no PF without inventing TVT
+        if not np.isfinite(last_f) and not np.isfinite(known_tvt).any():
+            return _nan_pf_result(float("nan"))
+        fill = last_f if np.isfinite(last_f) else float(known_tvt[np.isfinite(known_tvt)][-1])
+        return _nan_pf_result(fill)
+
+    seed_tvt = last_f if np.isfinite(last_f) else float(np.median(tw_ok))
+    if np.isfinite(known_tvt).any():
+        seed_tvt = float(known_tvt[np.isfinite(known_tvt)][-1])
+    if not np.isfinite(seed_tvt):
+        return _nan_pf_result(float("nan"))
+
     rng_seed = int(seed)  # caller seed (not shadowed by TVT seed)
 
     def _run_one(cfg: dict[str, Any], seed_offset: int = 0) -> dict[str, np.ndarray]:

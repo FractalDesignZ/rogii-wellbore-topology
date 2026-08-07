@@ -228,8 +228,10 @@ def train_lgbm_residual(
         final_oof = oof_r
     else:
         cand = {prior_col: float(gate3.detail["oof_rmse_prior"])}
-        if lk_m is not None and np.isfinite(gate3.detail.get("oof_rmse_last_known") or np.nan):
-            cand["prior_last_tvt"] = float(gate3.detail["oof_rmse_last_known"])
+        # exact 0.0 is finite and valid — never use truthiness on the score
+        lk_rmse = gate3.detail.get("oof_rmse_last_known")
+        if lk_m is not None and lk_rmse is not None and np.isfinite(lk_rmse):
+            cand["prior_last_tvt"] = float(lk_rmse)
         serve_prior_col = min(cand, key=cand.get)
         final_oof = cand[serve_prior_col]
         final_models = []

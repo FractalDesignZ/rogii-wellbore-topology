@@ -67,8 +67,12 @@ class TestParticleTrack(unittest.TestCase):
         k = sp.known_idx
         err = np.nanmean(np.abs(d["prior_dip_stack"][k] - df.iloc[k]["TVT_input"].to_numpy(float)))
         self.assertLess(err, 2.0)
-        # dip coefficients should be non-trivial for this synthetic plane
-        self.assertTrue(abs(d["dip_coef_x"]) + abs(d["dip_coef_y"]) > 1e-6)
+        # toe projection: synthetic plane TVT = 100 + 0.01*X + 0.02*Y — fit should recover
+        toe = sp.predict_idx
+        true_toe = df.iloc[toe]["TVT"].to_numpy(float)
+        pred_toe = d["prior_dip_stack"][toe]
+        toe_err = float(np.nanmean(np.abs(pred_toe - true_toe)))
+        self.assertLess(toe_err, 5.0, msg=f"toe dip projection err={toe_err}")
 
     def test_well_prior_blend_column(self) -> None:
         n = 40
@@ -98,12 +102,16 @@ class TestParticleTrack(unittest.TestCase):
         locked = p["prior_pf_blend"][k]
         true_h = df.iloc[k]["TVT_input"].to_numpy(float)
         self.assertTrue(np.allclose(locked, true_h, equal_nan=False, atol=1e-6))
-        # seed changes bagged toe slightly when bag=False still uses seed
+        # seed must reach RNG: different seeds → not-all-close toe tracks
         p2 = particle_prior_for_well(df, tw, sp, n_particles=150, bag=False, seed=7)
         toe = sp.predict_idx
-        # at least some toe difference expected under different RNG
         self.assertEqual(len(p2["prior_pf_tvt"]), n)
-        _ = np.max(np.abs(p["prior_pf_tvt"][toe] - p2["prior_pf_tvt"][toe]))
+        t0 = p["prior_pf_tvt"][toe]
+        t1 = p2["prior_pf_tvt"][toe]
+        self.assertFalse(
+            np.allclose(t0, t1, atol=1e-9, equal_nan=True),
+            msg="seed must change PF toe track when bag=False",
+        )
 
 
 if __name__ == "__main__":
