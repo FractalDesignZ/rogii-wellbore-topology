@@ -73,9 +73,9 @@ Soft neighbor → stack **before** `prior_best` **only when** `STACK_SOFT_NB_WEI
 `prior_disagreement` post-transfer; `compute_prior_disagreement` helper; residual Δ clip vs base only.
 Coverage: default-off stack identity + trusted-neighbor `prior_best` pull (set-11 tests).
 
-**Open P2 (docs / edge coverage):** missing-`prior_stack` GR mismatch path; residual
-smooth multi-well `well_id` contract; dual-serving head resolution stress; deep
-`n_refit` floor integration through `train_lgbm_residual` (unit coverage partial).
+**P2 closed (set-17/18 CR):** missing-`prior_stack` GR guard; dual-serve distinct
+bases; deep `n_refit` floor+p90 unit tests; seal per-well error isolation +
+`seal_threads` actual pool size; heel_known helper; shared Gate3 floor map.
 
 ## Measure protocol
 
