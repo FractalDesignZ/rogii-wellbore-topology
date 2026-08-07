@@ -263,6 +263,8 @@ def train_lgbm_residual(
     feature_medians = compute_feature_medians(pd.DataFrame(X_raw, columns=cols))
     oof = np.clip(oof, -residual_max_dev, residual_max_dev)
     oof_tvt = prior + oof
+    # Note: do NOT re-clamp residual head to last±max_dev — Gate3 residual may
+    # correctly leave the pure-prior band (diag: last clamp regressed 11.08→11.35).
     from rwt.kernel_api import resolve_kernel
     from rwt.provenance import seal_artifact
 

@@ -79,7 +79,8 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         return prior
     preds = [m.predict(Xn) for m in models]
     res = np.mean(np.vstack(preds), axis=0)
-    # Clamp residual delta so a runaway head cannot leave last±max_dev band
+    # Clamp residual Δ vs residual *base* only (prior_stack). Do not re-clamp to
+    # last_known: Gate3 residual may leave the pure-prior band when it wins OOF.
     max_dev = float(model_blob.get("residual_max_dev", 18.0))
     res = np.clip(res, -max_dev, max_dev)
     out = prior + res

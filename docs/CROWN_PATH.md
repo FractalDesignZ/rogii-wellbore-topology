@@ -16,8 +16,8 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset (capped ±40 ft) |
-| **Residual** | Default base **`prior_stack`**; toe-weighted L2 LGBM; dual seed bag; residual Δ clip ±18; median impute train/serve; Gate3 |
-| **Clamp** | All pure candidates ≤ last_known ± 18 ft |
+| **Residual** | Default base **`prior_stack`**; toe-weighted L2; dual seed bag; Δ clip vs base ±18; fold-safe medians; Gate3 |
+| **Clamp** | Pure priors ≤ last±18; residual Δ ≤ base±18 (may leave last band when G3 wins) |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
 ## What still is RESIDUE
@@ -26,23 +26,30 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-4)
+## Measure (12w crown set-5 / set-4 honest)
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| residual on **prior_stack** (Gate3 ACCEPT) | **11.08** honest OOF (fold-safe impute) |
-| residual set-4 pre-P1 (leaky median) | 11.03 |
-| residual set-3 default | 11.27 |
+| residual on **prior_stack** (Gate3 ACCEPT) | **11.08** honest OOF |
+| residual set-3 | 11.27 |
 | residual on prior_last_tvt | 12.30 |
 | prior_stack (best pure) | **12.33** |
 | prior_best (stack-led) | **12.65** |
-| pf_blend_last_known | 12.92 |
 | last_known | 13.41 |
 | prior_ncc (seed-local) | **16.27** |
-| pf_bag (median) | 17.44 |
 
-Set-4 levers: dual seed bag residual; residual Δ clip ±18 train/serve; median impute train/serve parity;
-`prior_disagreement` feature; soft neighbor into stack. (Huber objective rejected — regressed to 11.56.)
+### Rejected A/B (set-5)
+
+| Lever | 12w residual | Note |
+| --- | ---: | --- |
+| Huber objective | 11.56 | worse than L2 |
+| trust×disagreement shrink | 11.50 | over-shrinks good residual |
+| re-clamp residual to last±18 | 11.35 | truth can leave pure band |
+| md_frac + stack_minus_last feats | 11.34 | collinear noise |
+
+### Kept (set-5 coherence)
+
+Soft neighbor → stack **before** `prior_best` (ensemble saw stale stack). Residual Δ clip vs base only.
 
 ## Measure protocol
 

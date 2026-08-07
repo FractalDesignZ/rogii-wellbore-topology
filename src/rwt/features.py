@@ -316,6 +316,24 @@ def build_station_frame(
         if "neighbor_transfer_ok" in stations.columns
         else None
     )
+    # Soft neighbor into residual base (stack) *before* prior_best so ensemble sees it
+    if (
+        "prior_stack" in stations.columns
+        and nb is not None
+        and nb_ok is not None
+        and np.isfinite(last_f)
+    ):
+        st = stations["prior_stack"].to_numpy(dtype=float).copy()
+        ok = np.asarray(nb_ok, dtype=float)
+        nbt = np.asarray(nb, dtype=float)
+        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st)
+        if m.any():
+            nb_c = last_f + np.clip(nbt - last_f, -18.0, 18.0)
+            w = 0.12 * np.clip(ok, 0.0, 1.0)
+            st = np.where(m, (1.0 - w) * st + w * nb_c, st)
+            st = last_f + np.clip(st - last_f, -18.0, 18.0)
+            stations["prior_stack"] = st
+
     best = blend_prior_best(
         last_f,
         stations["prior_stack"].to_numpy(dtype=float),
@@ -349,23 +367,6 @@ def build_station_frame(
                 if 0 <= int(ki) < len(best) and np.isfinite(hv):
                     best[int(ki)] = float(hv)
     stations["prior_best"] = best
-    # Soft neighbor into residual base (stack) only where transfer is trusted
-    if (
-        "prior_stack" in stations.columns
-        and nb is not None
-        and nb_ok is not None
-        and np.isfinite(last_f)
-    ):
-        st = stations["prior_stack"].to_numpy(dtype=float).copy()
-        ok = np.asarray(nb_ok, dtype=float)
-        nbt = np.asarray(nb, dtype=float)
-        m = (ok > 0.55) & np.isfinite(nbt) & np.isfinite(st)
-        if m.any():
-            nb_c = last_f + np.clip(nbt - last_f, -18.0, 18.0)
-            w = 0.12 * np.clip(ok, 0.0, 1.0)
-            st = np.where(m, (1.0 - w) * st + w * nb_c, st)
-            st = last_f + np.clip(st - last_f, -18.0, 18.0)
-            stations["prior_stack"] = st
     stations = kernel.augment_station_frame(stations, df, typewell)
     stations = embed_column(stations)
     return stations

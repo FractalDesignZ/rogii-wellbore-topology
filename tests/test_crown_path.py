@@ -293,6 +293,33 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(m.last_x, 7.0)
         self.assertTrue(np.allclose(y, 118.0))
 
+    def test_serve_residual_clip_vs_base_not_last(self) -> None:
+        """Residual Δ clipped vs residual base prior; may leave last±dev if base does."""
+        from rwt.submit import predict_stations
+
+        class _M:
+            def predict(self, X):
+                return np.full(len(X), 30.0)
+
+        st = pd.DataFrame(
+            {
+                "prior_stack": [110.0, 110.0],  # base already +10 from last
+                "prior_last_tvt": [100.0, 100.0],
+                "relative_md": [0.0, 1.0],
+            }
+        )
+        blob = {
+            "models": [_M()],
+            "feature_cols": ["relative_md"],
+            "prior_column": "prior_stack",
+            "use_residual": True,
+            "residual_max_dev": 18.0,
+            "feature_medians": {"relative_md": 0.0},
+        }
+        y = predict_stations(blob, st)
+        # 110 + clip(30→18) = 128 (beyond last±18 — intentional when residual wins)
+        self.assertTrue(np.allclose(y, 128.0))
+
     def test_serve_blob_medians_match_refit_contract(self) -> None:
         """Serialized blob must carry single full-train medians for serve ensemble."""
         # contract unit: not full LGBM fit — documents expected keys after Gate3 accept
