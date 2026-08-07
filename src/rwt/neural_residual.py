@@ -297,6 +297,23 @@ def train_neural_residual(
     prior_m = prior_flat[m]
     y_m = y_flat[m]
     oof_m = oof_pred[m]
+    if not np.any(m):
+        return NeuralReport(
+            ok=False,
+            device=dev,
+            oof_rmse=float("inf"),
+            oof_rmse_selected=float("inf"),
+            use_residual=False,
+            baseline_rmse={},
+            gate3={"name": "RESIDUAL_ACCEPTANCE", "passed": False, "error": "empty_oof"},
+            fold_rmse=[float(x) for x in fold_scores],
+            n_stations=int(len(train_df)),
+            n_wells=int(n_groups),
+            seconds=round(time.perf_counter() - t0, 2),
+            detail={"error": "no finite OOF predictions"},
+        )
+    # Gate3 floors must be scored on the *same* OOF rows as residual (LGBM parity).
+    # Skip floors with holes on m so beat_all_floors is a fair comparison.
     floor_rmses: dict[str, float] = {}
     for name, col in (
         ("last_known", "prior_last_tvt"),
@@ -312,27 +329,10 @@ def train_neural_residual(
         if col not in train_df.columns:
             continue
         b = train_df[col].to_numpy(float)
-        # Score on OOF rows where this floor is finite (same spirit as LGBM path)
-        mm = m & np.isfinite(b)
-        if int(mm.sum()) < 50:
+        if not np.isfinite(b[m]).all():
             continue
-        floor_rmses[name] = rmse(y_flat[mm], b[mm])
+        floor_rmses[name] = rmse(y_flat[m], b[m])
     baseline_rmse = dict(floor_rmses)
-    if not np.any(m):
-        return NeuralReport(
-            ok=False,
-            device=dev,
-            oof_rmse=float("inf"),
-            oof_rmse_selected=float("inf"),
-            use_residual=False,
-            baseline_rmse=baseline_rmse,
-            gate3={"name": "RESIDUAL_ACCEPTANCE", "passed": False, "error": "empty_oof"},
-            fold_rmse=[float(x) for x in fold_scores],
-            n_stations=int(len(train_df)),
-            n_wells=int(n_groups),
-            seconds=round(time.perf_counter() - t0, 2),
-            detail={"error": "no finite OOF predictions"},
-        )
     lk_m = None
     if "prior_last_tvt" in train_df.columns:
         lk = train_df["prior_last_tvt"].to_numpy(float)[m]

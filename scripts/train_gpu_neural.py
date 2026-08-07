@@ -78,9 +78,13 @@ def main() -> int:
         f"t={time.perf_counter()-t0:.1f}s",
         flush=True,
     )
+    n_wells = int(stations["well_id"].nunique()) if "well_id" in stations.columns else 0
+    n_splits = max(2, min(int(a.folds), n_wells)) if n_wells else int(a.folds)
+    if n_splits != a.folds:
+        print(f"[folds] clamped {a.folds} → {n_splits} (n_wells={n_wells})", flush=True)
     rep = train_neural_residual(
         stations,
-        n_splits=a.folds,
+        n_splits=n_splits,
         epochs=a.epochs,
         batch_wells=8,
         max_len=2048,
