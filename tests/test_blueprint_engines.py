@@ -1,0 +1,110 @@
+"""Blueprint traps: form-surface leak, local-dip prior, relative features."""
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from rwt.features import FEATURE_COLS_DEFAULT, build_station_frame, feature_matrix  # noqa: E402
+from rwt.middle_out import resolve_middle_out  # noqa: E402
+from rwt.priors import FORM_SURFACE_LEAK_COLS, compute_local_dip_prior  # noqa: E402
+
+
+class TestBlueprintEngines(unittest.TestCase):
+    def _synthetic_well(self, n: int = 80, heel: int = 25) -> tuple[pd.DataFrame, object]:
+        # flat beds TVT = C - Z with C=1000; Z decreases along well
+        md = np.arange(n, dtype=float)
+        z = -9000.0 - 0.05 * md
+        tvt = 1000.0 - z  # dTVT/dZ = -1
+        # mild GR signal
+        gr = 80 + 5 * np.sin(md / 7)
+        df = pd.DataFrame(
+            {
+                "MD": md,
+                "X": md * 10.0,
+                "Y": np.zeros(n),
+                "Z": z,
+                "GR": gr,
+                "TVT": tvt,
+                "TVT_input": [float(tvt[i]) if i < heel else np.nan for i in range(n)],
+                # train-only mirage surfaces — must never enter residual X
+                "ANCC": np.full(n, -9100.0),
+                "BUDA": np.full(n, -9500.0),
+            }
+        )
+        sp = resolve_middle_out(df, well_id="BLUE01")
+        return df, sp
+
+    def test_form_surfaces_not_in_feature_cols(self) -> None:
+        for c in FORM_SURFACE_LEAK_COLS:
+            self.assertNotIn(c, FEATURE_COLS_DEFAULT)
+            self.assertNotIn(f"form_{c}", FEATURE_COLS_DEFAULT)
+            self.assertNotIn(f"z_minus_{c}", FEATURE_COLS_DEFAULT)
+        # absolute map coords banned from residual X
+        self.assertNotIn("MD", FEATURE_COLS_DEFAULT)
+        self.assertNotIn("X", FEATURE_COLS_DEFAULT)
+        self.assertNotIn("Y", FEATURE_COLS_DEFAULT)
+        self.assertNotIn("Z", FEATURE_COLS_DEFAULT)
+        self.assertIn("relative_md", FEATURE_COLS_DEFAULT)
+        self.assertIn("prior_local_dip", FEATURE_COLS_DEFAULT)
+
+    def test_feature_matrix_rejects_form_leak(self) -> None:
+        st = pd.DataFrame(
+            {
+                "relative_md": [0.0, 1.0],
+                "GR": [80.0, 81.0],
+                "form_ANCC": [-9100.0, -9100.0],
+            }
+        )
+        with self.assertRaises(ValueError):
+            feature_matrix(st, cols=["relative_md", "GR", "form_ANCC"])
+
+    def test_local_dip_prior_locks_heel_and_projects(self) -> None:
+        df, sp = self._synthetic_well()
+        out = compute_local_dip_prior(df, sp, heel_window_ft=300.0)
+        prior = out["prior_local_dip"]
+        k = sp.known_idx
+        toe = sp.predict_idx
+        # heel lock
+        self.assertTrue(
+            np.allclose(
+                prior[k],
+                df.iloc[k]["TVT_input"].to_numpy(float),
+                atol=1e-6,
+            )
+        )
+        # flat beds → local_dip ≈ -1
+        self.assertAlmostEqual(out["local_dip"], -1.0, places=2)
+        # toe projection should track true TVT under constant dip
+        err = float(np.nanmean(np.abs(prior[toe] - df.iloc[toe]["TVT"].to_numpy(float))))
+        self.assertLess(err, 1.0, msg=f"local dip toe err={err}")
+
+    def test_build_station_frame_has_relative_and_no_form(self) -> None:
+        df, sp = self._synthetic_well()
+        tw = pd.DataFrame(
+            {
+                "TVT": np.linspace(float(df["TVT"].min()), float(df["TVT"].max()), 50),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 8, 50)),
+            }
+        )
+        st = build_station_frame(df, tw, sp, station_idx=sp.predict_idx)
+        self.assertIn("relative_md", st.columns)
+        self.assertIn("relative_z", st.columns)
+        self.assertIn("prior_local_dip", st.columns)
+        self.assertIn("GR_mean_10", st.columns)
+        self.assertIn("curvature_dls", st.columns)
+        for c in FORM_SURFACE_LEAK_COLS:
+            self.assertNotIn(f"form_{c}", st.columns)
+            self.assertNotIn(f"z_minus_{c}", st.columns)
+        X, cols = feature_matrix(st)
+        self.assertEqual(X.shape[0], len(st))
+        self.assertTrue(all("ANCC" not in c and "BUDA" not in c for c in cols))
+
+
+if __name__ == "__main__":
+    unittest.main()

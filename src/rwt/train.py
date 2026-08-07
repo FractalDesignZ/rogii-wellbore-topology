@@ -226,6 +226,7 @@ def train_lgbm_residual(
     baseline_rmse: dict[str, float] = {}
     for name, col in (
         ("last_known", "prior_last_tvt"),
+        ("local_dip_ps", "prior_local_dip"),
         ("flat_formation", "prior_flat_tvt"),
         ("linear_md_extrap", "prior_extrap_tvt"),
         ("dual_transport_mid", "prior_mid"),

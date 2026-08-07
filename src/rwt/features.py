@@ -12,9 +12,11 @@ from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
 from rwt.particle_track import particle_prior_for_well
 from rwt.priors import (
+    FORM_SURFACE_LEAK_COLS,
     _heel_tvt_values,
     blend_stack_priors,
     compute_heel_fitted_dip_prior,
+    compute_local_dip_prior,
 )
 from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
@@ -30,8 +32,10 @@ def build_station_frame(
     spatial_index: SpatialIndex | None = None,
 ) -> pd.DataFrame:
     """
-    One row per station: SE(3) local geom, dual-transport prior_mid, GR NCC,
-    formation tops, optional spatial neighbor transfer.
+    One row per station: SE(3) local geom, local-dip / PF / dual priors,
+    relative kinematics, multi-scale GR rolls + NCC, spatial neighbors.
+
+    Never emits train-only form surfaces (ANCC..BUDA) — structural leak trap.
     """
     df = lateral.reset_index(drop=True)
     n = len(df)
@@ -50,6 +54,8 @@ def build_station_frame(
         df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
     )
     dual = dual_transport_prior(df, split)
+    # Blueprint M2: PS anchor + local ΔTVT/ΔZ over last 300 ft heel
+    local_dip_p = compute_local_dip_prior(df, split)
     # Layer 1+2: heel-only flat + XY dip plane (competition-safe)
     dip_prior = compute_heel_fitted_dip_prior(df, split)
     # Layer multi-PF bag (public lite of private-6th multi-PF idea)
@@ -70,6 +76,15 @@ def build_station_frame(
         lock = np.isfinite(full)
         stack = np.where(lock, full, stack)
 
+    # M1 kinematics: inclination + dogleg proxy from MD/Z
+    md_arr = df["MD"].to_numpy(dtype=float) if "MD" in df.columns else np.arange(n, dtype=float)
+    z_arr = df["Z"].to_numpy(dtype=float) if "Z" in df.columns else np.zeros(n)
+    d_z = np.diff(z_arr, prepend=z_arr[0] if n else 0.0)
+    d_md = np.diff(md_arr, prepend=1.0 if n else 1.0)
+    d_md = np.where(np.abs(d_md) < 1e-9, 1e-9, d_md)
+    incl = np.degrees(np.arccos(np.clip(d_z / d_md, -1.0, 1.0)))
+    dls = np.diff(incl, prepend=float(incl[0]) if n else 0.0) / d_md * 100.0
+
     tw_gr = typewell["GR"].to_numpy(dtype=float) if typewell is not None and "GR" in typewell else None
     tw_tvt = (
         typewell["TVT"].to_numpy(dtype=float)
@@ -82,6 +97,20 @@ def build_station_frame(
         gr = np.full(n, np.nan, dtype=float)
     if tw_gr is not None:
         tw_gr = np.asarray(tw_gr, dtype=float)
+
+    # M3: multi-scale GR rolling stats (sensor-noise filter; trees handle NaN via fill)
+    gr_s = pd.Series(gr, dtype=float)
+    gr_rolls: dict[str, np.ndarray] = {}
+    for w in (10, 20, 40):
+        gr_rolls[f"GR_mean_{w}"] = (
+            gr_s.rolling(window=w, min_periods=1, center=True).mean().to_numpy(dtype=float)
+        )
+        gr_rolls[f"GR_std_{w}"] = (
+            gr_s.rolling(window=w, min_periods=1, center=True)
+            .std()
+            .fillna(0.0)
+            .to_numpy(dtype=float)
+        )
 
     rows = []
     idx_list = list(range(n) if station_idx is None else [int(i) for i in station_idx])
@@ -117,11 +146,17 @@ def build_station_frame(
                         )
                     ncc_cache[i] = ncc_cache[nearest]
 
+    rel_md = local_dip_p["relative_md"]
+    rel_z = local_dip_p["relative_z"]
+    prior_loc = local_dip_p["prior_local_dip"]
+    loc_dip = float(local_dip_p["local_dip"]) if np.isfinite(local_dip_p["local_dip"]) else 0.0
+
     for i in indices:
         gi = float(gr[i])
         row: dict[str, Any] = {
             "well_id": split.well_id,
             "station": i,
+            # absolute coords retained for spatial/submit id only — not in FEATURE_COLS
             "MD": float(df.loc[i, "MD"]),
             "X": float(df.loc[i, "X"]),
             "Y": float(df.loc[i, "Y"]),
@@ -130,6 +165,12 @@ def build_station_frame(
             "is_predict": bool(is_predict_mask[i]),
             "is_known": bool(is_known_mask[i]),
             **{f"well_{k}": v for k, v in well_geom.items() if np.isscalar(v)},
+            # relative kinematics (anti map-memorization)
+            "relative_md": float(rel_md[i]),
+            "relative_z": float(rel_z[i]),
+            "inclination_deg": float(incl[i]),
+            "curvature_dls": float(dls[i]),
+            "local_dip": loc_dip,
             "local_curv": float(local["local_curv"][i]),
             "local_curv_roll": float(local["local_curv_roll"][i]),
             "local_torsion": float(local["local_torsion"][i]),
@@ -152,6 +193,7 @@ def build_station_frame(
             "prior_backward_tvt": float(dual["prior_backward"][i]),
             "prior_mid": float(dual["prior_mid"][i]),
             "prior_extrap_tvt": float(dual["prior_forward"][i]),
+            "prior_local_dip": float(prior_loc[i]) if np.isfinite(prior_loc[i]) else float("nan"),
             "prior_dip_trend": float(dip_prior["prior_dip_trend"][i]),
             "prior_dip_stack": float(dip_prior["prior_dip_stack"][i]),
             "prior_pf_tvt": float(pf["prior_pf_tvt"][i]),
@@ -166,10 +208,10 @@ def build_station_frame(
             "dip_coef_x": float(dip_prior["dip_coef_x"]),
             "dip_coef_y": float(dip_prior["dip_coef_y"]),
         }
-        for form_col in ("ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA"):
-            if form_col in df.columns and pd.notna(df.loc[i, form_col]):
-                row[f"form_{form_col}"] = float(df.loc[i, form_col])
-                row[f"z_minus_{form_col}"] = row["Z"] - float(df.loc[i, form_col])
+        for rk, arr in gr_rolls.items():
+            v = float(arr[i])
+            row[rk] = v if np.isfinite(v) else 0.0
+        # INTENTIONAL: never add FORM_SURFACE_LEAK_COLS (ANCC..BUDA)
         if int(i) in ncc_cache:
             row.update(ncc_cache[int(i)])
         if "TVT" in df.columns and pd.notna(df.loc[i, "TVT"]):
@@ -186,10 +228,20 @@ def build_station_frame(
     return stations
 
 
+# Relative / prior / signal features only — no absolute X,Y map, no form surfaces.
 FEATURE_COLS_DEFAULT = [
-    "MD",
-    "Z",
+    "relative_md",
+    "relative_z",
     "GR",
+    "GR_mean_10",
+    "GR_std_10",
+    "GR_mean_20",
+    "GR_std_20",
+    "GR_mean_40",
+    "GR_std_40",
+    "inclination_deg",
+    "curvature_dls",
+    "local_dip",
     "local_curv",
     "local_curv_roll",
     "local_torsion",
@@ -225,6 +277,7 @@ FEATURE_COLS_DEFAULT = [
     "prior_forward_tvt",
     "prior_backward_tvt",
     "prior_mid",
+    "prior_local_dip",
     "prior_dip_trend",
     "prior_dip_stack",
     "prior_pf_tvt",
@@ -249,18 +302,6 @@ FEATURE_COLS_DEFAULT = [
     "neighbor_transfer_ok",
     "neighbor_count",
     "neighbor_min_dist",
-    "form_ANCC",
-    "form_ASTNU",
-    "form_ASTNL",
-    "form_EGFDU",
-    "form_EGFDL",
-    "form_BUDA",
-    "z_minus_ANCC",
-    "z_minus_ASTNU",
-    "z_minus_ASTNL",
-    "z_minus_EGFDU",
-    "z_minus_EGFDL",
-    "z_minus_BUDA",
 ]
 
 
@@ -269,5 +310,23 @@ def feature_matrix(
     cols: list[str] | None = None,
 ) -> tuple[np.ndarray, list[str]]:
     cols = cols or [c for c in FEATURE_COLS_DEFAULT if c in stations.columns]
+    # Trap 1: refuse train-only form surfaces if a caller tries to inject them
+    leak = [
+        c
+        for c in cols
+        if c in FORM_SURFACE_LEAK_COLS
+        or c.startswith("form_ANCC")
+        or c.startswith("form_AST")
+        or c.startswith("form_EGF")
+        or c.startswith("form_BUDA")
+        or c.startswith("z_minus_")
+    ]
+    # form_azimuth/form_dip are SO(3) dip-frame angles — not geological tops
+    leak = [c for c in leak if c not in ("form_azimuth_deg", "form_dip_deg")]
+    if leak:
+        raise ValueError(
+            f"structural leak: refuse form-surface features {leak} "
+            f"(train-only ANCC..BUDA; drop before residual train)"
+        )
     X = stations[cols].astype(float).replace([np.inf, -np.inf], np.nan).fillna(0.0).to_numpy()
     return X, cols
