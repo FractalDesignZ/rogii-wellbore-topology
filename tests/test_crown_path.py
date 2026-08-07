@@ -464,6 +464,64 @@ class TestCrownPath(unittest.TestCase):
         moved = unknown & (np.abs(stack - pre) > 1e-6)
         self.assertTrue(moved.any())
 
+    def test_default_soft_nb_zero_stack_neighbors_still_shift_best(self) -> None:
+        """Default weight 0: stack unchanged; prior_best differs vs no-spatial control."""
+        from rwt.features import build_station_frame
+        from rwt.spatial import SpatialIndex, well_spatial_node_from_lateral
+
+        n = 50
+        lat = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(0, 200, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, n)),
+                "TVT_input": [100.0 if i < 12 else np.nan for i in range(n)],
+                "TVT": np.full(n, 100.0),
+            }
+        )
+        nb = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(5, 205, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, n)),
+                "TVT": np.full(n, 115.0),
+                "TVT_input": [115.0 if i < 20 else np.nan for i in range(n)],
+            }
+        )
+        # typewell so PF conf > 0 (neighbor weight in prior_best needs conf)
+        tw = pd.DataFrame(
+            {
+                "TVT": np.linspace(90, 120, 100),
+                "GR": 80 + 5 * np.sin(np.linspace(0, 6, 100)),
+            }
+        )
+        idx = SpatialIndex(max_dist=500.0, close_dist=200.0)
+        idx.add(well_spatial_node_from_lateral("tgt", lat))
+        idx.add(well_spatial_node_from_lateral("nb", nb))
+        sp = resolve_middle_out(lat, well_id="tgt")
+        with_nb = build_station_frame(lat, tw, sp, spatial_index=idx)
+        no_nb = build_station_frame(lat, tw, sp, spatial_index=None)
+        # default: residual base stack not soft-nb'd
+        pre = with_nb["_prior_stack_pre_neighbor"].to_numpy(dtype=float)
+        stack = with_nb["prior_stack"].to_numpy(dtype=float)
+        self.assertTrue(np.allclose(stack, pre, equal_nan=True, atol=1e-9))
+        # neighbors still move prior_best vs sealed no-spatial control
+        unknown = ~with_nb["is_known"].to_numpy(dtype=bool)
+        ok = with_nb["neighbor_transfer_ok"].to_numpy(dtype=float)
+        conf = with_nb["pf_confidence"].to_numpy(dtype=float)
+        trusted = unknown & (ok > 0.55) & (conf > 0.2)
+        self.assertTrue(trusted.any(), "need trusted neighbor + PF conf for prior_best pull")
+        b_nb = with_nb["prior_best"].to_numpy(dtype=float)
+        b_ctrl = no_nb["prior_best"].to_numpy(dtype=float)
+        self.assertTrue(
+            np.any(np.abs(b_nb[trusted] - b_ctrl[trusted]) > 1e-3),
+            "trusted neighbor must shift prior_best vs no-spatial control",
+        )
+
     def test_impute_feature_frame_median_not_zero(self) -> None:
         from rwt.features import impute_feature_frame
 
