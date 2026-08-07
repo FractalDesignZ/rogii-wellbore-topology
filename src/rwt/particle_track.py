@@ -294,7 +294,15 @@ def particle_prior_for_well(
         )
 
     if bag:
-        runs = [_run_one(cfg, seed_offset=i * 17) for i, cfg in enumerate(_PF_BAG_CONFIGS)]
+        # thread bag configs (numpy/Python mix); multi-well uses process pool outside
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(4, len(_PF_BAG_CONFIGS))) as ex:
+            futs = [
+                ex.submit(_run_one, cfg, seed_offset=i * 17)
+                for i, cfg in enumerate(_PF_BAG_CONFIGS)
+            ]
+            runs = [f.result() for f in futs]
         bag_arr = np.mean(np.vstack([r["prior_pf_tvt"] for r in runs]), axis=0)
         conf = np.mean(np.vstack([r["pf_confidence"] for r in runs]), axis=0)
         stds = np.mean(np.vstack([r["pf_tvt_std"] for r in runs]), axis=0)

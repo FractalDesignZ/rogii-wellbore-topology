@@ -28,23 +28,20 @@ def _assemble_dataset(
     *,
     synthetic: bool = False,
     max_wells: int = 0,
+    workers: int | None = None,
+    progress: Any | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Assemble train stations + Gate 2 summary (passed/rejected well ids)."""
-    frames: list[pd.DataFrame] = []
-    gate2_results: list[dict[str, Any]] = []
-    unlabeled_skips: list[str] = []
-    passed_wells: list[str] = []
+    """Assemble train stations + Gate 2 summary (multi-process when workers>1)."""
     if synthetic or data_root is None:
         lat, tw = synthetic_well()
         sp = split_by_mask(lat, well_id="SYN01")
-        frames.append(build_station_frame(lat, tw, sp))
-        passed_wells = ["SYN01"]
+        frames = [build_station_frame(lat, tw, sp)]
         gate2_meta = {
             "name": "MIDDLE_OUT_MASK",
             "passed": True,
             "n_passed": 1,
             "n_rejected": 0,
-            "passed_wells": passed_wells,
+            "passed_wells": ["SYN01"],
             "rejected_wells": [],
             "unlabeled_skips": [],
             "results": [{"well_id": "SYN01", "passed": True, "detail": {}}],
@@ -69,51 +66,27 @@ def _assemble_dataset(
         raise FileNotFoundError(f"No wells under {root}")
     spatial: SpatialIndex = build_spatial_index([(w, d) for w, d, _s, _t in loaded])
 
-    from rwt.gates import gate_middle_out_mask
+    from rwt.parallel import assemble_wells_parallel, configure_compute_env
 
-    n = 0
-    for wid, df, sp, tw in loaded:
-        # Gate 2 first — record every result before label filters
-        g2 = gate_middle_out_mask(df, wid)
-        gate2_results.append(
-            {"well_id": wid, "passed": bool(g2.passed), "detail": g2.detail}
-        )
-        if not g2.passed:
-            print(f"[GATE2 SKIP] {wid}: {g2.detail}", flush=True)
-            continue
-        tvt_col = "TVT" if "TVT" in df.columns else "TVT_true"
-        tvt_arr = df[tvt_col].to_numpy()
-        pred_idx = np.asarray(sp.predict_idx, dtype=int)
-        labeled_pred = pred_idx[pd.notna(tvt_arr[pred_idx])]
-        if len(labeled_pred) == 0:
-            unlabeled_skips.append(wid)
-            continue
-        frames.append(
-            build_station_frame(
-                df,
-                tw,
-                sp,
-                station_idx=labeled_pred,
-                spatial_index=spatial,
-            )
-        )
-        passed_wells.append(wid)
-        n += 1
-        if n % 10 == 0:
-            print(f"assembled {n} wells…", flush=True)
+    cfg = configure_compute_env(workers=workers)
+    print(
+        f"[COMPUTE] workers={cfg['workers']} blas_threads={cfg['blas_threads']} "
+        f"cpus={cfg['cpu_count']} — {cfg['note']}",
+        flush=True,
+    )
+    frames, gate2_meta = assemble_wells_parallel(
+        loaded,
+        spatial,
+        workers=int(cfg["workers"]),
+        progress=progress,
+    )
     if not frames:
         raise FileNotFoundError(f"No labeled predict stations under {root}")
-    rejected = [r for r in gate2_results if not r["passed"]]
-    gate2_meta = {
-        "name": "MIDDLE_OUT_MASK",
-        "passed": len(rejected) == 0 and len(passed_wells) > 0,
-        "n_passed": len(passed_wells),
-        "n_rejected": len(rejected),
-        "passed_wells": passed_wells,
-        "rejected_wells": rejected,
-        "unlabeled_skips": unlabeled_skips,
-        "results": gate2_results,
-    }
+    print(
+        f"assembled {len(frames)} wells "
+        f"(workers={gate2_meta.get('workers')}, gate2_reject={gate2_meta.get('n_rejected')})",
+        flush=True,
+    )
     return pd.concat(frames, ignore_index=True), gate2_meta
 
 
@@ -165,6 +138,13 @@ def train_lgbm_residual(
     models = []
     fold_scores: list[float] = []
     # Residual head: shallow, regularized — target is small ΔTVT, not absolute map
+    import os as _os
+
+    lgb_threads = int(
+        _os.environ.get("RWT_LGBM_THREADS")
+        or _os.environ.get("OMP_NUM_THREADS")
+        or max(1, (_os.cpu_count() or 4))
+    )
     params = {
         "objective": "regression",
         "metric": "rmse",
@@ -175,6 +155,7 @@ def train_lgbm_residual(
         "bagging_fraction": 0.8,
         "bagging_freq": 1,
         "lambda_l2": 2.0,
+        "num_threads": lgb_threads,
         "verbosity": -1,
         "seed": seed,
     }
@@ -373,6 +354,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-wells", type=int, default=0)
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="process workers for well assemble (0=auto cpu-1)",
+    )
+    ap.add_argument(
         "--prior-col",
         default=None,
         help=f"residual base prior column (default: {DEFAULT_PRIOR_COL})",
@@ -381,43 +368,79 @@ def main(argv: list[str] | None = None) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    stations, gate2_meta = _assemble_dataset(
-        Path(args.data) if args.data else None,
-        synthetic=args.synthetic or not args.data,
-        max_wells=args.max_wells,
-    )
-    stations.to_csv(out / "stations.csv", index=False)
-    result = train_lgbm_residual(
-        stations,
-        n_splits=args.folds,
-        prior_col=args.prior_col,
-        gate2_meta=gate2_meta,
-    )
-    report = result["report"]
-    (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    try:
-        import joblib
+    from rwt.parallel import configure_compute_env
+    from rwt.progress import init_progress
 
-        joblib.dump(
-            {
-                "models": result["models"],
-                "feature_cols": result["feature_cols"],
-                "prior_column": result["prior_column"],
-                "use_residual": result.get("use_residual", True),
-            },
-            out / "model.joblib",
+    # resolve workers before progress snapshot so dashboard shows real RWT_WORKERS
+    workers = args.workers if args.workers > 0 else None
+    cfg = configure_compute_env(workers=workers)
+    progress = init_progress(out)
+    progress.state["workers"] = int(cfg["workers"])
+    try:
+        stations, gate2_meta = _assemble_dataset(
+            Path(args.data) if args.data else None,
+            synthetic=args.synthetic or not args.data,
+            max_wells=args.max_wells,
+            workers=int(cfg["workers"]),
+            progress=progress,
         )
-    except Exception as e:
-        print(f"FAIL model.joblib: {e}", flush=True)
-        report["ok"] = False
-        report["model_error"] = str(e)[:400]
-        (out / "cv_report.json").write_text(
-            json.dumps(report, indent=2) + "\n", encoding="utf-8"
+        stations.to_csv(out / "stations.csv", index=False)
+        progress.set_phase(
+            "train",
+            total=args.folds,
+            message=f"stations={len(stations)} wells≈{stations['well_id'].nunique()}",
+        )
+        progress.update_metrics(
+            {
+                "n_stations": int(len(stations)),
+                "n_wells_stations": int(stations["well_id"].nunique())
+                if "well_id" in stations.columns
+                else 0,
+            }
+        )
+        result = train_lgbm_residual(
+            stations,
+            n_splits=args.folds,
+            prior_col=args.prior_col,
+            gate2_meta=gate2_meta,
+        )
+        report = result["report"]
+        (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        try:
+            import joblib
+
+            joblib.dump(
+                {
+                    "models": result["models"],
+                    "feature_cols": result["feature_cols"],
+                    "prior_column": result["prior_column"],
+                    "use_residual": result.get("use_residual", True),
+                },
+                out / "model.joblib",
+            )
+        except Exception as e:
+            print(f"FAIL model.joblib: {e}", flush=True)
+            report["ok"] = False
+            report["model_error"] = str(e)[:400]
+            (out / "cv_report.json").write_text(
+                json.dumps(report, indent=2) + "\n", encoding="utf-8"
+            )
+            progress.fail(str(e)[:200])
+            print(json.dumps(report, indent=2))
+            return 1
+        progress.finish(
+            "train complete",
+            oof_rmse_selected=report.get("oof_rmse_selected"),
+            use_residual=report.get("use_residual"),
+            final_prior_type=report.get("final_prior_type"),
+            n_wells=report.get("n_wells"),
+            baseline_rmse=report.get("baseline_rmse"),
         )
         print(json.dumps(report, indent=2))
-        return 1
-    print(json.dumps(report, indent=2))
-    return 0 if report.get("ok") else 1
+        return 0 if report.get("ok") else 1
+    except Exception as e:
+        progress.fail(str(e)[:400])
+        raise
 
 
 if __name__ == "__main__":
