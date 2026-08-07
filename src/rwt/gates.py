@@ -62,28 +62,41 @@ def gate_residual_acceptance(
     oof_residual_pred: np.ndarray,
     prior_pred: np.ndarray,
     *,
-    prior_name: str = "prior_pf_blend",
+    prior_name: str = "prior_stack",
+    last_known_pred: np.ndarray | None = None,
 ) -> GateResult:
     """
-    Gate 3: accept residual head only if OOF RMSE ≤ pure prior RMSE.
+    Gate 3: accept residual head only if:
+      OOF_RMSE(residual) ≤ OOF_RMSE(prior)  AND
+      OOF_RMSE(residual) ≤ OOF_RMSE(last_known)   (when last_known provided)
 
-    If rejected, production path must fall back to pure prior (no residual).
+    Competition law: never ship a head that loses the last_known floor.
     """
     y_true = np.asarray(y_true, float)
     oof_residual_pred = np.asarray(oof_residual_pred, float)
     prior_pred = np.asarray(prior_pred, float)
     r_res = rmse(y_true, oof_residual_pred)
     r_pri = rmse(y_true, prior_pred)
-    passed = bool(np.isfinite(r_res) and np.isfinite(r_pri) and r_res <= r_pri + 1e-12)
+    r_lk = None
+    if last_known_pred is not None:
+        r_lk = rmse(y_true, np.asarray(last_known_pred, float))
+    beat_prior = bool(np.isfinite(r_res) and np.isfinite(r_pri) and r_res <= r_pri + 1e-12)
+    beat_lk = True if r_lk is None else bool(np.isfinite(r_lk) and r_res <= r_lk + 1e-12)
+    passed = beat_prior and beat_lk
     return GateResult(
         name="RESIDUAL_ACCEPTANCE",
         passed=passed,
         detail={
             "oof_rmse_residual": r_res,
             "oof_rmse_prior": r_pri,
+            "oof_rmse_last_known": r_lk,
             "prior_name": prior_name,
+            "beat_prior": beat_prior,
+            "beat_last_known": beat_lk,
             "decision": "ACCEPT_RESIDUAL" if passed else "FALLBACK_PURE_PRIOR",
-            "delta_rmse": float(r_pri - r_res) if (np.isfinite(r_res) and np.isfinite(r_pri)) else None,
+            "delta_rmse_vs_prior": float(r_pri - r_res)
+            if (np.isfinite(r_res) and np.isfinite(r_pri))
+            else None,
         },
     )
 

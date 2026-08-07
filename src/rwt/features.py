@@ -11,6 +11,7 @@ from rwt.gr_match import multi_scale_ncc
 from rwt.kernel_api import resolve_kernel
 from rwt.middle_out import MiddleOutSplit, dual_transport_prior
 from rwt.particle_track import particle_prior_for_well
+from rwt.priors import blend_stack_priors, compute_heel_fitted_dip_prior
 from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
 
@@ -45,8 +46,32 @@ def build_station_frame(
         df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
     )
     dual = dual_transport_prior(df, split)
-    # Contest-core prior: particle-filter GR↔typewell tracker blended with last-known
-    pf = particle_prior_for_well(df, typewell, split)
+    # Layer 1+2: heel-only flat + XY dip plane (competition-safe)
+    dip_prior = compute_heel_fitted_dip_prior(df, split)
+    # Layer multi-PF bag (public lite of private-6th multi-PF idea)
+    pf = particle_prior_for_well(df, typewell, split, bag=True)
+    last_f = float(pf.get("prior_last_tvt", dual["prior_last_tvt"]))
+    stack = blend_stack_priors(
+        last_f,
+        dip_prior["prior_dip_stack"],
+        pf["prior_pf_bag"],
+        pf["pf_confidence"],
+    )
+    # lock heel on stack
+    if len(split.known_idx):
+        k = np.asarray(split.known_idx, dtype=int)
+        if "TVT_input" in df.columns:
+            heel_tvt = np.asarray(df.iloc[k]["TVT_input"].to_numpy(dtype=float), dtype=float).copy()
+        else:
+            heel_tvt = np.full(len(k), np.nan, dtype=float)
+        if "TVT" in df.columns:
+            t = np.asarray(df.iloc[k]["TVT"].to_numpy(dtype=float), dtype=float)
+            miss = ~np.isfinite(heel_tvt)
+            heel_tvt[miss] = t[miss]
+        full = np.full(n, np.nan, dtype=float)
+        full[k] = heel_tvt
+        lock = np.isfinite(full)
+        stack = np.where(lock, full, stack)
 
     tw_gr = typewell["GR"].to_numpy(dtype=float) if typewell is not None and "GR" in typewell else None
     tw_tvt = (
@@ -115,17 +140,24 @@ def build_station_frame(
             "prior_mean_tvt": float(dual["prior_mean_tvt"]),
             "prior_tvt_plus_z": float(dual["prior_tvt_plus_z"]),
             "prior_slope_tvt_md": float(dual["prior_slope_tvt_md"]),
-            "prior_flat_tvt": float(dual["prior_flat"][i]),
+            "prior_flat_tvt": float(dip_prior["prior_flat_tvt"][i]),
             "prior_forward_tvt": float(dual["prior_forward"][i]),
             "prior_backward_tvt": float(dual["prior_backward"][i]),
             "prior_mid": float(dual["prior_mid"][i]),
             "prior_extrap_tvt": float(dual["prior_forward"][i]),
+            "prior_dip_trend": float(dip_prior["prior_dip_trend"][i]),
+            "prior_dip_stack": float(dip_prior["prior_dip_stack"][i]),
             "prior_pf_tvt": float(pf["prior_pf_tvt"][i]),
             "prior_pf_blend": float(pf["prior_pf_blend"][i]),
+            "prior_pf_bag": float(pf["prior_pf_bag"][i]),
+            "prior_stack": float(stack[i]),
             "pf_confidence": float(pf["pf_confidence"][i]),
             "pf_tvt_std": float(pf["pf_tvt_std"][i])
             if np.isfinite(pf["pf_tvt_std"][i])
             else 0.0,
+            "C_heel": float(dip_prior["C_heel"]),
+            "dip_coef_x": float(dip_prior["dip_coef_x"]),
+            "dip_coef_y": float(dip_prior["dip_coef_y"]),
         }
         for form_col in ("ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA"):
             if form_col in df.columns and pd.notna(df.loc[i, form_col]):
@@ -186,10 +218,17 @@ FEATURE_COLS_DEFAULT = [
     "prior_forward_tvt",
     "prior_backward_tvt",
     "prior_mid",
+    "prior_dip_trend",
+    "prior_dip_stack",
     "prior_pf_tvt",
     "prior_pf_blend",
+    "prior_pf_bag",
+    "prior_stack",
     "pf_confidence",
     "pf_tvt_std",
+    "C_heel",
+    "dip_coef_x",
+    "dip_coef_y",
     "ncc_16",
     "ncc_32",
     "ncc_64",

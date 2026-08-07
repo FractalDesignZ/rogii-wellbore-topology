@@ -177,8 +177,11 @@ def train_lgbm_residual(
         ("flat_formation", "prior_flat_tvt"),
         ("linear_md_extrap", "prior_extrap_tvt"),
         ("dual_transport_mid", "prior_mid"),
+        ("heel_dip_stack", "prior_dip_stack"),
         ("particle_filter", "prior_pf_tvt"),
         ("pf_blend_last_known", "prior_pf_blend"),
+        ("pf_bag", "prior_pf_bag"),
+        ("prior_stack", "prior_stack"),
     ):
         if col in train_df.columns:
             baseline_rmse[name] = rmse(
@@ -194,8 +197,15 @@ def train_lgbm_residual(
     from rwt.simd import cpu_feature_report
 
     prior_m = prior[row_m]
+    lk_m = None
+    if "prior_last_tvt" in train_df.columns:
+        lk_m = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
     gate3 = gate_residual_acceptance(
-        y_m, oof_tvt[row_m], prior_m, prior_name=prior_col
+        y_m,
+        oof_tvt[row_m],
+        prior_m,
+        prior_name=prior_col,
+        last_known_pred=lk_m,
     )
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)

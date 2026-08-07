@@ -44,6 +44,31 @@ class TestParticleTrack(unittest.TestCase):
         err_bad = rmse(true_tvt, np.full(n, 100.0))
         self.assertLess(err_pf, err_bad)
 
+    def test_dip_prior_heel_only(self) -> None:
+        from rwt.priors import compute_heel_fitted_dip_prior
+
+        n = 30
+        df = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(0, 1000, n),
+                "Y": np.linspace(0, 200, n),
+                "Z": -9000 - np.linspace(0, 30, n),
+                "TVT": 100 + 0.01 * np.linspace(0, 1000, n) + 0.02 * np.linspace(0, 200, n),
+                "TVT_input": [
+                    100 + 0.01 * (i * 1000 / 29) + 0.02 * (i * 200 / 29) if i < 12 else np.nan
+                    for i in range(n)
+                ],
+            }
+        )
+        sp = resolve_middle_out(df, well_id="w")
+        d = compute_heel_fitted_dip_prior(df, sp, alpha=1.0)
+        self.assertEqual(len(d["prior_dip_stack"]), n)
+        # heel should nearly match known
+        k = sp.known_idx
+        err = np.nanmean(np.abs(d["prior_dip_stack"][k] - df.iloc[k]["TVT_input"].to_numpy(float)))
+        self.assertLess(err, 2.0)
+
     def test_well_prior_blend_column(self) -> None:
         n = 40
         df = pd.DataFrame(

@@ -189,6 +189,15 @@ def blend_pf_last_known(
     return (1.0 - c) * float(last_known) + c * np.asarray(prior_pf, float)
 
 
+# Diverse PF hyperconfigs inspired by top private LB multi-PF bagging
+_PF_BAG_CONFIGS: list[dict[str, Any]] = [
+    {"n_particles": 450, "process_sigma": 0.22, "gr_sigma": 16.0, "tvt_span": 60.0, "seed": 0},
+    {"n_particles": 450, "process_sigma": 0.40, "gr_sigma": 24.0, "tvt_span": 90.0, "seed": 1},
+    {"n_particles": 550, "process_sigma": 0.30, "gr_sigma": 20.0, "tvt_span": 70.0, "seed": 2},
+    {"n_particles": 350, "process_sigma": 0.18, "gr_sigma": 28.0, "tvt_span": 50.0, "seed": 3},
+]
+
+
 def particle_prior_for_well(
     lateral: pd.DataFrame,
     typewell: pd.DataFrame | None,
@@ -196,11 +205,13 @@ def particle_prior_for_well(
     *,
     n_particles: int = 400,
     seed: int = 0,
+    bag: bool = True,
 ) -> dict[str, Any]:
     """
-    Full-well PF prior arrays + blend with heel last-known.
+    Full-well PF prior + multi-PF bagging + last-known blend.
 
-    On known heel, prior_pf_blend locks to observed TVT_input/TVT when present.
+    On known heel, locks to observed TVT_input/TVT. Bagging averages diverse
+    process/obs noise configs (6th-place style multi-PF ensemble, public lite).
     """
     n = len(lateral)
     stats = known_prior_tvt(lateral, split)
@@ -210,9 +221,11 @@ def particle_prior_for_well(
         return {
             "prior_pf_tvt": arr,
             "prior_pf_blend": arr.copy(),
+            "prior_pf_bag": arr.copy(),
             "pf_confidence": np.zeros(n),
             "pf_tvt_std": np.full(n, np.nan),
             "prior_last_tvt": last,
+            "n_pf_bag": 0,
         }
 
     gr = lateral["GR"].to_numpy(dtype=float) if "GR" in lateral.columns else np.full(n, np.nan)
@@ -227,26 +240,51 @@ def particle_prior_for_well(
             miss = ~np.isfinite(known_tvt[kidx]) & np.isfinite(tcol[kidx])
             known_tvt[kidx[miss]] = tcol[kidx[miss]]
 
-    seed = last if np.isfinite(last) else float(np.nanmedian(typewell["TVT"]))
+    seed_tvt = last if np.isfinite(last) else float(np.nanmedian(typewell["TVT"]))
     if np.isfinite(known_tvt).any():
-        # seed from last known station TVT
-        last_k = known_tvt[np.isfinite(known_tvt)][-1]
-        seed = float(last_k)
+        seed_tvt = float(known_tvt[np.isfinite(known_tvt)][-1])
 
-    pf = particle_filter_tvt(
-        gr,
-        typewell["GR"].to_numpy(dtype=float),
-        typewell["TVT"].to_numpy(dtype=float),
-        seed_tvt=seed,
-        known_tvt=known_tvt,
-        n_particles=n_particles,
-        rng=np.random.default_rng(seed if isinstance(seed, int) else 0),
-    )
-    # conservative blend: only trust PF when tight + confident; else last-known
+    tw_gr = typewell["GR"].to_numpy(dtype=float)
+    tw_tvt = typewell["TVT"].to_numpy(dtype=float)
+
+    def _run_one(cfg: dict[str, Any]) -> dict[str, np.ndarray]:
+        return particle_filter_tvt(
+            gr,
+            tw_gr,
+            tw_tvt,
+            seed_tvt=seed_tvt,
+            known_tvt=known_tvt,
+            n_particles=int(cfg.get("n_particles", n_particles)),
+            tvt_span=float(cfg.get("tvt_span", 80.0)),
+            process_sigma=float(cfg.get("process_sigma", 0.35)),
+            gr_sigma=float(cfg.get("gr_sigma", 22.0)),
+            rng=np.random.default_rng(int(cfg.get("seed", seed))),
+        )
+
+    if bag:
+        runs = [_run_one(cfg) for cfg in _PF_BAG_CONFIGS]
+        pf_tvt = np.mean(np.vstack([r["prior_pf_tvt"] for r in runs]), axis=0)
+        conf = np.mean(np.vstack([r["pf_confidence"] for r in runs]), axis=0)
+        stds = np.mean(np.vstack([r["pf_tvt_std"] for r in runs]), axis=0)
+        n_bag = len(runs)
+    else:
+        single = _run_one(
+            {
+                "n_particles": n_particles,
+                "process_sigma": 0.35,
+                "gr_sigma": 22.0,
+                "tvt_span": 80.0,
+                "seed": seed,
+            }
+        )
+        pf_tvt, conf, stds = single["prior_pf_tvt"], single["pf_confidence"], single["pf_tvt_std"]
+        n_bag = 1
+
+    last_f = last if np.isfinite(last) else seed_tvt
     blend = blend_pf_last_known(
-        pf["prior_pf_tvt"],
-        last if np.isfinite(last) else seed,
-        pf["pf_confidence"],
+        pf_tvt,
+        last_f,
+        conf,
         conf_floor=0.25,
         conf_ceil=0.70,
     )
@@ -255,12 +293,15 @@ def particle_prior_for_well(
         is_known[np.asarray(split.known_idx, dtype=int)] = True
     lock = is_known & np.isfinite(known_tvt)
     blend = np.where(lock, known_tvt, blend)
-    pf_tvt = np.where(lock, known_tvt, pf["prior_pf_tvt"])
+    pf_tvt = np.where(lock, known_tvt, pf_tvt)
+    bag_arr = pf_tvt.copy()
 
     return {
         "prior_pf_tvt": pf_tvt,
         "prior_pf_blend": blend,
-        "pf_confidence": pf["pf_confidence"],
-        "pf_tvt_std": pf["pf_tvt_std"],
-        "prior_last_tvt": last if np.isfinite(last) else seed,
+        "prior_pf_bag": bag_arr,
+        "pf_confidence": conf,
+        "pf_tvt_std": stds,
+        "prior_last_tvt": last_f,
+        "n_pf_bag": n_bag,
     }
