@@ -90,11 +90,14 @@ def build_station_frame(
             seed_tvt=last_f,
             stride=8,
         )
+    # Stack residual base: median PF bag (12w pure ~12.35) + high-conf NCC soft
     stack = blend_stack_priors(
         last_f,
         dip_prior["prior_dip_stack"],
         pf["prior_pf_bag"],
         pf["pf_confidence"],
+        prior_ncc=ncc_track["prior_ncc_tvt"],
+        ncc_conf=ncc_track["ncc_track_conf"],
     )
     # lock heel on stack via shared heel TVT helper
     if len(split.known_idx):
@@ -418,5 +421,13 @@ def feature_matrix(
             f"structural leak: refuse form-surface features {leak} "
             f"(train-only ANCC..BUDA; drop before residual train)"
         )
-    X = stations[cols].astype(float).replace([np.inf, -np.inf], np.nan).fillna(0.0).to_numpy()
+    # Median impute (max-op set-5 / neural parity) — zero-fill biases residual
+    frame = stations[cols].astype(float).replace([np.inf, -np.inf], np.nan)
+    for c in frame.columns:
+        s = frame[c]
+        med = float(np.nanmedian(s.to_numpy(dtype=float))) if s.notna().any() else 0.0
+        if not np.isfinite(med):
+            med = 0.0
+        frame[c] = s.fillna(med)
+    X = frame.to_numpy(dtype=float)
     return X, cols

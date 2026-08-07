@@ -223,6 +223,27 @@ class TestCrownPath(unittest.TestCase):
         self.assertLess(float(np.mean(out)), 108.0)
         self.assertTrue(np.all(np.abs(out - last) <= 18.0 + 1e-9))
 
+    def test_stack_blend_ncc_soft_and_clamp(self) -> None:
+        """Stack uses PF stalk + high-conf NCC soft pull, always clamp law."""
+        from rwt.priors import blend_stack_priors
+
+        n = 40
+        last = 100.0
+        dip = np.full(n, 105.0)
+        pf = np.full(n, 110.0)
+        conf = np.linspace(0.0, 1.0, n)
+        ncc = np.full(n, 112.0)
+        nc = np.where(np.arange(n) > 20, 0.9, 0.0)
+        out = blend_stack_priors(
+            last, dip, pf, conf, prior_ncc=ncc, ncc_conf=nc, max_dev=18.0
+        )
+        self.assertEqual(len(out), n)
+        self.assertTrue(np.all(np.abs(out - last) <= 18.0 + 1e-9))
+        # cold conf (near heel of this synthetic) stays near last / soft dip
+        self.assertLess(float(np.mean(out[:8])), last + 4.0)
+        # high conf + high ncc moves toward stalk within clamp
+        self.assertGreater(float(np.mean(out[-8:])), last + 3.0)
+
     def test_process_bias_near_ps_clipped(self) -> None:
         """Build-section large dTVT must not set toe process_bias outside ±0.05."""
         tw_tvt = np.linspace(100, 200, 200)

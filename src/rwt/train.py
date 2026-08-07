@@ -132,6 +132,13 @@ def train_lgbm_residual(
     prior = train_df[prior_col].to_numpy(dtype=float)
     y_res = y - prior
     groups = train_df["well_id"].astype(str).to_numpy()
+    # Toe-weighted residual: far-from-PS stations dominate public error
+    if "relative_md" in train_df.columns:
+        rel = np.abs(train_df["relative_md"].to_numpy(dtype=float))
+        rel = np.where(np.isfinite(rel), rel, 0.0)
+        sample_w = 1.0 + np.clip(rel, 0.0, 6000.0) / 3000.0
+    else:
+        sample_w = np.ones(len(train_df), dtype=float)
 
     try:
         import lightgbm as lgb
@@ -178,26 +185,32 @@ def train_lgbm_residual(
         }
         n_rounds, early = 2500, 120
     else:
+        # slightly deeper default than pre-crown; still Gate3-gated
         params = {
             "objective": "regression",
             "metric": "rmse",
-            "learning_rate": 0.04,
-            "num_leaves": 47,
-            "min_data_in_leaf": 120,
-            "feature_fraction": 0.75,
-            "bagging_fraction": 0.85,
+            "learning_rate": 0.035,
+            "num_leaves": 63,
+            "min_data_in_leaf": 80,
+            "feature_fraction": 0.80,
+            "bagging_fraction": 0.88,
             "bagging_freq": 1,
-            "lambda_l2": 3.0,
-            "lambda_l1": 0.1,
+            "lambda_l2": 2.0,
+            "lambda_l1": 0.08,
+            "max_bin": 255,
             "num_threads": lgb_threads,
             "verbosity": -1,
             "seed": seed,
         }
-        n_rounds, early = 800, 60
+        n_rounds, early = 1200, 80
 
     def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int) -> None:
-        dtr = lgb.Dataset(X[tr], label=y_res[tr], feature_name=cols)
-        dva = lgb.Dataset(X[va], label=y_res[va], feature_name=cols, reference=dtr)
+        dtr = lgb.Dataset(
+            X[tr], label=y_res[tr], weight=sample_w[tr], feature_name=cols
+        )
+        dva = lgb.Dataset(
+            X[va], label=y_res[va], weight=sample_w[va], feature_name=cols, reference=dtr
+        )
         p = dict(params)
         p["seed"] = seed + fold
         model = lgb.train(

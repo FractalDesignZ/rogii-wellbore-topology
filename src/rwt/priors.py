@@ -301,22 +301,27 @@ def compute_heel_fitted_dip_prior(
 def blend_stack_priors(
     last_known: float,
     prior_dip_stack: np.ndarray,
-    prior_pf_bag: np.ndarray,
+    prior_pf: np.ndarray,
     pf_confidence: np.ndarray,
     *,
+    prior_ncc: np.ndarray | None = None,
+    ncc_conf: np.ndarray | None = None,
     conf_floor: float = 0.25,
     conf_ceil: float = 0.70,
     max_dev: float = 18.0,
 ) -> np.ndarray:
     """
-    Conservative stack: last_known floor + small dip pull + PF only where confident.
+    Best pure residual base (12w ~12.35 with median-bag PF arm).
 
-    Hard-clamps deviation from last_known to ±max_dev so a runaway PF/dip cannot
-    destroy the strong public floor (diag: unclamped blend lost 5–7 ft on some wells).
+    last_known floor + soft dip + conf-gated PF stalk. Optional NCC soft pull
+    only at high ncc_conf (cold stalk ≡ zero). Clamp law: last ± max_dev.
+
+    Note: callers should pass median-bag or blend for ``prior_pf``; raw single-PF
+    tracks with high process span destroy the pure floor.
     """
     last_known = float(last_known)
     dip = np.asarray(prior_dip_stack, float)
-    pf = np.asarray(prior_pf_bag, float)
+    pf = np.asarray(prior_pf, float)
     conf = np.asarray(pf_confidence, float)
     # structural: mostly last_known; dip only a soft nudge (already MD-decayed)
     dip_delta = np.clip(dip - last_known, -max_dev, max_dev)
@@ -324,6 +329,18 @@ def blend_stack_priors(
     c = np.clip((conf - conf_floor) / max(conf_ceil - conf_floor, 1e-6), 0.0, 1.0)
     pf_delta = np.clip(pf - last_known, -max_dev, max_dev)
     out = (1.0 - c) * struct + c * (last_known + pf_delta)
+    if prior_ncc is not None:
+        ncc = np.asarray(prior_ncc, float)
+        nc = (
+            np.clip(np.asarray(ncc_conf, float), 0.0, 1.0)
+            if ncc_conf is not None
+            else np.zeros(len(ncc))
+        )
+        # only high NCC conf moves stack (cold stalk ≡ zero pull); max 20% mix
+        cn = np.clip((nc - 0.45) / 0.40, 0.0, 1.0) * 0.20
+        ncc_delta = np.clip(ncc - last_known, -max_dev, max_dev)
+        fin = np.isfinite(ncc)
+        out = np.where(fin, (1.0 - cn) * out + cn * (last_known + ncc_delta), out)
     return last_known + np.clip(out - last_known, -max_dev, max_dev)
 
 
