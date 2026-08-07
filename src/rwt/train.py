@@ -142,8 +142,6 @@ def train_lgbm_residual(
     oof = np.zeros(len(train_df))
     models = []
     fold_scores: list[float] = []
-    # Residual head: shallow default; max_precision deepens trees for score war.
-    # Thread count from RWT_LGBM_THREADS / OMP (dashboard parallel train sets these).
     def _env_threads(*keys: str, default: int | None = None) -> int:
         for k in keys:
             v = os.environ.get(k)
@@ -158,7 +156,6 @@ def train_lgbm_residual(
     lgb_threads = _env_threads(
         "RWT_LGBM_THREADS", "OMP_NUM_THREADS", "RWT_NUM_THREADS"
     )
-    # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
     if max_precision:
         params = {
             "objective": "regression",
@@ -234,7 +231,6 @@ def train_lgbm_residual(
     from rwt.provenance import seal_artifact
 
     k = resolve_kernel()
-    # Baselines and OOF share the same finite OOF-row set so beats_* is valid
     row_m = oof_mask if oof_mask.any() else np.ones(len(train_df), dtype=bool)
     y_m = y[row_m]
     oof_m = oof_tvt[row_m]
@@ -260,13 +256,12 @@ def train_lgbm_residual(
             continue
         b = train_df[col].to_numpy(dtype=float)[row_m]
         if not np.isfinite(b[shared]).all():
-            continue  # skip baselines with holes on the OOF row set
+            continue
         baseline_rmse[name] = rmse(y_s, b[shared])
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
 
-    # ── Gates 1+3 (Gate 2 is structural at assemble time) ───────────────
     from rwt.gates import gate_ip_fence, gate_residual_acceptance, gate_residual_acceptance_per_well
     from rwt.simd import cpu_feature_report
 
@@ -276,7 +271,6 @@ def train_lgbm_residual(
         lk_full = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m]
         if np.isfinite(lk_full[shared]).all():
             lk_m = lk_full[shared]
-    # single map: every scored pure prior → station column (Gate3 floors + fallback)
     _floor_col = {
         "last_known": "prior_last_tvt",
         "local_dip_ps": "prior_local_dip",
@@ -306,7 +300,6 @@ def train_lgbm_residual(
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
 
-    # Adaptive per-well fire (only meaningful when global Gate3 accepts)
     pf_conf_s = None
     if "pf_confidence" in train_df.columns:
         pf_full = train_df["pf_confidence"].to_numpy(dtype=float)[row_m]
@@ -436,7 +429,6 @@ def main(argv: list[str] | None = None) -> int:
     from rwt.parallel import configure_compute_env
     from rwt.progress import init_progress
 
-    # resolve workers before progress snapshot so dashboard shows real RWT_WORKERS
     workers = args.workers if args.workers > 0 else None
     cfg = configure_compute_env(workers=workers)
     progress = init_progress(out)
@@ -481,6 +473,10 @@ def main(argv: list[str] | None = None) -> int:
                     "feature_cols": result["feature_cols"],
                     "prior_column": result["prior_column"],
                     "use_residual": result.get("use_residual", True),
+                    # Adaptive serve: residual only where pf_confidence is high
+                    # (mirrors gate_residual_acceptance_per_well at inference)
+                    "adaptive_serve": bool(result.get("use_residual", False)),
+                    "adaptive_conf_threshold": 0.35,
                 },
                 out / "model.joblib",
             )
