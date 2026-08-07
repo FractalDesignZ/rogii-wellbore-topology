@@ -30,8 +30,6 @@ def main() -> int:
     from rwt.baselines import rmse
     from rwt.load import iter_well_frames, load_typewell, typewell_path_for_well
     from rwt.middle_out import resolve_middle_out
-    from rwt.priors import compute_local_dip_prior
-    from private_kernel.beam_match import beam_blend_last, beam_prior_for_well
     from rwt.kernel_api import resolve_kernel
 
     ap = argparse.ArgumentParser()
@@ -40,10 +38,21 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "private_beam_pilot"))
     a = ap.parse_args()
 
+    # Fail-closed imports: public clones have no private_kernel package body
+    try:
+        from private_kernel.beam_match import beam_blend_last, beam_prior_for_well
+    except ImportError as e:
+        summary = {
+            "ok": False,
+            "error": f"private_kernel import failed: {e}",
+            "hint": "Local only: private_kernel/* is gitignored; not required for public CI",
+        }
+        print(json.dumps(summary, indent=2), flush=True)
+        return 2
+
     k = resolve_kernel()
     print(json.dumps({"kernel_id": k.kernel_id(), "private": k.is_private()}), flush=True)
     if not k.is_private():
-        # Fail-closed: public CI / clones without private_kernel stay green-path honest
         summary = {
             "ok": False,
             "error": "private_kernel not loaded (expected if gitignored / RWT_KERNEL!=private)",

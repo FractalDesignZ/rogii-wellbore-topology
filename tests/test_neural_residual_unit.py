@@ -66,6 +66,13 @@ class TestNeuralResidualUnit(unittest.TestCase):
         p = _well_tensors(df, ["f0"], "prior_stack", max_len=64)[0]
         np.testing.assert_allclose(p["y_res"], np.ones(5))
 
+    def test_train_lgbm_exposes_max_precision_kw(self):
+        import inspect
+        from rwt.train import train_lgbm_residual
+
+        sig = inspect.signature(train_lgbm_residual)
+        self.assertIn("max_precision", sig.parameters)
+
 
 if __name__ == "__main__":
     unittest.main()
