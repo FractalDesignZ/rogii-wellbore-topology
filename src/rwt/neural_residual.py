@@ -190,26 +190,31 @@ def train_neural_residual(
     # put feature cols back for packing
     for i, c in enumerate(cols):
         train_df[c] = X_all[:, i]
-    # sanitize
+    # sanitize: median impute (0-fill biases residual when features sparse)
     for c in cols:
-        train_df[c] = (
-            train_df[c]
-            .replace([np.inf, -np.inf], np.nan)
-            .fillna(0.0)
-            .astype(np.float32)
-        )
+        s = train_df[c].replace([np.inf, -np.inf], np.nan)
+        med = float(np.nanmedian(s.to_numpy(dtype=float))) if len(s) else 0.0
+        if not np.isfinite(med):
+            med = 0.0
+        train_df[c] = s.fillna(med).astype(np.float32)
 
     wells = _well_tensors(train_df, cols, prior_col, max_len=max_len)
     well_ids = np.array([w["well_id"] for w in wells])
     n_groups = len(wells)
     if n_groups < 2:
         raise ValueError("need ≥2 wells for GroupKFold neural residual")
+    n_splits_eff = max(2, min(int(n_splits), n_groups))
+    if n_splits_eff != n_splits:
+        print(
+            f"[neural] folds clamped {n_splits} → {n_splits_eff} (n_wells={n_groups})",
+            flush=True,
+        )
 
     # flatten for OOF / Gate3 (station-level)
     y_flat = train_df["TVT"].to_numpy(float)
     prior_flat = train_df[prior_col].to_numpy(float)
 
-    gkf = GroupKFold(n_splits=min(n_splits, n_groups))
+    gkf = GroupKFold(n_splits=n_splits_eff)
     # station-level OOF storage
     oof_pred = np.full(len(train_df), np.nan, dtype=float)
     fold_scores: list[float] = []

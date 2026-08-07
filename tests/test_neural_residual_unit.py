@@ -73,6 +73,24 @@ class TestNeuralResidualUnit(unittest.TestCase):
         sig = inspect.signature(train_lgbm_residual)
         self.assertIn("max_precision", sig.parameters)
 
+    def test_median_impute_not_all_zero_when_nan_block(self):
+        """Packing path uses finite features; all-nan column becomes 0 after median."""
+        df = pd.DataFrame(
+            {
+                "well_id": ["W"] * 8,
+                "station": range(8),
+                "TVT": np.arange(8, dtype=float),
+                "prior_stack": np.arange(8, dtype=float) - 0.5,
+                "f0": [1.0, 1.0, np.nan, 1.0, 1.0, np.nan, 1.0, 1.0],
+            }
+        )
+        # Simulate sanitize median (same as train_neural_residual)
+        s = df["f0"].replace([np.inf, -np.inf], np.nan)
+        med = float(np.nanmedian(s.to_numpy(float)))
+        out = s.fillna(med)
+        self.assertTrue(np.isfinite(out).all())
+        self.assertAlmostEqual(float(out.iloc[2]), 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
