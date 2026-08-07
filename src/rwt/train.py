@@ -23,13 +23,20 @@ from rwt.spatial import SpatialIndex, build_spatial_index
 RESIDUAL_SMOOTH_WINDOW = 0
 
 # Dual residual: ensemble (prior_best+Δ) with (prior_stack+Δ) when both finite.
-# Set-15 equal-mean 10.985 rejected; named weights 0.75/0.25 → 10.948 keep.
-DUAL_RESIDUAL_ENSEMBLE = True
+# Set-15 equal-mean 10.985 rejected; weighted dual shallow 10.948.
+# Set-16 dual deep 10.836; set-17 single deep prior_best **10.830** beats dual.
+# Keep dual infrastructure for opt-in A/B (DUAL_RESIDUAL_ENSEMBLE=True).
+DUAL_RESIDUAL_ENSEMBLE = False
 # Weights by *base name* (not list position) so --prior-col reordering is safe.
 DUAL_RESIDUAL_WEIGHT_BY_BASE: dict[str, float] = {
     "prior_best": 0.75,
     "prior_stack": 0.25,
 }
+# Crown residual LGBM: deep profile is the measure-tuned default (set-16/17).
+CROWN_DEEP_RESIDUAL = True
+# Serve refit floor under deep (fold best_iters often early-stop << 2000).
+N_REFIT_FLOOR_DEEP = 400
+N_REFIT_FLOOR_SHALLOW = 200
 
 
 def dual_residual_weights_for_bases(
@@ -260,13 +267,11 @@ def train_lgbm_residual(
     )
     # Clamp residual Δ so head cannot leave pure-prior band (clamp law parity)
     residual_max_dev = float(MAX_TVT_DEV)
-    # Set-16: dual residual + deep LGBM → 12w OOF **10.84** (shallow dual 10.95).
-    # max_precision flag forces deep; dual ensemble also uses deep by default.
-    # Shallow path retained when dual off and not max_precision (fast smoke).
-    use_deep = bool(max_precision) or (
-        DUAL_RESIDUAL_ENSEMBLE and len(residual_bases) > 1
-    )
+    # Set-17: single deep prior_best **10.830** beats dual deep 10.836.
+    # Deep profile is crown default; max_precision is alias; dual opt-in only.
+    use_deep = bool(max_precision) or bool(CROWN_DEEP_RESIDUAL)
     n_seed_bag = 3 if use_deep else 2
+    n_refit_floor = N_REFIT_FLOOR_DEEP if use_deep else N_REFIT_FLOOR_SHALLOW
     if use_deep:
         params = {
             "objective": "regression",
@@ -485,7 +490,7 @@ def train_lgbm_residual(
         X_serve = impute_feature_frame(
             pd.DataFrame(X_raw, columns=cols), medians=feature_medians
         ).to_numpy(dtype=float)
-        n_refit = select_n_refit(fold_best_iters, n_rounds, floor=200)
+        n_refit = select_n_refit(fold_best_iters, n_rounds, floor=n_refit_floor)
         for bi, base in enumerate(residual_bases):
             d_full = lgb.Dataset(
                 X_serve,

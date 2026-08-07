@@ -32,7 +32,8 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **13** (crown CR) | #11 | `select_n_refit` + tests; residual MD-smooth hook train/serve (**w=21 rejected 11.09**; default 0); `fold_best_iters` + `residual_smooth_window` in report/blob; CountingKernel `super()`; tautology test cleanup. Soft-nb P2 closed. |
 | **14** (crown) | #11 | residual default base **`prior_best`** (12w OOF **10.95** vs stack-base 11.06); pure floor still prior_stack 12.33; PRIOR_FALLBACKS reordered. |
 | **15** (crown) | #11 | dual residual heads best+stack train/serve; weights **0.75/0.25** → **10.948** (equal-mean 10.985 rejected); blob `residual_heads` + `dual_residual_weights`; tests dual serve. |
-| **16** (crown CR) | #11 | named dual weights by base (not position); thread-pool seal (CR serial seal); deep LGBM default under dual → **10.836**; reject `prior_delta_best_stack` feat 10.955; tests weight-by-name. |
+| **16** (crown CR) | #11 | named dual weights by base (not position); thread-pool seal (CR serial seal); deep LGBM under dual → **10.836**; reject `prior_delta_best_stack` feat 10.955; tests weight-by-name. |
+| **17** (crown) | #11 | dual residual **off** (dilutes best head); single deep `prior_best` **10.830**; `CROWN_DEEP_RESIDUAL=True`; n_refit floor 400 deep; dual infrastructure retained opt-in. |
 
 ## CodeRabbit
 

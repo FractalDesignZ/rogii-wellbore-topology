@@ -388,6 +388,23 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(w2[1], 0.75)
         self.assertEqual(dual_residual_weights_for_bases(["prior_best"]), [1.0])
 
+    def test_crown_defaults_single_deep_prior_best(self) -> None:
+        """Set-17 measure: dual off, deep residual on, prior_best default base."""
+        from rwt.priors import DEFAULT_PRIOR_COL
+        from rwt.train import (
+            CROWN_DEEP_RESIDUAL,
+            DUAL_RESIDUAL_ENSEMBLE,
+            N_REFIT_FLOOR_DEEP,
+            select_n_refit,
+        )
+
+        self.assertEqual(DEFAULT_PRIOR_COL, "prior_best")
+        self.assertFalse(DUAL_RESIDUAL_ENSEMBLE)
+        self.assertTrue(CROWN_DEEP_RESIDUAL)
+        # deep n_refit floor 400
+        self.assertEqual(N_REFIT_FLOOR_DEEP, 400)
+        self.assertEqual(select_n_refit([50, 60, 70], 2500, floor=400), 400)
+
     def test_smooth_residual_along_well_preserves_mean(self) -> None:
         """MD smooth damps high-freq noise; well means unchanged."""
         from rwt.baselines import smooth_residual_along_well
