@@ -9,7 +9,8 @@ import pandas as pd
 from rwt.geometry import station_local_geometry
 from rwt.gr_match import multi_scale_ncc
 from rwt.kernel_api import resolve_kernel
-from rwt.middle_out import MiddleOutSplit, known_prior_tvt
+from rwt.middle_out import MiddleOutSplit, dual_transport_prior
+from rwt.spatial import SpatialIndex, attach_spatial_features
 from rwt.watermark import embed_column
 
 
@@ -20,13 +21,11 @@ def build_station_frame(
     *,
     scales: tuple[int, ...] = (16, 32, 64),
     station_idx: np.ndarray | None = None,
+    spatial_index: SpatialIndex | None = None,
 ) -> pd.DataFrame:
     """
-    One row per station. Includes well-level geometry broadcast + local geometry
-    + GR match + middle-out priors.
-
-    If ``station_idx`` is set, only those stations are emitted (well geometry still
-    uses the full lateral). Useful for training on known heel only.
+    One row per station: SE(3) local geom, dual-transport prior_mid, GR NCC,
+    formation tops, optional spatial neighbor transfer.
     """
     df = lateral.reset_index(drop=True)
     n = len(df)
@@ -40,7 +39,7 @@ def build_station_frame(
     local = station_local_geometry(
         df["X"].to_numpy(), df["Y"].to_numpy(), df["Z"].to_numpy()
     )
-    prior = known_prior_tvt(df, split)
+    dual = dual_transport_prior(df, split)
 
     tw_gr = typewell["GR"].to_numpy(dtype=float) if typewell is not None and "GR" in typewell else None
     tw_tvt = (
@@ -49,7 +48,6 @@ def build_station_frame(
         else None
     )
     if "GR" in df.columns:
-        # Keep NaNs: NCC must not treat missing GR as measured zero
         gr = df["GR"].to_numpy(dtype=float)
     else:
         gr = np.full(n, np.nan, dtype=float)
@@ -64,6 +62,7 @@ def build_station_frame(
         is_predict_mask[np.asarray(split.predict_idx, dtype=int)] = True
     if len(split.known_idx):
         is_known_mask[np.asarray(split.known_idx, dtype=int)] = True
+
     for i in indices:
         gi = float(gr[i])
         row: dict[str, Any] = {
@@ -79,29 +78,39 @@ def build_station_frame(
             **{f"well_{k}": v for k, v in well_geom.items() if np.isscalar(v)},
             "local_curv": float(local["local_curv"][i]),
             "local_curv_roll": float(local["local_curv_roll"][i]),
+            "local_torsion": float(local["local_torsion"][i]),
+            "local_torsion_roll": float(local["local_torsion_roll"][i]),
+            "e_ref": float(local["e_ref"][i]),
+            "e_ref_roll": float(local["e_ref_roll"][i]),
             "d_z": float(local["d_z"][i]),
             "d_horiz": float(local["d_horiz"][i]),
-            **prior,
+            "prior_last_tvt": float(dual["prior_last_tvt"]),
+            "prior_mean_tvt": float(dual["prior_mean_tvt"]),
+            "prior_tvt_plus_z": float(dual["prior_tvt_plus_z"]),
+            "prior_slope_tvt_md": float(dual["prior_slope_tvt_md"]),
+            "prior_flat_tvt": float(dual["prior_flat"][i]),
+            "prior_forward_tvt": float(dual["prior_forward"][i]),
+            "prior_backward_tvt": float(dual["prior_backward"][i]),
+            "prior_mid": float(dual["prior_mid"][i]),
+            # Alias of prior_forward for baseline_linear_md beat-table (not a second feature)
+            "prior_extrap_tvt": float(dual["prior_forward"][i]),
         }
-        # structural prior prediction at this Z
-        row["prior_flat_tvt"] = prior["prior_tvt_plus_z"] - row["Z"]
-        if len(split.known_idx):
-            md_ref = float(df.loc[int(split.known_idx[-1]), "MD"])
-            row["prior_extrap_tvt"] = prior["prior_last_tvt"] + prior[
-                "prior_slope_tvt_md"
-            ] * (row["MD"] - md_ref)
-        else:
-            row["prior_extrap_tvt"] = prior["prior_last_tvt"]
+        for form_col in ("ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA"):
+            if form_col in df.columns and pd.notna(df.loc[i, form_col]):
+                row[f"form_{form_col}"] = float(df.loc[i, form_col])
+                row[f"z_minus_{form_col}"] = row["Z"] - float(df.loc[i, form_col])
         if tw_gr is not None:
             m = multi_scale_ncc(gr, tw_gr, tw_tvt, scales=scales, center=i)
             row.update(m)
-        # target if present
         if "TVT" in df.columns and pd.notna(df.loc[i, "TVT"]):
             row["TVT"] = float(df.loc[i, "TVT"])
         elif "TVT_true" in df.columns:
             row["TVT"] = float(df.loc[i, "TVT_true"])
         rows.append(row)
     stations = pd.DataFrame(rows)
+    stations = attach_spatial_features(
+        stations, df, spatial_index, split.well_id
+    )
     stations = kernel.augment_station_frame(stations, df, typewell)
     stations = embed_column(stations)
     return stations
@@ -113,6 +122,10 @@ FEATURE_COLS_DEFAULT = [
     "GR",
     "local_curv",
     "local_curv_roll",
+    "local_torsion",
+    "local_torsion_roll",
+    "e_ref",
+    "e_ref_roll",
     "d_z",
     "d_horiz",
     "well_mean_curv",
@@ -120,8 +133,13 @@ FEATURE_COLS_DEFAULT = [
     "well_cum_twist",
     "well_abs_cum_twist",
     "well_twist_std",
+    "well_mean_abs_torsion",
+    "well_mean_e_ref",
+    "well_max_e_ref",
     "well_tortuosity_q3d_proxy",
     "well_signed_azimuth",
+    "well_azimuth_x",
+    "well_azimuth_y",
     "well_delta_z",
     "well_md_span",
     "prior_last_tvt",
@@ -129,7 +147,10 @@ FEATURE_COLS_DEFAULT = [
     "prior_tvt_plus_z",
     "prior_slope_tvt_md",
     "prior_flat_tvt",
-    "prior_extrap_tvt",
+    "prior_forward_tvt",
+    "prior_backward_tvt",
+    "prior_mid",
+    # prior_extrap_tvt omitted from features (duplicate of prior_forward_tvt; kept on frame for baselines)
     "ncc_16",
     "ncc_32",
     "ncc_64",
@@ -138,6 +159,23 @@ FEATURE_COLS_DEFAULT = [
     "ncc_64_lag",
     "tvt_hint_median",
     "tvt_hint_std",
+    "neighbor_tvt",
+    "neighbor_xy_dist",
+    "neighbor_transfer_ok",
+    "neighbor_count",
+    "neighbor_min_dist",
+    "form_ANCC",
+    "form_ASTNU",
+    "form_ASTNL",
+    "form_EGFDU",
+    "form_EGFDL",
+    "form_BUDA",
+    "z_minus_ANCC",
+    "z_minus_ASTNU",
+    "z_minus_ASTNL",
+    "z_minus_EGFDU",
+    "z_minus_EGFDL",
+    "z_minus_BUDA",
 ]
 
 

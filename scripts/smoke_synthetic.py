@@ -34,10 +34,10 @@ def main() -> int:
     p_last = baseline_last_known(lat.assign(TVT=lat["TVT_true"]), sp)
     p_flat = baseline_flat_formation(lat.assign(TVT=lat["TVT_true"]), sp)
     stations = build_station_frame(lat, tw, sp)
-    # train on known true TVT
-    stations.loc[stations["is_known"], "TVT"] = lat.loc[
-        stations.loc[stations["is_known"], "station"].to_numpy(), "TVT_true"
-    ].to_numpy()
+    # labels on predict toe (competition zone) from synthetic TVT_true
+    pred_mask = stations["is_predict"].to_numpy()
+    st_idx = stations.loc[pred_mask, "station"].to_numpy()
+    stations.loc[pred_mask, "TVT"] = lat.loc[st_idx, "TVT_true"].to_numpy()
     result = train_lgbm_residual(stations, n_splits=3)
     report = {
         "geometry": {k: geom[k] for k in ("cum_twist", "abs_cum_twist", "tortuosity_q3d_proxy", "mean_curv")},
