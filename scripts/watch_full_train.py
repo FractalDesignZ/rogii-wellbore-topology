@@ -9,13 +9,24 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT = ROOT / "artifacts" / "full_train" / "cv_report.json"
-# optional: pass log path as argv[1]
-LOG = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+# argv: [progress_or_log_path] optional; default parallel out dir
+_arg = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "artifacts" / "full_train_parallel"
+if _arg.is_dir():
+    OUT = _arg
+    LOG = OUT / "progress.log"
+elif _arg.name == "progress.json":
+    OUT = _arg.parent
+    LOG = OUT / "progress.log"
+else:
+    # legacy: treat as train log; report next to full_train_parallel preferred
+    LOG = _arg
+    OUT = ROOT / "artifacts" / "full_train_parallel"
+REPORT = OUT / "cv_report.json"
 FAIL_RE = re.compile(r"Traceback|SystemExit|Error:|FAIL model")
 
 
 def main() -> int:
+    print(f"watching REPORT={REPORT}", flush=True)
     while True:
         if REPORT.is_file():
             try:

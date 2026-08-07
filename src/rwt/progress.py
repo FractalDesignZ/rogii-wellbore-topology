@@ -19,6 +19,7 @@ class ProgressTracker:
         self.log_path = self.out_dir / "progress.log"
         self._lock = threading.Lock()
         self._t0 = time.time()
+        self._heartbeat_stop = threading.Event()
         self.state: dict[str, Any] = {
             "phase": "init",
             "done": 0,
@@ -37,6 +38,18 @@ class ProgressTracker:
             "elapsed_sec": 0.0,
         }
         self._flush()
+        self._hb = threading.Thread(target=self._heartbeat_loop, name="rwt-progress-hb", daemon=True)
+        self._hb.start()
+
+    def _heartbeat_loop(self) -> None:
+        while not self._heartbeat_stop.wait(5.0):
+            with self._lock:
+                # keep dashboard clocks moving even when workers are on long wells
+                self.state["message"] = self.state.get("message") or "heartbeat"
+                self._flush()
+
+    def stop_heartbeat(self) -> None:
+        self._heartbeat_stop.set()
 
     def _flush(self) -> None:
         now = time.time()
@@ -98,6 +111,7 @@ class ProgressTracker:
             self._flush()
 
     def finish(self, message: str = "done", **metrics: Any) -> None:
+        self.stop_heartbeat()
         with self._lock:
             self.state["phase"] = "done"
             self.state["message"] = message
@@ -107,6 +121,7 @@ class ProgressTracker:
             self._flush()
 
     def fail(self, message: str) -> None:
+        self.stop_heartbeat()
         with self._lock:
             self.state["phase"] = "failed"
             self.state["message"] = message
