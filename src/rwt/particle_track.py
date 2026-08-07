@@ -90,6 +90,7 @@ def particle_filter_tvt(
             "prior_pf_tvt": pred,
             "pf_confidence": np.zeros(n, dtype=float),
             "pf_tvt_std": np.full(n, np.nan),
+            "process_bias": 0.0,
         }
 
     # GR scale calibration on known heel (lateral vs typewell at known TVT)

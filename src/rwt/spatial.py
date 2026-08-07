@@ -192,20 +192,19 @@ def attach_spatial_features(
     best_id, best_d = neigh[0]
     node = index.nodes[best_id]
     tr = neighbor_tvt_transfer(lateral, node, close_dist=close_dist)
-    # Heel affine offset: align neighbor TVT to this well's heel TVT when both finite
-    # (public crown: neighbors share structure but absolute TVT level can bias).
+    # Heel-only affine offset (TVT_input mask only — never toe labels / full TVT)
     offset = 0.0
-    heel_tvt = None
-    for col in ("TVT_input", "TVT", "TVT_true"):
-        if col in lateral.columns and lateral[col].notna().any():
-            heel_tvt = lateral[col].to_numpy(dtype=float)
-            break
-    if heel_tvt is not None:
+    if "TVT_input" in lateral.columns:
+        heel_tvt = lateral["TVT_input"].to_numpy(dtype=float)
         tr_full = tr["neighbor_tvt"]
-        m = np.isfinite(heel_tvt) & np.isfinite(tr_full) & (tr["neighbor_transfer_ok"] > 0.5)
+        # known heel stations only
+        m = (
+            np.isfinite(heel_tvt)
+            & np.isfinite(tr_full)
+            & (tr["neighbor_transfer_ok"] > 0.5)
+        )
         if m.sum() >= 8:
             offset = float(np.median(heel_tvt[m] - tr_full[m]))
-            # refuse runaway offsets (pad mismatch)
             if abs(offset) > 40.0:
                 offset = 0.0
     if "station" in out.columns:

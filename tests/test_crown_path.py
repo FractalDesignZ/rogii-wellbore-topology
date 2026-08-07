@@ -68,11 +68,46 @@ class TestCrownPath(unittest.TestCase):
         self.assertEqual(len(out["prior_pf_tvt"]), n)
         self.assertIn("process_bias", out)
         self.assertTrue(np.isfinite(out["prior_pf_tvt"]).all())
-        # toe track should beat constant last-known
+        # toe track must beat constant last-known on this synthetic GR match
         toe = slice(30, None)
         err_pf = rmse(true[toe], out["prior_pf_tvt"][toe])
         err_lk = rmse(true[toe], np.full(n - 30, true[29]))
-        self.assertLess(err_pf, err_lk * 1.15)
+        self.assertLess(err_pf, err_lk)
+
+    def test_neighbor_offset_uses_tvt_input_only(self) -> None:
+        """Hidden toe TVT must not drive neighbor heel offset."""
+        from rwt.spatial import SpatialIndex, attach_spatial_features, well_spatial_node_from_lateral
+
+        n = 40
+        # target: heel TVT_input ~100, toe full TVT jumps to 200 (must not leak)
+        lat = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(0, 100, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "TVT_input": [100.0 if i < 15 else np.nan for i in range(n)],
+                "TVT": [100.0 if i < 15 else 200.0 for i in range(n)],
+            }
+        )
+        # neighbor nearby with flat TVT 100
+        nb = pd.DataFrame(
+            {
+                "MD": np.arange(n, dtype=float),
+                "X": np.linspace(10, 110, n),
+                "Y": np.zeros(n),
+                "Z": -np.arange(n, dtype=float),
+                "TVT": np.full(n, 100.0),
+                "TVT_input": [100.0 if i < 20 else np.nan for i in range(n)],
+            }
+        )
+        idx = SpatialIndex(max_dist=500.0, close_dist=200.0)
+        idx.add(well_spatial_node_from_lateral("tgt", lat))
+        idx.add(well_spatial_node_from_lateral("nb", nb))
+        st = pd.DataFrame({"station": list(range(n)), "well_id": ["tgt"] * n})
+        out = attach_spatial_features(st, lat, idx, "tgt", max_dist=500.0, close_dist=200.0)
+        # offset from heel-only should be near 0, not pulled by toe 200 labels
+        self.assertLess(abs(float(out["neighbor_offset"].iloc[0])), 5.0)
 
     def test_well_prior_has_blend(self) -> None:
         n = 40

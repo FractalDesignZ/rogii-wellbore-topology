@@ -14,7 +14,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **PF stalk** | Process bias from heel ΔTVT; GR level × ΔGR likelihood; GR-dropout noise inflate; 5-config bag |
 | **Prior ensemble** | `prior_best` = conf-weighted clamp ensemble (last, stack, PF blend, local MD, neighbor) |
 | **Neighbor** | Heel median offset calibration (capped ±40 ft) before transfer |
-| **Residual** | Default base `prior_best`; Gate3 vs all floors; slightly stronger LGBM reg |
+| **Residual** | Default base `prior_last_tvt`; `prior_best` is Gate3 floor + residual feature; stronger LGBM reg |
 | **Clamp** | All pure candidates still ≤ last_known ± 18 ft |
 
 ## What still is RESIDUE

@@ -355,11 +355,20 @@ def blend_prior_best(
     local = _clamp(prior_local_dip)
     conf = np.clip(np.asarray(pf_confidence, dtype=float), 0.0, 1.0)
 
+    # zero-weight non-finite candidates (after clamp) so NaNs cannot poison out
+    def _finite_or_last(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        fin = np.isfinite(x)
+        return np.where(fin, x, last_arr), fin
+
+    stack, fin_s = _finite_or_last(stack)
+    blend, fin_b = _finite_or_last(blend)
+    local, fin_l = _finite_or_last(local)
+
     # Crown weights: last_known dominates; PF/stack only when conf high (full-cohort law)
     w_last = 0.50 + 0.25 * (1.0 - conf)
-    w_stack = 0.20 + 0.10 * conf
-    w_pf = 0.08 + 0.22 * conf
-    w_loc = 0.05 * (1.0 - conf)
+    w_stack = (0.20 + 0.10 * conf) * fin_s.astype(float)
+    w_pf = (0.08 + 0.22 * conf) * fin_b.astype(float)
+    w_loc = (0.05 * (1.0 - conf)) * fin_l.astype(float)
     w_nb = np.zeros(n, dtype=float)
     nb = last_arr
     if neighbor_tvt is not None and neighbor_ok is not None:
@@ -368,7 +377,8 @@ def blend_prior_best(
         m = np.isfinite(nb_raw) & (ok > 0.5)
         if m.any():
             nb = _clamp(np.where(m, nb_raw, last))
-            w_nb = np.where(m, 0.12 * ok * conf, 0.0)  # neighbor only with PF conf
+            nb, fin_n = _finite_or_last(nb)
+            w_nb = np.where(m & fin_n, 0.12 * ok * conf, 0.0)
 
     w_sum = w_last + w_stack + w_pf + w_loc + w_nb
     w_sum = np.where(w_sum < 1e-9, 1.0, w_sum)
