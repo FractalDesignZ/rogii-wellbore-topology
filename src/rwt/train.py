@@ -23,10 +23,48 @@ from rwt.spatial import SpatialIndex, build_spatial_index
 RESIDUAL_SMOOTH_WINDOW = 0
 
 # Dual residual: ensemble (prior_best+Δ) with (prior_stack+Δ) when both finite.
-# Set-15 equal-mean: 10.985 vs single-best 10.951 (rejected). Weighted re-A/B below.
+# Set-15 equal-mean 10.985 rejected; named weights 0.75/0.25 → 10.948 keep.
 DUAL_RESIDUAL_ENSEMBLE = True
-# Head weights aligned to residual_bases order [primary, partner]. Primary=prior_best.
-DUAL_RESIDUAL_WEIGHTS = (0.75, 0.25)
+# Weights by *base name* (not list position) so --prior-col reordering is safe.
+DUAL_RESIDUAL_WEIGHT_BY_BASE: dict[str, float] = {
+    "prior_best": 0.75,
+    "prior_stack": 0.25,
+}
+
+
+def dual_residual_weights_for_bases(
+    bases: list[str] | tuple[str, ...],
+    weight_by_base: dict[str, float] | None = None,
+) -> list[float]:
+    """
+    Resolve per-head ensemble weights for residual_bases order.
+
+    Uses named weights (default DUAL_RESIDUAL_WEIGHT_BY_BASE). Missing names get
+    equal share of remaining mass; if none named, equal weights.
+    """
+    bases = list(bases)
+    n = len(bases)
+    if n == 0:
+        return []
+    if n == 1:
+        return [1.0]
+    wmap = dict(weight_by_base or DUAL_RESIDUAL_WEIGHT_BY_BASE)
+    named = [float(wmap[b]) if b in wmap else float("nan") for b in bases]
+    if all(np.isfinite(named)):
+        s = float(sum(named))
+        if s <= 0:
+            return [1.0 / n] * n
+        return [float(x) / s for x in named]
+    # partial names: fill missing with equal share of leftover
+    known = sum(x for x in named if np.isfinite(x))
+    n_miss = sum(1 for x in named if not np.isfinite(x))
+    leftover = max(0.0, 1.0 - known) if known <= 1.0 else 0.0
+    fill = leftover / n_miss if n_miss else 0.0
+    out = [float(x) if np.isfinite(x) else fill for x in named]
+    s = float(sum(out))
+    if s <= 0:
+        return [1.0 / n] * n
+    return [float(x) / s for x in out]
 
 
 def _typewell_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:
@@ -222,10 +260,14 @@ def train_lgbm_residual(
     )
     # Clamp residual Δ so head cannot leave pure-prior band (clamp law parity)
     residual_max_dev = float(MAX_TVT_DEV)
-    # Dual seed bag per fold (3-seed mean regressed 12w 11.08→11.25; keep 2)
-    n_seed_bag = 3 if max_precision else 2
-    # Crown default (regularized ΔTVT); max_precision deepens for score war (still Gate3).
-    if max_precision:
+    # Set-16: dual residual + deep LGBM → 12w OOF **10.84** (shallow dual 10.95).
+    # max_precision flag forces deep; dual ensemble also uses deep by default.
+    # Shallow path retained when dual off and not max_precision (fast smoke).
+    use_deep = bool(max_precision) or (
+        DUAL_RESIDUAL_ENSEMBLE and len(residual_bases) > 1
+    )
+    n_seed_bag = 3 if use_deep else 2
+    if use_deep:
         params = {
             "objective": "regression",
             "metric": "rmse",
@@ -263,12 +305,14 @@ def train_lgbm_residual(
         }
         n_rounds, early = 1200, 80
 
+    head_weights = dual_residual_weights_for_bases(residual_bases)
+
     def _ensemble_heads(parts: list[np.ndarray]) -> np.ndarray:
-        """Weighted mean of residual heads; equal mean if weights mismatch."""
+        """Weighted mean of residual heads (named weights via residual_bases)."""
         stacked = np.vstack(parts)
         if stacked.shape[0] == 1:
             return stacked[0]
-        w = np.asarray(DUAL_RESIDUAL_WEIGHTS[: stacked.shape[0]], dtype=float)
+        w = np.asarray(head_weights[: stacked.shape[0]], dtype=float)
         if len(w) != stacked.shape[0] or not np.isfinite(w).all() or float(w.sum()) <= 0:
             return np.mean(stacked, axis=0)
         w = w / w.sum()
@@ -496,6 +540,7 @@ def train_lgbm_residual(
         "oof_rmse": oof_r,
         "oof_rmse_selected": final_oof,
         "max_precision": bool(max_precision),
+        "deep_residual": bool(use_deep),
         "lgb_threads": int(lgb_threads),
         "n_rounds_cap": int(n_rounds),
         "n_refit": int(n_refit) if use_residual and n_refit is not None else None,
@@ -504,9 +549,7 @@ def train_lgbm_residual(
         "residual_bases": list(residual_bases),
         "dual_residual": bool(len(residual_bases) > 1),
         "dual_residual_weights": (
-            list(DUAL_RESIDUAL_WEIGHTS[: len(residual_bases)])
-            if len(residual_bases) > 1
-            else None
+            list(head_weights) if len(residual_bases) > 1 else None
         ),
         "residual_max_dev": float(residual_max_dev),
         "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
@@ -545,9 +588,7 @@ def train_lgbm_residual(
         "models": final_models,
         "residual_heads": residual_heads,
         "dual_residual_weights": (
-            list(DUAL_RESIDUAL_WEIGHTS[: len(residual_bases)])
-            if use_residual and len(residual_bases) > 1
-            else None
+            list(head_weights) if use_residual and len(residual_bases) > 1 else None
         ),
         "feature_cols": cols,
         "prior_column": report["prior_column"],

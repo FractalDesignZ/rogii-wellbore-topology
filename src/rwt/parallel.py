@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import tempfile
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -172,13 +172,34 @@ def assemble_wells_parallel(
                             message=f"rows={r.get('n_rows')} err={r.get('error')}",
                         )
 
-        # load frames + attach spatial in parent (single process, progress phase)
+        # load frames + attach spatial in parent; seal once per well (single-seal).
+        # Thread pool: SpatialIndex is read-only after build; NumPy-heavy seal parallelizes.
         if progress is not None:
             progress.set_phase(
                 "spatial_attach",
                 total=len(loaded),
                 message="neighbor features + seal on assembled frames",
             )
+
+        def _seal_one(
+            item: tuple[str, pd.DataFrame, MiddleOutSplit, pd.DataFrame | None, str],
+        ) -> dict[str, Any]:
+            wid, df, sp, tw, path = item
+            t0 = time.perf_counter()
+            frame = pd.read_pickle(path)
+            frame = attach_spatial_features(frame, df, spatial, wid)
+            frame = seal_station_frame(frame, df, sp, tw)
+            dt = time.perf_counter() - t0
+            return {
+                "well_id": wid,
+                "frame": frame,
+                "seconds": round(dt, 4),
+                "n": len(frame),
+            }
+
+        seal_jobs: list[
+            tuple[str, pd.DataFrame, MiddleOutSplit, pd.DataFrame | None, str]
+        ] = []
         for wid, df, sp, tw in loaded:
             r = by_id.get(wid) or {
                 "well_id": wid,
@@ -200,21 +221,40 @@ def assemble_wells_parallel(
                 if progress is not None:
                     progress.tick(item=wid, ok=False, message="no_frame")
                 continue
-            frame = pd.read_pickle(path)
-            # Parent: attach neighbors then seal once (finalize + kernel + watermark)
-            t0 = time.perf_counter()
-            frame = attach_spatial_features(frame, df, spatial, wid)
-            frame = seal_station_frame(frame, df, sp, tw)
-            dt = time.perf_counter() - t0
-            seal_phase_s += dt
-            seal_per_well.append({"well_id": wid, "seconds": round(dt, 4), "n": len(frame)})
-            frames.append(frame)
+            seal_jobs.append((wid, df, sp, tw, path))
+
+        n_seal_threads = max(1, min(int(cfg.get("workers") or 1), len(seal_jobs) or 1))
+        sealed_by_id: dict[str, dict[str, Any]] = {}
+        if n_seal_threads <= 1 or len(seal_jobs) <= 1:
+            for job in seal_jobs:
+                sealed_by_id[job[0]] = _seal_one(job)
+        else:
+            with ThreadPoolExecutor(max_workers=n_seal_threads) as tex:
+                futs = {tex.submit(_seal_one, job): job[0] for job in seal_jobs}
+                for fut in as_completed(futs):
+                    wid = futs[fut]
+                    sealed_by_id[wid] = fut.result()
+
+        # stable well order matching loaded
+        for wid, _df, _sp, _tw in loaded:
+            s = sealed_by_id.get(wid)
+            if not s:
+                continue
+            seal_phase_s += float(s["seconds"])
+            seal_per_well.append(
+                {
+                    "well_id": wid,
+                    "seconds": s["seconds"],
+                    "n": s["n"],
+                }
+            )
+            frames.append(s["frame"])
             passed_wells.append(wid)
             if progress is not None:
                 progress.tick(
                     item=wid,
                     ok=True,
-                    message=f"spatial+seal n={len(frame)} {dt:.3f}s",
+                    message=f"spatial+seal n={s['n']} {s['seconds']:.3f}s",
                 )
     finally:
         # best-effort cleanup of temp pickles
@@ -241,5 +281,8 @@ def assemble_wells_parallel(
         # parent-side attach_spatial + seal_station_frame cost (kernel visible)
         "seal_phase_seconds": round(seal_phase_s, 4),
         "seal_per_well": seal_per_well,
+        "seal_threads": int(
+            max(1, min(int(cfg.get("workers") or 1), len(seal_per_well) or 1))
+        ),
     }
     return frames, gate2_meta

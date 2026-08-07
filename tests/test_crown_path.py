@@ -375,6 +375,19 @@ class TestCrownPath(unittest.TestCase):
         # empty → n_rounds
         self.assertEqual(select_n_refit([], 800, floor=200), 800)
 
+    def test_dual_residual_weights_by_base_name(self) -> None:
+        """Weights follow base *names*, not list position (CR dual residual)."""
+        from rwt.train import dual_residual_weights_for_bases
+
+        w1 = dual_residual_weights_for_bases(["prior_best", "prior_stack"])
+        self.assertAlmostEqual(w1[0], 0.75)
+        self.assertAlmostEqual(w1[1], 0.25)
+        # reverse order must still assign 0.75 to prior_best
+        w2 = dual_residual_weights_for_bases(["prior_stack", "prior_best"])
+        self.assertAlmostEqual(w2[0], 0.25)
+        self.assertAlmostEqual(w2[1], 0.75)
+        self.assertEqual(dual_residual_weights_for_bases(["prior_best"]), [1.0])
+
     def test_smooth_residual_along_well_preserves_mean(self) -> None:
         """MD smooth damps high-freq noise; well means unchanged."""
         from rwt.baselines import smooth_residual_along_well

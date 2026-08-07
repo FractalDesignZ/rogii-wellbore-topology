@@ -16,7 +16,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | **Stack base** | `prior_stack` = last + soft dip + **median PF bag** + high-conf NCC soft pull (clamp ±18) |
 | **Prior ensemble** | `prior_best` **stack-led** clamp of stack/PF/local/neighbor/NCC (NCC weight ∝ conf only) |
 | **Neighbor** | Heel `TVT_input`-only median offset; train/serve seal after attach; **stack soft-nb weight 0** (measure); neighbors in prior_best + features |
-| **Residual** | Dual head **0.75·(prior_best+Δ)+0.25·(prior_stack+Δ)** (set-15); pure floor **`prior_stack`**; toe-weighted L2; dual seed bag; GR mismatch@stalk; Δ clip ±18; fold-safe medians; MD-smooth off; Gate3 |
+| **Residual** | Dual head **0.75·best+0.25·stack** + **deep LGBM** (set-16); pure floor **`prior_stack`**; toe-weighted L2; 3-seed bag; GR mismatch@stalk; Δ clip ±18; fold-safe medians; MD-smooth off; Gate3 |
 | **Clamp** | Published stack/prior_best/NCC/PF ≤ last±18 (`MAX_TVT_DEV`); residual Δ ≤ base±18 (may leave last band when G3 wins). Raw neighbor_tvt feature may still show ±40 offset before blend. |
 | **RESTRICT** | No Kaggle submit — OOF/Gate3/seals only |
 
@@ -26,23 +26,24 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 - Private beam / DTW / sheaf stalk offline.
 - Public PF is discrete particle — not full lattice Viterbi.
 
-## Measure (12w crown set-15 — dual residual weighted)
+## Measure (12w crown set-16 — dual deep residual)
 
 | Floor / head | OOF RMSE |
 | --- | ---: |
-| dual residual 0.75 best + 0.25 stack (Gate3) | **10.948** |
-| residual on **prior_best** only (set-14) | 10.951 |
-| dual residual equal-mean | 10.985 (rejected) |
-| residual on prior_stack (set-11–13) | 11.06 |
+| dual residual + **deep LGBM** (set-16) | **10.836** |
+| dual residual shallow 0.75/0.25 (set-15) | 10.948 |
+| residual prior_best only (set-14) | 10.951 |
+| dual equal-mean | 10.985 (rejected) |
+| prior_delta_best_stack residual feat | 10.955 (rejected) |
+| residual prior_stack (set-11–13) | 11.06 |
 | residual MD-smooth w=21 | 11.09 (rejected) |
-| residual set-10 soft-nb w=0.12 | 11.48 (rejected) |
 | residual set-4 pre-P1 (leaky; **not Gate3**) | 11.03 hist |
 | prior_stack (best pure) | **12.33** |
 | prior_best (pure) | 12.69 |
 | last_known | 13.41 |
 
-Set-14: residual **prior_best** base. Set-15: dual residual heads train/serve with weights
-0.75/0.25 (equal-mean rejected). Pure Gate3 floor remains prior_stack.
+Set-15: dual residual weights 0.75/0.25. Set-16: named weights by base, thread-pool
+seal, deep LGBM default under dual residual (max_precision profile).
 
 ### Rejected A/B (set-5 / set-7)
 
@@ -61,8 +62,9 @@ Set-14: residual **prior_best** base. Set-15: dual residual heads train/serve wi
 | well-inverse residual weights | 11.39 | hurts easy long wells |
 | residual MD-smooth w=21 | 11.09 | over-smooths stalk steps |
 | dual residual equal-mean | 10.985 | dilutes best head |
+| prior_delta_best_stack feat | 10.955 | collinear noise on dual |
 
-### Kept (set-5–15 coherence)
+### Kept (set-5–16 coherence)
 
 Soft neighbor → stack **before** `prior_best` **only when** `STACK_SOFT_NB_WEIGHT>0`
 (default **0** by measure — neighbors still enter via `prior_best` + `neighbor_*` feats);

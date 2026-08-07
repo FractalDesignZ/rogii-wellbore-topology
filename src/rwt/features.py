@@ -224,6 +224,14 @@ def finalize_after_spatial(
                 if 0 <= int(ki) < len(best) and np.isfinite(hv):
                     best[int(ki)] = float(hv)
     stations["prior_best"] = best
+    # Signed stalk gap for residual trees (best − stack); nan → 0
+    stack_arr = (
+        stations["prior_stack"].to_numpy(dtype=float)
+        if "prior_stack" in stations.columns
+        else np.full(len(stations), np.nan)
+    )
+    delta = np.asarray(best, dtype=float) - stack_arr
+    stations["prior_delta_best_stack"] = np.where(np.isfinite(delta), delta, 0.0)
     return stations
 
 
@@ -561,6 +569,7 @@ FEATURE_COLS_DEFAULT = [
     "prior_pf_bag",
     "prior_stack",
     "prior_best",
+    # prior_delta_best_stack emitted on stations but not residual X (set-16 A/B 10.955)
     "prior_ncc_tvt",
     "ncc_track_conf",
     "pf_confidence",
