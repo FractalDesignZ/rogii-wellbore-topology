@@ -87,8 +87,14 @@ def main() -> int:
             manifest["stripped_columns"] = drop
 
     seal = write_sealed_json(out / "MANIFEST.sealed.json", manifest, kind="competition_bundle")
-    # belt: ensure private_kernel never present
-    assert not (out / "private_kernel").exists()
+    # belt: ensure private_kernel never present. Explicit raise, not assert —
+    # `python -O` strips asserts, and this is the IP fence on an outbound bundle.
+    leaked = [p for p in out.rglob("*") if "private_kernel" in p.parts or p.suffix == ".whl"]
+    if leaked:
+        shutil.rmtree(out, ignore_errors=True)
+        raise RuntimeError(
+            f"IP fence: refusing to emit bundle containing {[str(p) for p in leaked]}"
+        )
     print(json.dumps({"ok": True, "out": str(out), "seal": seal.get("seal_sha256")}, indent=2))
     print("COMPETITION_BUNDLE_OK — upload submission.csv only; keep kernel private")
     return 0

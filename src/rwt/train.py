@@ -91,6 +91,53 @@ def _assemble_dataset(
     return pd.concat(frames, ignore_index=True), gate2_meta
 
 
+def nested_floor_selection(
+    y: np.ndarray,
+    cand_preds: dict[str, np.ndarray],
+    fold_id: np.ndarray,
+) -> dict[str, Any]:
+    """
+    Honest OOF for the "serve whichever pure prior scores best" strategy.
+
+    Picking ``min(floor_rmses)`` and reporting that minimum scores the winner on
+    the same rows that selected it — the winner's curse. The minimum of K noisy
+    estimates is biased low, so the sealed number flatters the served prior.
+
+    Here the choice is made on the *other* folds and scored on the held-out fold,
+    so the reported figure prices in the cost of selecting. Falls back to
+    ``ok=False`` when there are too few folds for an out-of-fold choice.
+    """
+    names = [n for n, p in cand_preds.items() if np.isfinite(p).all()]
+    folds = [f for f in np.unique(fold_id) if f >= 0]
+    if len(names) < 2 or len(folds) < 2:
+        return {"ok": False, "reason": "need >=2 candidates and >=2 folds"}
+    sq_err: list[np.ndarray] = []
+    picks: dict[str, str] = {}
+    for f in folds:
+        va = fold_id == f
+        tr = (fold_id >= 0) & ~va
+        if not va.any() or not tr.any():
+            continue
+        # choose on the training folds only
+        best = min(names, key=lambda n: rmse(y[tr], cand_preds[n][tr]))
+        picks[str(int(f))] = best
+        sq_err.append((y[va] - cand_preds[best][va]) ** 2)
+    if not sq_err:
+        return {"ok": False, "reason": "no scorable folds"}
+    allsq = np.concatenate(sq_err)
+    naive = min(rmse(y, cand_preds[n]) for n in names)
+    honest = float(np.sqrt(np.mean(allsq)))
+    return {
+        "ok": True,
+        "oof_rmse_nested": honest,
+        "oof_rmse_naive_argmin": float(naive),
+        "selection_optimism": float(honest - naive),
+        "n_candidates": len(names),
+        "fold_picks": picks,
+        "stable_pick": len(set(picks.values())) == 1,
+    }
+
+
 def train_lgbm_residual(
     stations: pd.DataFrame,
     *,
@@ -195,6 +242,8 @@ def train_lgbm_residual(
         }
         n_rounds, early = 800, 60
 
+    fold_id = np.full(len(train_df), -1, dtype=int)
+
     def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int) -> None:
         dtr = lgb.Dataset(X[tr], label=y_res[tr], feature_name=cols)
         dva = lgb.Dataset(X[va], label=y_res[va], feature_name=cols, reference=dtr)
@@ -209,6 +258,7 @@ def train_lgbm_residual(
         )
         pred_res = model.predict(X[va])
         oof[va] = pred_res
+        fold_id[va] = fold
         fold_scores.append(rmse(y[va], prior[va] + pred_res))
         models.append(model)
 
@@ -306,6 +356,17 @@ def train_lgbm_residual(
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
     serve_prior_col = prior_col
+    # Honest cost of choosing a floor by argmin, on the same rows Gate3 scored.
+    fold_s = fold_id[row_m][shared]
+    cand_arr: dict[str, np.ndarray] = {}
+    for n in floor_rmses:
+        col = _floor_col.get(n, n)
+        if col in train_df.columns:
+            v = train_df[col].to_numpy(dtype=float)[row_m][shared]
+            if np.isfinite(v).all():
+                cand_arr[col] = v
+    cand_arr.setdefault(prior_col, prior_m)
+    selection_audit = nested_floor_selection(y_s, cand_arr, fold_s)
     if use_residual:
         print(
             f"[GATE PASS] Residual head accepted: OOF {gate3.detail['oof_rmse_residual']:.3f} "
@@ -333,6 +394,17 @@ def train_lgbm_residual(
             f"Serve pure '{serve_prior_col}' (OOF {final_oof:.3f}).",
             flush=True,
         )
+        if selection_audit.get("ok"):
+            print(
+                f"[SELECTION] '{serve_prior_col}' was chosen by argmin over "
+                f"{selection_audit['n_candidates']} priors on these same rows. "
+                f"Nested (choose-on-other-folds) OOF = "
+                f"{selection_audit['oof_rmse_nested']:.3f} "
+                f"vs reported {selection_audit['oof_rmse_naive_argmin']:.3f} "
+                f"→ optimism {selection_audit['selection_optimism']:+.3f} ft. "
+                f"Quote the nested figure as the honest floor.",
+                flush=True,
+            )
 
     report = {
         "ok": True,
@@ -345,6 +417,10 @@ def train_lgbm_residual(
         "cv_rmse_std": float(np.std(fold_scores)),
         "oof_rmse": oof_r,
         "oof_rmse_selected": final_oof,
+        # oof_rmse_selected is argmin-on-scored-rows when Gate3 rejects, so it
+        # carries selection optimism; selection_audit prices that in.
+        "oof_rmse_selected_is_argmin": bool(not use_residual),
+        "selection_audit": selection_audit,
         "max_precision": bool(max_precision),
         "lgb_threads": int(lgb_threads),
         "n_rounds_cap": int(n_rounds),

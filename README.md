@@ -74,7 +74,8 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Abstraction-mode stack + TSS open-curve geometry | **landed** |
 | PF stack + clamps + Gate3 best pure floor | **landed** (PR#3–#4) |
 | Multi-process assemble + live dashboard | **landed** (PR#5) |
-| Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
+| Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT — ⚠ [unverified](docs/VERIFICATION_VALIDATION.md#f3--the-headline-metric-disagrees-with-itself-and-its-artifact-is-absent): ledger says ~14.67, cited artifact not in repo |
+| V&V pass | [`docs/VERIFICATION_VALIDATION.md`](docs/VERIFICATION_VALIDATION.md) · `python scripts/vv_harness.py` |
 | GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
 | RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
 | Kaggle submit | **OFF** — measure in-repo only (OOF / Gate3 / seals); no competition upload under RESTRICT |

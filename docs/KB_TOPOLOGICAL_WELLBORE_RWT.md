@@ -191,6 +191,16 @@ Competition metric is toe-only; GroupKFold-by-well is non-negotiable.
 
 Artifact: `artifacts/full_train_parallel/cv_report.json` (GroupKFold 5-fold, 773 wells, ~3.78M toe stations).
 
+> ⚠ **V&V status — unverified.** `artifacts/**` is gitignored, so this artifact
+> is not in the repo and the table below cannot be checked from source.
+> `MAXOP_CR_REVIEW_LEDGER.md` quotes the same run as **~14.67**, not 14.54; on a
+> Gate3-accept run selected == residual, so the two disagree. Re-run
+> `scripts/train_max_precision.py --max-wells 0` and commit the seal to close
+> this. The pipeline *machinery* is validated independently in
+> [`VERIFICATION_VALIDATION.md`](VERIFICATION_VALIDATION.md) — that pass found
+> OOF to be conservative vs true held-out error on a synthetic cohort, but says
+> nothing about the field numbers here.
+
 | Head | OOF RMSE |
 | --- | ---: |
 | **Residual on `prior_stack` (Gate3 ACCEPT)** | **14.54** |

@@ -73,15 +73,30 @@ def gate_residual_acceptance(
       - every pure floor prior in ``floor_rmses`` (stack, pf_blend, …)
 
     Competition law: never ship a head that loses the best pure prior floor.
+
+    Row-set parity is enforced here, not assumed of the caller: every array
+    predictor is scored on the rows where *all* of them are finite. Scoring a
+    residual on its own finite subset while the prior is scored on more rows
+    lets a strictly worse head pass (it drops the rows it fails on), so the
+    comparison must share one mask.
     """
     y_true = np.asarray(y_true, float)
     oof_residual_pred = np.asarray(oof_residual_pred, float)
     prior_pred = np.asarray(prior_pred, float)
-    r_res = rmse(y_true, oof_residual_pred)
-    r_pri = rmse(y_true, prior_pred)
+    lk_arr = None if last_known_pred is None else np.asarray(last_known_pred, float)
+
+    shared = np.isfinite(y_true) & np.isfinite(oof_residual_pred) & np.isfinite(prior_pred)
+    if lk_arr is not None and lk_arr.shape == y_true.shape:
+        shared &= np.isfinite(lk_arr)
+    n_shared = int(shared.sum())
+    n_dropped = int(y_true.size - n_shared)
+
+    y_s = y_true[shared]
+    r_res = rmse(y_s, oof_residual_pred[shared])
+    r_pri = rmse(y_s, prior_pred[shared])
     r_lk = None
-    if last_known_pred is not None:
-        r_lk = rmse(y_true, np.asarray(last_known_pred, float))
+    if lk_arr is not None:
+        r_lk = rmse(y_s, lk_arr[shared]) if lk_arr.shape == y_true.shape else rmse(y_true, lk_arr)
     floors = {str(k): float(v) for k, v in (floor_rmses or {}).items() if np.isfinite(v)}
     if r_lk is not None and np.isfinite(r_lk):
         floors.setdefault("last_known", float(r_lk))
@@ -106,6 +121,8 @@ def gate_residual_acceptance(
             "best_floor_name": best_floor_name,
             "floor_rmses": floors,
             "prior_name": prior_name,
+            "n_scored_rows": n_shared,
+            "n_dropped_nonfinite_rows": n_dropped,
             "beat_prior": beat_prior,
             "beat_last_known": beat_lk,
             "beat_all_floors": beat_all_floors,
