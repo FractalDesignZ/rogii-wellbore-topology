@@ -348,7 +348,30 @@ def train_lgbm_residual(
             f"{gate3.detail.get('oof_rmse_best_floor'):.3f}",
             flush=True,
         )
-        final_models = models
+        # Refit serve ensemble on *all* train rows with full-train medians so
+        # serve impute matches training impute (CR P1 train/serve contract).
+        # Fold models remain OOF-only and are discarded for the blob.
+        X_serve = impute_feature_frame(
+            pd.DataFrame(X_raw, columns=cols), medians=feature_medians
+        ).to_numpy(dtype=float)
+        d_full = lgb.Dataset(
+            X_serve, label=y_res, weight=sample_w, feature_name=cols
+        )
+        # early-stop rounds from median of fold bag models if available
+        n_refit = n_rounds
+        if models:
+            try:
+                bests = [int(m.best_iteration or n_rounds) for m in models]
+                n_refit = max(50, int(np.median(bests)))
+            except Exception:
+                n_refit = n_rounds
+        final_models = []
+        for b in range(n_seed_bag):
+            p = dict(params)
+            p["seed"] = seed + 900 + b * 101
+            final_models.append(
+                lgb.train(p, d_full, num_boost_round=n_refit)
+            )
         final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
     else:

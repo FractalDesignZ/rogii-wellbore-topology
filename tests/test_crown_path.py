@@ -293,6 +293,26 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(m.last_x, 7.0)
         self.assertTrue(np.allclose(y, 118.0))
 
+    def test_serve_blob_medians_match_refit_contract(self) -> None:
+        """Serialized blob must carry single full-train medians for serve ensemble."""
+        # contract unit: not full LGBM fit — documents expected keys after Gate3 accept
+        blob = {
+            "models": ["placeholder"],
+            "feature_cols": ["a"],
+            "feature_medians": {"a": 1.5},
+            "residual_max_dev": 18.0,
+            "use_residual": True,
+            "prior_column": "prior_stack",
+        }
+        self.assertIn("feature_medians", blob)
+        self.assertEqual(blob["feature_medians"]["a"], 1.5)
+        # serve must not re-fit medians from batch when keys present
+        from rwt.features import impute_feature_frame
+
+        batch = pd.DataFrame({"a": [np.nan, 99.0]})
+        out = impute_feature_frame(batch, medians=blob["feature_medians"])
+        self.assertAlmostEqual(float(out["a"].iloc[0]), 1.5)
+
     def test_process_bias_near_ps_clipped(self) -> None:
         """Build-section large dTVT must not set toe process_bias outside ±0.05."""
         tw_tvt = np.linspace(100, 200, 200)
