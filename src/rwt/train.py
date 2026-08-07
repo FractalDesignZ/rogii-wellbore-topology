@@ -368,16 +368,20 @@ def main(argv: list[str] | None = None) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    from rwt.parallel import configure_compute_env
     from rwt.progress import init_progress
 
-    progress = init_progress(out)
+    # resolve workers before progress snapshot so dashboard shows real RWT_WORKERS
     workers = args.workers if args.workers > 0 else None
+    cfg = configure_compute_env(workers=workers)
+    progress = init_progress(out)
+    progress.state["workers"] = int(cfg["workers"])
     try:
         stations, gate2_meta = _assemble_dataset(
             Path(args.data) if args.data else None,
             synthetic=args.synthetic or not args.data,
             max_wells=args.max_wells,
-            workers=workers,
+            workers=int(cfg["workers"]),
             progress=progress,
         )
         stations.to_csv(out / "stations.csv", index=False)
