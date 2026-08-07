@@ -293,29 +293,26 @@ class TestCrownPath(unittest.TestCase):
         idx.add(well_spatial_node_from_lateral("nb", nb))
         sp = resolve_middle_out(lat, well_id="tgt")
         st = build_station_frame(lat, None, sp, spatial_index=idx)
-        # require soft-neighbor moved stack (deterministic fixture — no skip)
+        from rwt.features import compute_prior_disagreement
+
         last = float(st["prior_last_tvt"].iloc[0])
         unknown = ~st["is_known"].to_numpy(dtype=bool)
         stack = st["prior_stack"].to_numpy(dtype=float)
-        ok = st["neighbor_transfer_ok"].to_numpy(dtype=float)
-        nbt = st["neighbor_tvt"].to_numpy(dtype=float)
-        # ensure spatial transfer is live so soft-neighbor can fire
-        self.assertTrue((ok[unknown] > 0.55).any(), "fixture must have trusted neighbor transfer")
-        self.assertTrue(np.isfinite(nbt[unknown]).any())
-        moved = unknown & np.isfinite(stack) & (np.abs(stack - last) > 0.05)
+        pre = st.attrs.get("prior_stack_pre_neighbor")
+        self.assertIsNotNone(pre, "build_station_frame must stash pre-neighbor stack")
+        pre = np.asarray(pre, dtype=float)
+        # prove soft-neighbor (not PF/NCC alone) changed stack on unknown rows
+        nb_moved = unknown & np.isfinite(stack) & np.isfinite(pre) & (np.abs(stack - pre) > 1e-6)
         self.assertTrue(
-            moved.any(),
-            "soft neighbor must move at least one unknown stack row off last",
+            nb_moved.any(),
+            "soft neighbor transfer must change prior_stack on ≥1 unknown row",
         )
-        # disagreement of final stack vs last/pf/ncc must match pure helper
-        from rwt.features import compute_prior_disagreement
-
         pf = st["prior_pf_blend"].to_numpy(dtype=float)
         ncc = st["prior_ncc_tvt"].to_numpy(dtype=float)
         expected = compute_prior_disagreement(last, stack, pf, ncc)
         got = st["prior_disagreement"].to_numpy(dtype=float)
         self.assertTrue(np.allclose(got, expected, equal_nan=True, atol=1e-9))
-        self.assertGreater(float(np.max(got[moved])), 0.01)
+        self.assertGreater(float(np.max(got[nb_moved])), 0.01)
 
     def test_impute_feature_frame_median_not_zero(self) -> None:
         from rwt.features import impute_feature_frame

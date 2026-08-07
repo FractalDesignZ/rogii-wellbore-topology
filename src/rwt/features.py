@@ -330,13 +330,14 @@ def build_station_frame(
     )
     # Soft neighbor into residual base (stack) *before* prior_best so ensemble sees it.
     # Exclude known heel: stack was already locked to observed TVT (lines above).
+    stack_pre_nb = stations["prior_stack"].to_numpy(dtype=float).copy()
     if (
         "prior_stack" in stations.columns
         and nb is not None
         and nb_ok is not None
         and np.isfinite(last_f)
     ):
-        st = stations["prior_stack"].to_numpy(dtype=float).copy()
+        st = stack_pre_nb.copy()
         ok = np.asarray(nb_ok, dtype=float)
         nbt = np.asarray(nb, dtype=float)
         known = (
@@ -352,21 +353,17 @@ def build_station_frame(
             st = last_f + np.clip(st - last_f, -MAX_TVT_DEV, MAX_TVT_DEV)
             stations["prior_stack"] = st
 
-    # Disagreement vs final residual base (post soft-neighbor stack transfer)
-    stack_f = stations["prior_stack"].to_numpy(dtype=float)
-    pf_f = stations["prior_pf_blend"].to_numpy(dtype=float)
-    ncc_f = (
+    # Disagreement vs final residual base (post soft-neighbor) — single helper
+    stations["prior_disagreement"] = compute_prior_disagreement(
+        last_f,
+        stations["prior_stack"].to_numpy(dtype=float),
+        stations["prior_pf_blend"].to_numpy(dtype=float),
         stations["prior_ncc_tvt"].to_numpy(dtype=float)
         if "prior_ncc_tvt" in stations.columns
-        else np.full(len(stations), np.nan)
+        else None,
     )
-    last_arr = np.full(len(stations), last_f if np.isfinite(last_f) else np.nan)
-    with np.errstate(all="ignore"):
-        dd = np.nanstd(
-            np.column_stack([last_arr, stack_f, pf_f, ncc_f]),
-            axis=1,
-        )
-    stations["prior_disagreement"] = np.where(np.isfinite(dd), dd, 0.0)
+    # stash pre-nb stack for diagnostics/tests (not a feature col)
+    stations.attrs["prior_stack_pre_neighbor"] = stack_pre_nb
 
     best = blend_prior_best(
         last_f,
