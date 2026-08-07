@@ -421,6 +421,42 @@ class TestCrownPath(unittest.TestCase):
         self.assertTrue(np.all(y > 90.0 + 1e-6))
         self.assertTrue(np.all(y < 110.0 - 1e-6))
 
+    def test_serve_dual_residual_heads_mean(self) -> None:
+        """Dual residual_heads: mean of (prior_b + Δ_b) across heads."""
+        from rwt.submit import predict_stations
+
+        class _MBest:
+            def predict(self, X):
+                return np.full(len(X), 4.0)
+
+        class _MStack:
+            def predict(self, X):
+                return np.full(len(X), 8.0)
+
+        st = pd.DataFrame(
+            {
+                "prior_best": [100.0, 100.0],
+                "prior_stack": [100.0, 100.0],
+                "relative_md": [0.0, 1.0],
+            }
+        )
+        blob = {
+            "models": [_MBest()],  # legacy primary
+            "residual_heads": [
+                {"prior_column": "prior_best", "models": [_MBest()]},
+                {"prior_column": "prior_stack", "models": [_MStack()]},
+            ],
+            "dual_residual_weights": [0.75, 0.25],
+            "feature_cols": ["relative_md"],
+            "prior_column": "prior_best",
+            "use_residual": True,
+            "residual_max_dev": 18.0,
+            "feature_medians": {"relative_md": 0.0},
+        }
+        y = predict_stations(blob, st)
+        # 0.75*(100+4) + 0.25*(100+8) = 105
+        self.assertTrue(np.allclose(y, 105.0))
+
     def test_compute_prior_disagreement_pure(self) -> None:
         """Unit: four-way nanstd matches helper (CR P2 contract)."""
         from rwt.features import compute_prior_disagreement

@@ -22,6 +22,12 @@ from rwt.spatial import SpatialIndex, build_spatial_index
 # 12w measure: w=21 → residual 11.09 vs hold 11.06 (rejected). Keep hook for re-A/B.
 RESIDUAL_SMOOTH_WINDOW = 0
 
+# Dual residual: ensemble (prior_best+Δ) with (prior_stack+Δ) when both finite.
+# Set-15 equal-mean: 10.985 vs single-best 10.951 (rejected). Weighted re-A/B below.
+DUAL_RESIDUAL_ENSEMBLE = True
+# Head weights aligned to residual_bases order [primary, partner]. Primary=prior_best.
+DUAL_RESIDUAL_WEIGHTS = (0.75, 0.25)
+
 
 def _typewell_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:
     """Back-compat alias — prefer ``typewell_path_for_well``."""
@@ -147,23 +153,38 @@ def train_lgbm_residual(
         prior_col = resolve_prior_column(train_df, DEFAULT_PRIOR_COL, strict=False)
     else:
         prior_col = resolve_prior_column(train_df, prior_col, strict=True)
-    # require finite TVT and selected prior (PF returns NaN when no TVT ref)
-    fin = np.isfinite(train_df["TVT"].to_numpy(dtype=float)) & np.isfinite(
-        train_df[prior_col].to_numpy(dtype=float)
-    )
+    from rwt.features import compute_feature_medians, impute_feature_frame
+
+    # Residual bases: primary + optional dual ensemble partner (best+stack)
+    residual_bases: list[str] = [prior_col]
+    if DUAL_RESIDUAL_ENSEMBLE:
+        for partner in ("prior_best", "prior_stack"):
+            if partner != prior_col and partner in train_df.columns:
+                residual_bases.append(partner)
+                break  # one partner only: best↔stack pair
+    residual_bases = list(dict.fromkeys(residual_bases))
+
+    # require finite TVT and *all* residual bases (PF may NaN without typewell)
+    fin = np.isfinite(train_df["TVT"].to_numpy(dtype=float))
+    for b in residual_bases:
+        if b not in train_df.columns:
+            raise ValueError(f"residual base column missing: {b}")
+        fin &= np.isfinite(train_df[b].to_numpy(dtype=float))
     train_df = train_df.loc[fin].copy()
     if len(train_df) < 50:
         raise ValueError(
             f"Insufficient labeled prediction-zone rows for residual train "
-            f"(n={len(train_df)}). Need finite TVT and {prior_col} values."
+            f"(n={len(train_df)}). Need finite TVT and bases {residual_bases}."
         )
-    from rwt.features import compute_feature_medians, impute_feature_frame
 
     # Raw features (NaN kept) — impute fold-local medians only (no OOF leak)
     X_raw, cols = feature_matrix(train_df, impute=False)
     y = train_df["TVT"].to_numpy(dtype=float)
-    prior = train_df[prior_col].to_numpy(dtype=float)
-    y_res = y - prior
+    priors_map = {
+        b: train_df[b].to_numpy(dtype=float) for b in residual_bases
+    }
+    y_res_map = {b: y - priors_map[b] for b in residual_bases}
+    prior = priors_map[prior_col]
     groups = train_df["well_id"].astype(str).to_numpy()
     # Toe-weighted residual: far-from-PS stations dominate public error
     # (well-inverse-count balancing regressed 12w residual 11.06→11.39)
@@ -180,7 +201,7 @@ def train_lgbm_residual(
         raise SystemExit("pip install lightgbm") from e
 
     n_groups = len(np.unique(groups))
-    oof = np.zeros(len(train_df))
+    oof_res_map = {b: np.zeros(len(train_df)) for b in residual_bases}
     fold_best_iters: list[int] = []
     fold_scores: list[float] = []
     # Residual head: shallow default; max_precision deepens trees for score war.
@@ -242,6 +263,17 @@ def train_lgbm_residual(
         }
         n_rounds, early = 1200, 80
 
+    def _ensemble_heads(parts: list[np.ndarray]) -> np.ndarray:
+        """Weighted mean of residual heads; equal mean if weights mismatch."""
+        stacked = np.vstack(parts)
+        if stacked.shape[0] == 1:
+            return stacked[0]
+        w = np.asarray(DUAL_RESIDUAL_WEIGHTS[: stacked.shape[0]], dtype=float)
+        if len(w) != stacked.shape[0] or not np.isfinite(w).all() or float(w.sum()) <= 0:
+            return np.mean(stacked, axis=0)
+        w = w / w.sum()
+        return np.average(stacked, axis=0, weights=w)
+
     def _fit_fold(tr: np.ndarray, va: np.ndarray, fold: int) -> None:
         # Medians from train fold only — never validation wells (CR P1)
         tr_frame = pd.DataFrame(X_raw[tr], columns=cols)
@@ -249,38 +281,46 @@ def train_lgbm_residual(
         fold_med = compute_feature_medians(tr_frame)
         Xtr = impute_feature_frame(tr_frame, medians=fold_med).to_numpy(dtype=float)
         Xva = impute_feature_frame(va_frame, medians=fold_med).to_numpy(dtype=float)
-        dtr = lgb.Dataset(
-            Xtr, label=y_res[tr], weight=sample_w[tr], feature_name=cols
-        )
-        dva = lgb.Dataset(
-            Xva, label=y_res[va], weight=sample_w[va], feature_name=cols, reference=dtr
-        )
-        preds_bag: list[np.ndarray] = []
-        for b in range(n_seed_bag):
-            p = dict(params)
-            p["seed"] = seed + fold * 17 + b * 101
-            model = lgb.train(
-                p,
-                dtr,
-                num_boost_round=n_rounds,
-                valid_sets=[dva],
-                callbacks=[lgb.early_stopping(early, verbose=False)],
+        head_tvt: list[np.ndarray] = []
+        for bi, base in enumerate(residual_bases):
+            y_res_b = y_res_map[base]
+            dtr = lgb.Dataset(
+                Xtr, label=y_res_b[tr], weight=sample_w[tr], feature_name=cols
             )
-            preds_bag.append(np.asarray(model.predict(Xva), dtype=float))
-            fold_best_iters.append(int(model.best_iteration or n_rounds))
-            # drop fold booster after OOF predict — only best_iteration needed for refit
-        pred_res = np.mean(np.vstack(preds_bag), axis=0)
-        pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
-        # Well-local MD smooth (GroupKFold holds out whole wells → contiguous)
-        if RESIDUAL_SMOOTH_WINDOW > 1:
-            pred_res = smooth_residual_along_well(
-                pred_res, groups[va], window=RESIDUAL_SMOOTH_WINDOW
+            dva = lgb.Dataset(
+                Xva,
+                label=y_res_b[va],
+                weight=sample_w[va],
+                feature_name=cols,
+                reference=dtr,
             )
+            preds_bag: list[np.ndarray] = []
+            for b in range(n_seed_bag):
+                p = dict(params)
+                p["seed"] = seed + fold * 17 + bi * 31 + b * 101
+                model = lgb.train(
+                    p,
+                    dtr,
+                    num_boost_round=n_rounds,
+                    valid_sets=[dva],
+                    callbacks=[lgb.early_stopping(early, verbose=False)],
+                )
+                preds_bag.append(np.asarray(model.predict(Xva), dtype=float))
+                fold_best_iters.append(int(model.best_iteration or n_rounds))
+            pred_res = np.mean(np.vstack(preds_bag), axis=0)
             pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
-        oof[va] = pred_res
-        fold_scores.append(rmse(y[va], prior[va] + pred_res))
+            if RESIDUAL_SMOOTH_WINDOW > 1:
+                pred_res = smooth_residual_along_well(
+                    pred_res, groups[va], window=RESIDUAL_SMOOTH_WINDOW
+                )
+                pred_res = np.clip(pred_res, -residual_max_dev, residual_max_dev)
+            oof_res_map[base][va] = pred_res
+            head_tvt.append(priors_map[base][va] + pred_res)
+        oof_ens = _ensemble_heads(head_tvt)
+        fold_scores.append(rmse(y[va], oof_ens))
 
     oof_mask = np.zeros(len(train_df), dtype=bool)
+    y_res_primary = y_res_map[prior_col]
     if n_groups < 2:
         n = len(train_df)
         cut = max(1, int(n * 0.75))
@@ -293,14 +333,19 @@ def train_lgbm_residual(
         oof_mask[va] = True
     else:
         gkf = GroupKFold(n_splits=min(n_splits, n_groups))
-        for fold, (tr, va) in enumerate(gkf.split(X_raw, y_res, groups)):
+        for fold, (tr, va) in enumerate(gkf.split(X_raw, y_res_primary, groups)):
             _fit_fold(tr, va, fold)
             oof_mask[va] = True
 
     # Serve medians: full labeled toe set (no test leakage); stored on model blob
     feature_medians = compute_feature_medians(pd.DataFrame(X_raw, columns=cols))
-    oof = np.clip(oof, -residual_max_dev, residual_max_dev)
-    oof_tvt = prior + oof
+    # Ensemble OOF TVT = weighted mean over residual heads (prior_b + Δ_b)
+    head_full = [
+        priors_map[b]
+        + np.clip(oof_res_map[b], -residual_max_dev, residual_max_dev)
+        for b in residual_bases
+    ]
+    oof_tvt = _ensemble_heads(head_full)
     # Note: do NOT re-clamp residual head to last±max_dev — Gate3 residual may
     # correctly leave the pure-prior band (diag: last clamp regressed 11.08→11.35).
     from rwt.kernel_api import resolve_kernel
@@ -381,32 +426,43 @@ def train_lgbm_residual(
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
     serve_prior_col = prior_col
+    residual_heads: list[dict[str, Any]] = []
+    final_models: list[Any] = []
     if use_residual:
         print(
             f"[GATE PASS] Residual head accepted: OOF {gate3.detail['oof_rmse_residual']:.3f} "
             f"<= best_floor({gate3.detail.get('best_floor_name')}) "
-            f"{gate3.detail.get('oof_rmse_best_floor'):.3f}",
+            f"{gate3.detail.get('oof_rmse_best_floor'):.3f}"
+            f" bases={residual_bases}",
             flush=True,
         )
         # Refit serve ensemble on *all* train rows with full-train medians so
         # serve impute matches training impute (CR P1 train/serve contract).
-        # Fold models remain OOF-only and are discarded for the blob.
         X_serve = impute_feature_frame(
             pd.DataFrame(X_raw, columns=cols), medians=feature_medians
         ).to_numpy(dtype=float)
-        d_full = lgb.Dataset(
-            X_serve, label=y_res, weight=sample_w, feature_name=cols
-        )
-        # early-stop rounds from fold bag best_iteration only (boosters dropped).
         n_refit = select_n_refit(fold_best_iters, n_rounds, floor=200)
-        final_models = []
-        for b in range(n_seed_bag):
-            p = dict(params)
-            p["seed"] = seed + 900 + b * 101
-            final_models.append(
-                lgb.train(p, d_full, num_boost_round=n_refit)
+        for bi, base in enumerate(residual_bases):
+            d_full = lgb.Dataset(
+                X_serve,
+                label=y_res_map[base],
+                weight=sample_w,
+                feature_name=cols,
             )
-        final_prior_type = f"{prior_col}_plus_lgbm_residual"
+            models_b: list[Any] = []
+            for b in range(n_seed_bag):
+                p = dict(params)
+                p["seed"] = seed + 900 + bi * 47 + b * 101
+                models_b.append(lgb.train(p, d_full, num_boost_round=n_refit))
+            residual_heads.append({"prior_column": base, "models": models_b})
+        # Legacy single-head blob fields = primary base (back-compat)
+        final_models = residual_heads[0]["models"]
+        if len(residual_bases) > 1:
+            final_prior_type = (
+                f"dual_residual({'+'.join(residual_bases)})_lgbm"
+            )
+        else:
+            final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
     else:
         n_refit = None
@@ -418,6 +474,7 @@ def train_lgbm_residual(
         serve_prior_col = min(cand, key=cand.get)
         final_oof = cand[serve_prior_col]
         final_models = []
+        residual_heads = []
         final_prior_type = f"pure_{serve_prior_col}"
         print(
             f"[GATE REJECT] Residual OOF {gate3.detail['oof_rmse_residual']:.3f} "
@@ -444,6 +501,13 @@ def train_lgbm_residual(
         "n_refit": int(n_refit) if use_residual and n_refit is not None else None,
         "fold_best_iters": [int(x) for x in fold_best_iters],
         "n_seed_bag": int(n_seed_bag),
+        "residual_bases": list(residual_bases),
+        "dual_residual": bool(len(residual_bases) > 1),
+        "dual_residual_weights": (
+            list(DUAL_RESIDUAL_WEIGHTS[: len(residual_bases)])
+            if len(residual_bases) > 1
+            else None
+        ),
         "residual_max_dev": float(residual_max_dev),
         "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
         "feature_medians": {k: float(v) for k, v in feature_medians.items()},
@@ -479,6 +543,12 @@ def train_lgbm_residual(
     return {
         "report": report,
         "models": final_models,
+        "residual_heads": residual_heads,
+        "dual_residual_weights": (
+            list(DUAL_RESIDUAL_WEIGHTS[: len(residual_bases)])
+            if use_residual and len(residual_bases) > 1
+            else None
+        ),
         "feature_cols": cols,
         "prior_column": report["prior_column"],
         "use_residual": use_residual,
@@ -560,6 +630,8 @@ def main(argv: list[str] | None = None) -> int:
             joblib.dump(
                 {
                     "models": result["models"],
+                    "residual_heads": result.get("residual_heads") or [],
+                    "dual_residual_weights": result.get("dual_residual_weights"),
                     "feature_cols": result["feature_cols"],
                     "prior_column": result["prior_column"],
                     "use_residual": result.get("use_residual", True),

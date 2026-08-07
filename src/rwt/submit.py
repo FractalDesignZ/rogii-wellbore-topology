@@ -74,30 +74,72 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
             f"non-finite serving prior '{prior_col}' on {n_bad}/{len(prior)} rows; "
             "refuse silent fill — fix assemble/prior before submit"
         )
-    models = model_blob.get("models") or []
-    use_residual = bool(model_blob.get("use_residual", True)) and len(models) > 0
-    if not use_residual:
-        return prior
-    preds = np.vstack([np.asarray(m.predict(Xn), dtype=float) for m in models])
-    # Match train OOF: mean seed bag (median+std-shrink rejected by measure)
-    res = np.mean(preds, axis=0)
-    # Clamp residual Δ vs residual *base* only (prior_stack). Do not re-clamp to
-    # last_known: Gate3 residual may leave the pure-prior band when it wins OOF.
     max_dev = float(model_blob.get("residual_max_dev", MAX_TVT_DEV))
-    res = np.clip(res, -max_dev, max_dev)
-    # Train/serve parity: well-local MD residual smooth (same window as OOF)
     smooth_w = int(model_blob.get("residual_smooth_window") or 0)
-    if smooth_w > 1:
-        from rwt.baselines import smooth_residual_along_well
+    wids = (
+        stations["well_id"].to_numpy()
+        if "well_id" in stations.columns
+        else None
+    )
 
-        wids = (
-            stations["well_id"].to_numpy()
-            if "well_id" in stations.columns
-            else None
-        )
-        res = smooth_residual_along_well(res, wids, window=smooth_w)
+    def _head_tvt(prior_arr: np.ndarray, models: list) -> np.ndarray:
+        if not models:
+            return prior_arr
+        preds = np.vstack([np.asarray(m.predict(Xn), dtype=float) for m in models])
+        # Match train OOF: mean seed bag (median+std-shrink rejected by measure)
+        res = np.mean(preds, axis=0)
+        # Clamp residual Δ vs residual *base* only. Do not re-clamp to last_known.
         res = np.clip(res, -max_dev, max_dev)
-    out = prior + res
+        if smooth_w > 1:
+            from rwt.baselines import smooth_residual_along_well
+
+            res = smooth_residual_along_well(res, wids, window=smooth_w)
+            res = np.clip(res, -max_dev, max_dev)
+        return prior_arr + res
+
+    # Dual residual: mean over residual_heads (set-15); legacy uses models alone
+    heads = model_blob.get("residual_heads") or []
+    use_residual = bool(model_blob.get("use_residual", True))
+    if use_residual and heads:
+        outs: list[np.ndarray] = []
+        for h in heads:
+            if not isinstance(h, dict):
+                continue
+            h_models = h.get("models") or []
+            if not h_models:
+                continue
+            h_prior_name = str(h.get("prior_column") or stored_prior or "prior_best")
+            h_col = resolve_prior_column(stations, h_prior_name, strict=True)
+            h_prior = stations[h_col].to_numpy(dtype=float)
+            if not np.isfinite(h_prior).all():
+                n_bad = int((~np.isfinite(h_prior)).sum())
+                raise ValueError(
+                    f"non-finite serving prior '{h_col}' on {n_bad}/{len(h_prior)} rows"
+                )
+            outs.append(_head_tvt(h_prior, list(h_models)))
+        if outs:
+            stacked = np.vstack(outs)
+            w = model_blob.get("dual_residual_weights")
+            if (
+                isinstance(w, (list, tuple))
+                and len(w) == stacked.shape[0]
+                and float(np.sum(np.asarray(w, dtype=float))) > 0
+            ):
+                ww = np.asarray(w, dtype=float)
+                ww = ww / ww.sum()
+                out = np.average(stacked, axis=0, weights=ww)
+            else:
+                out = np.mean(stacked, axis=0)
+            if not np.isfinite(out).all():
+                n_bad = int((~np.isfinite(out)).sum())
+                raise ValueError(
+                    f"non-finite residual predictions on {n_bad}/{len(out)} rows"
+                )
+            return out
+    models = model_blob.get("models") or []
+    if not use_residual or not models:
+        return prior
+    out = _head_tvt(prior, list(models))
     if not np.isfinite(out).all():
         n_bad = int((~np.isfinite(out)).sum())
         raise ValueError(
