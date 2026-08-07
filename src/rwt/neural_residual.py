@@ -112,17 +112,30 @@ def _well_tensors(
     prior_col: str,
     max_len: int = 4096,
 ) -> list[dict[str, Any]]:
-    """Pack each well as fixed-length sequence (truncate/pad)."""
+    """Pack each well as fixed-length sequence (truncate/pad).
+
+    Stores original ``row_idx`` into ``train_df`` so OOF write-back never
+    mis-aligns when sequences are truncated to ``max_len``.
+    """
     out = []
+    # stable row positions into train_df (GroupKFold OOF buffer)
+    train_df = train_df.copy()
+    train_df["_row_i"] = np.arange(len(train_df), dtype=int)
     for wid, g in train_df.groupby("well_id", sort=False):
         g = g.sort_values("station") if "station" in g.columns else g
+        row_i = g["_row_i"].to_numpy(dtype=int)
         X = g[cols].to_numpy(dtype=np.float32)
         y = g["TVT"].to_numpy(dtype=np.float32)
         prior = g[prior_col].to_numpy(dtype=np.float32)
         n = len(g)
         if n > max_len:
-            # keep toe-heavy: last max_len (prediction zone denser mid-lateral+)
-            X, y, prior = X[-max_len:], y[-max_len:], prior[-max_len:]
+            # keep toe-heavy: last max_len
+            X, y, prior, row_i = (
+                X[-max_len:],
+                y[-max_len:],
+                prior[-max_len:],
+                row_i[-max_len:],
+            )
             n = max_len
         out.append(
             {
@@ -131,6 +144,7 @@ def _well_tensors(
                 "y": y,
                 "prior": prior,
                 "y_res": y - prior,
+                "row_i": row_i,
                 "n": n,
             }
         )
@@ -154,7 +168,6 @@ def train_neural_residual(
     """
     t0 = time.perf_counter()
     import torch
-    from torch.utils.data import DataLoader
 
     dev = _device()
     device = torch.device(dev)
@@ -192,41 +205,14 @@ def train_neural_residual(
     if n_groups < 2:
         raise ValueError("need ≥2 wells for GroupKFold neural residual")
 
-    # flatten for baseline floors (station-level, same as LGBM)
+    # flatten for OOF / Gate3 (station-level)
     y_flat = train_df["TVT"].to_numpy(float)
     prior_flat = train_df[prior_col].to_numpy(float)
-    groups_flat = train_df["well_id"].astype(str).to_numpy()
-
-    baseline_rmse: dict[str, float] = {}
-    for name, col in (
-        ("last_known", "prior_last_tvt"),
-        ("local_dip_ps", "prior_local_dip"),
-        ("flat_formation", "prior_flat_tvt"),
-        ("linear_md_extrap", "prior_extrap_tvt"),
-        ("particle_filter", "prior_pf_tvt"),
-        ("pf_blend_last_known", "prior_pf_blend"),
-        ("pf_bag", "prior_pf_bag"),
-        ("prior_stack", "prior_stack"),
-    ):
-        if col not in train_df.columns:
-            continue
-        b = train_df[col].to_numpy(float)
-        m = np.isfinite(y_flat) & np.isfinite(b)
-        if m.sum() < 50:
-            continue
-        baseline_rmse[name] = rmse(y_flat[m], b[m])
 
     gkf = GroupKFold(n_splits=min(n_splits, n_groups))
-    # map well index for folds
-    well_index = {w: i for i, w in enumerate(well_ids)}
     # station-level OOF storage
     oof_pred = np.full(len(train_df), np.nan, dtype=float)
     fold_scores: list[float] = []
-
-    # index rows by well
-    row_by_well: dict[str, np.ndarray] = {
-        str(w): np.where(groups_flat == str(w))[0] for w in well_ids
-    }
 
     torch.manual_seed(seed)
     if dev == "cuda":
@@ -248,8 +234,10 @@ def train_neural_residual(
 
         model.train()
         for ep in range(epochs):
-            np.random.default_rng(seed + fold * 1000 + ep).shuffle(tr_wells)
-            for batch in _batch_list(tr_wells, batch_wells):
+            order = np.arange(len(tr_wells))
+            np.random.default_rng(seed + fold * 1000 + ep).shuffle(order)
+            tr_ordered = [tr_wells[i] for i in order]
+            for batch in _batch_list(tr_ordered, batch_wells):
                 # pad batch to max n in batch
                 L = max(b["n"] for b in batch)
                 F = len(cols)
@@ -283,14 +271,12 @@ def train_neural_residual(
                     pr = model(xt).float().cpu().numpy().ravel()  # residual
                 n = b["n"]
                 pred_tvt = b["prior"] + pr[:n]
-                # write into station OOF for this well (align by last-n if truncated)
-                idxs = row_by_well[b["well_id"]]
-                if len(idxs) >= n:
-                    take = idxs[-n:]
-                else:
-                    take = idxs
-                    pred_tvt = pred_tvt[-len(take) :]
-                    n = len(take)
+                # exact row mapping (truncation-safe)
+                take = b["row_i"]
+                if len(take) != n:
+                    n = min(len(take), n)
+                    take = take[:n]
+                    pred_tvt = pred_tvt[:n]
                 oof_pred[take] = pred_tvt
                 y_true_f.append(b["y"][:n])
                 y_pred_f.append(pred_tvt)
@@ -305,18 +291,38 @@ def train_neural_residual(
         if dev == "cuda":
             torch.cuda.empty_cache()
 
-    m = np.isfinite(oof_pred) & np.isfinite(y_flat)
+    # Gate3 floors must share the same OOF row set as residual (no full-frame leak)
+    m = np.isfinite(oof_pred) & np.isfinite(y_flat) & np.isfinite(prior_flat)
     oof_r = rmse(y_flat[m], oof_pred[m]) if m.any() else float("inf")
     prior_m = prior_flat[m]
+    y_m = y_flat[m]
+    oof_m = oof_pred[m]
+    floor_rmses: dict[str, float] = {}
+    for name, col in (
+        ("last_known", "prior_last_tvt"),
+        ("local_dip_ps", "prior_local_dip"),
+        ("flat_formation", "prior_flat_tvt"),
+        ("linear_md_extrap", "prior_extrap_tvt"),
+        ("particle_filter", "prior_pf_tvt"),
+        ("pf_blend_last_known", "prior_pf_blend"),
+        ("pf_bag", "prior_pf_bag"),
+        ("prior_stack", "prior_stack"),
+    ):
+        if col not in train_df.columns:
+            continue
+        b = train_df[col].to_numpy(float)
+        if not np.isfinite(b[m]).all():
+            continue
+        floor_rmses[name] = rmse(y_m, b[m])
+    baseline_rmse = dict(floor_rmses)
     lk_m = None
     if "prior_last_tvt" in train_df.columns:
         lk = train_df["prior_last_tvt"].to_numpy(float)[m]
         if np.isfinite(lk).all():
             lk_m = lk
-    floor_rmses = {k: v for k, v in baseline_rmse.items() if np.isfinite(v)}
     gate3 = gate_residual_acceptance(
-        y_flat[m],
-        oof_pred[m],
+        y_m,
+        oof_m,
         prior_m,
         prior_name=prior_col,
         last_known_pred=lk_m,

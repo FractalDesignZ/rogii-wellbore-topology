@@ -80,17 +80,22 @@ def main() -> int:
     )}, indent=2), flush=True)
 
     if a.export_onnx:
-        from rwt.neural_residual import export_onnx_for_npu
+        try:
+            from rwt.neural_residual import export_onnx_for_npu
 
-        meta = export_onnx_for_npu(
-            stations, out / "delta_tvt_tcn.onnx", max_len=512, epochs=3
-        )
-        (out / "onnx_export.json").write_text(
-            json.dumps(meta, indent=2, default=str) + "\n", encoding="utf-8"
-        )
-        print("onnx", meta.get("onnx"), flush=True)
+            meta = export_onnx_for_npu(
+                stations, out / "delta_tvt_tcn.onnx", max_len=512, epochs=3
+            )
+            (out / "onnx_export.json").write_text(
+                json.dumps(meta, indent=2, default=str) + "\n", encoding="utf-8"
+            )
+            print("onnx", meta.get("onnx"), "ok", meta.get("onnx_ok"), flush=True)
+        except Exception as e:
+            # NPU export is experimental — never fail the CUDA MEASURE certificate
+            print(f"onnx export SKIP: {type(e).__name__}: {e}", flush=True)
 
-    return 0 if d.get("beats_5ft") else 2
+    # rc=0 when measure completed under law (G3 may still reject residual)
+    return 0 if d.get("ok") else 1
 
 
 if __name__ == "__main__":

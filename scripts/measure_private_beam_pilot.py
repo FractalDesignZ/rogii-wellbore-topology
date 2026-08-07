@@ -43,7 +43,14 @@ def main() -> int:
     k = resolve_kernel()
     print(json.dumps({"kernel_id": k.kernel_id(), "private": k.is_private()}), flush=True)
     if not k.is_private():
-        print("FAIL: private kernel did not load", flush=True)
+        # Fail-closed: public CI / clones without private_kernel stay green-path honest
+        summary = {
+            "ok": False,
+            "error": "private_kernel not loaded (expected if gitignored / RWT_KERNEL!=private)",
+            "kernel_id": k.kernel_id(),
+            "hint": "Local only: implement private_kernel/ and set RWT_KERNEL=private",
+        }
+        print(json.dumps(summary, indent=2), flush=True)
         return 2
 
     root = Path(a.data)

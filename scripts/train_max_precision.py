@@ -67,8 +67,18 @@ def main() -> int:
         flush=True,
     )
 
+    # Honor dashboard / parallel env when present
+    workers = None
+    if os.environ.get("RWT_WORKERS"):
+        try:
+            workers = max(1, int(os.environ["RWT_WORKERS"]))
+        except ValueError:
+            workers = None
     stations, gate2 = _assemble_dataset(
-        Path(a.data), synthetic=False, max_wells=a.max_wells
+        Path(a.data),
+        synthetic=False,
+        max_wells=a.max_wells,
+        workers=workers,
     )
     print(
         f"assembled stations={len(stations)} wells={stations['well_id'].nunique()} "
