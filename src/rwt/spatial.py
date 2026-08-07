@@ -1,8 +1,13 @@
 """
 Spatial neighbor graph for public sheaf-lite TVT transfer.
 
-Public layer only: k-NN on lateral XY centroids, azimuth gate, nearest-XY TVT
-restriction. Proprietary sheaf Laplacians stay in private_kernel.
+Public layer only: k-NN on lateral XY centroids, azimuth gate, multi-neighbor
+weighted TVT restriction. Proprietary sheaf Laplacians stay in private_kernel.
+
+Upgrade (feat/all-suggestions-integration):
+  - Multi-neighbor confidence-weighted TVT (not nearest-only)
+  - Heel-offset calibration retained and applied per-neighbor before blend
+  - Additional columns: neighbor_tvt_wmean, neighbor_weight_sum, neighbor_n_close
 """
 from __future__ import annotations
 
@@ -150,7 +155,6 @@ def neighbor_tvt_transfer(
             "neighbor_transfer_ok": np.zeros(n, dtype=float),
         }
     nx, ny, ntvt = nx[finite], ny[finite], ntvt[finite]
-    # (n, m) distances via broadcasting in chunks if huge
     d2 = (nx[None, :] - tx[:, None]) ** 2 + (ny[None, :] - ty[:, None]) ** 2
     j = np.argmin(d2, axis=1)
     out_tvt = ntvt[j].astype(float)
@@ -163,6 +167,28 @@ def neighbor_tvt_transfer(
     }
 
 
+def _heel_offset(
+    lateral: pd.DataFrame,
+    tr_tvt: np.ndarray,
+    tr_ok: np.ndarray,
+) -> float:
+    """Heel-only median offset (TVT_input mask). Cap ±40 ft."""
+    if "TVT_input" not in lateral.columns:
+        return 0.0
+    heel_tvt = lateral["TVT_input"].to_numpy(dtype=float)
+    m = (
+        np.isfinite(heel_tvt)
+        & np.isfinite(tr_tvt)
+        & (tr_ok > 0.5)
+    )
+    if m.sum() < 8:
+        return 0.0
+    offset = float(np.median(heel_tvt[m] - tr_tvt[m]))
+    if abs(offset) > 40.0:
+        return 0.0
+    return offset
+
+
 def attach_spatial_features(
     stations: pd.DataFrame,
     lateral: pd.DataFrame,
@@ -171,8 +197,17 @@ def attach_spatial_features(
     *,
     max_dist: float | None = None,
     close_dist: float | None = None,
+    k_neighbors: int = 3,
 ) -> pd.DataFrame:
-    """Add neighbor transfer columns to a station frame (no-op if no index)."""
+    """
+    Add neighbor transfer columns (multi-neighbor weighted).
+
+    New columns (additive):
+      neighbor_tvt_wmean   — distance-weighted mean of top-k transfers
+      neighbor_weight_sum  — sum of weights used
+      neighbor_n_close     — count of neighbors with transfer_ok > 0.5
+    Legacy columns retained for backward compatibility.
+    """
     out = stations.copy()
     out["neighbor_tvt"] = np.nan
     out["neighbor_xy_dist"] = np.nan
@@ -180,43 +215,87 @@ def attach_spatial_features(
     out["neighbor_count"] = 0.0
     out["neighbor_min_dist"] = np.nan
     out["neighbor_offset"] = 0.0
+    out["neighbor_tvt_wmean"] = np.nan
+    out["neighbor_weight_sum"] = 0.0
+    out["neighbor_n_close"] = 0.0
+
     if index is None or well_id not in index.nodes:
         return out
+
     max_dist = float(index.max_dist if max_dist is None else max_dist)
     close_dist = float(index.close_dist if close_dist is None else close_dist)
-    neigh = index.neighbors(well_id, k=3, max_dist=max_dist)
+    neigh = index.neighbors(well_id, k=k_neighbors, max_dist=max_dist)
     out["neighbor_count"] = float(len(neigh))
     if not neigh:
         return out
+
     out["neighbor_min_dist"] = float(neigh[0][1])
-    best_id, best_d = neigh[0]
-    node = index.nodes[best_id]
-    tr = neighbor_tvt_transfer(lateral, node, close_dist=close_dist)
-    # Heel-only affine offset (TVT_input mask only — never toe labels / full TVT)
-    offset = 0.0
-    if "TVT_input" in lateral.columns:
-        heel_tvt = lateral["TVT_input"].to_numpy(dtype=float)
-        tr_full = tr["neighbor_tvt"]
-        # known heel stations only
-        m = (
-            np.isfinite(heel_tvt)
-            & np.isfinite(tr_full)
-            & (tr["neighbor_transfer_ok"] > 0.5)
-        )
-        if m.sum() >= 8:
-            offset = float(np.median(heel_tvt[m] - tr_full[m]))
-            if abs(offset) > 40.0:
-                offset = 0.0
-    if "station" in out.columns:
-        st = out["station"].to_numpy(dtype=int)
-        n_lat = len(lateral)
-        st = np.clip(st, 0, max(n_lat - 1, 0))
-        out["neighbor_tvt"] = tr["neighbor_tvt"][st] + offset
-        out["neighbor_xy_dist"] = tr["neighbor_xy_dist"][st]
-        out["neighbor_transfer_ok"] = tr["neighbor_transfer_ok"][st]
-        out["neighbor_offset"] = float(offset)
-        if best_d > close_dist:
-            out["neighbor_transfer_ok"] = out["neighbor_transfer_ok"] * 0.25
+
+    n_lat = len(lateral)
+    st = (
+        out["station"].to_numpy(dtype=int)
+        if "station" in out.columns
+        else np.arange(len(out))
+    )
+    st = np.clip(st, 0, max(n_lat - 1, 0))
+
+    # Collect per-neighbor transfers
+    all_tvt = []
+    all_dist = []
+    all_ok = []
+    offsets = []
+
+    for nid, ndist in neigh:
+        node = index.nodes[nid]
+        tr = neighbor_tvt_transfer(lateral, node, close_dist=close_dist)
+        off = _heel_offset(lateral, tr["neighbor_tvt"], tr["neighbor_transfer_ok"])
+        offsets.append(off)
+        tvt = tr["neighbor_tvt"] + off
+        ok = tr["neighbor_transfer_ok"].copy()
+        if ndist > close_dist:
+            ok = ok * 0.25
+        all_tvt.append(tvt)
+        all_dist.append(tr["neighbor_xy_dist"])
+        all_ok.append(ok)
+
+    # Best (nearest) for legacy columns
+    best_tvt = all_tvt[0]
+    best_dist = all_dist[0]
+    best_ok = all_ok[0]
+    out["neighbor_tvt"] = best_tvt[st]
+    out["neighbor_xy_dist"] = best_dist[st]
+    out["neighbor_transfer_ok"] = best_ok[st]
+    out["neighbor_offset"] = float(offsets[0])
+
+    # Multi-neighbor weighted mean (inverse-distance * ok)
+    n_st = len(st)
+    wmean = np.full(n_st, np.nan)
+    wsum = np.zeros(n_st)
+    n_close = np.zeros(n_st)
+
+    for i in range(len(all_tvt)):
+        tvt_i = all_tvt[i][st]
+        dist_i = all_dist[i][st]
+        ok_i = all_ok[i][st]
+        # inverse distance weight, soft floor
+        w = ok_i / np.maximum(dist_i, 5.0)
+        valid = np.isfinite(tvt_i) & (ok_i > 0.05)
+        w = np.where(valid, w, 0.0)
+        # accumulate
+        if i == 0:
+            acc = np.where(valid, w * tvt_i, 0.0)
+            wsum = w.copy()
+        else:
+            acc = acc + np.where(valid, w * tvt_i, 0.0)
+            wsum = wsum + w
+        n_close = n_close + (ok_i > 0.5).astype(float)
+
+    mask = wsum > 1e-9
+    wmean[mask] = acc[mask] / wsum[mask]
+    out["neighbor_tvt_wmean"] = wmean
+    out["neighbor_weight_sum"] = wsum
+    out["neighbor_n_close"] = n_close
+
     return out
 
 
@@ -236,7 +315,6 @@ def build_spatial_index(
     nodes = [n for n in idx.nodes.values() if np.isfinite(n.cx) and np.isfinite(n.cy)]
     if len(nodes) >= 2 and (max_dist is None or close_dist is None):
         pts = np.array([[n.cx, n.cy] for n in nodes], dtype=float)
-        # vectorized pairwise upper triangle
         d = np.sqrt(((pts[:, None, :] - pts[None, :, :]) ** 2).sum(axis=2))
         iu = np.triu_indices(len(pts), k=1)
         darr = d[iu]

@@ -3,7 +3,12 @@ Logic quality gates (M0-M6 operational law).
 
 Gate 1 — IP fence: public vs private kernel (fail-closed).
 Gate 2 — Middle-out mask: heel prior / toe predict.
-Gate 3 — Residual acceptance: LGBM head only if it beats pure prior OOF.
+Gate 3 — Residual acceptance: LGBM / neural head only if it beats pure prior OOF.
+
+Upgrade (feat/all-suggestions-integration):
+  - gate_residual_acceptance_per_well: optional per-well fire condition
+    (global Gate3 still required; residual only fires on wells that locally beat
+    their own pure prior).
 """
 from __future__ import annotations
 
@@ -115,6 +120,78 @@ def gate_residual_acceptance(
             else None,
         },
     )
+
+
+def gate_residual_acceptance_per_well(
+    y_true: np.ndarray,
+    oof_residual_pred: np.ndarray,
+    prior_pred: np.ndarray,
+    well_ids: np.ndarray,
+    *,
+    min_stations: int = 30,
+    margin: float = 0.0,
+) -> dict[str, Any]:
+    """
+    Per-well residual fire condition (adaptive serve helper).
+
+    Global Gate3 must still pass. This helper only decides, for each well,
+    whether the residual head locally beats the pure prior on that well's
+    OOF stations. Wells that fail the local test fall back to pure prior.
+
+    Returns:
+      well_decisions: dict well_id → {"use_residual": bool, "rmse_res": float, "rmse_pri": float, "n": int}
+      n_residual_wells, n_prior_wells, adaptive_oof_rmse (if enough stations)
+    """
+    y_true = np.asarray(y_true, float)
+    oof_residual_pred = np.asarray(oof_residual_pred, float)
+    prior_pred = np.asarray(prior_pred, float)
+    well_ids = np.asarray(well_ids).astype(str)
+
+    decisions: dict[str, dict[str, Any]] = {}
+    for wid in np.unique(well_ids):
+        m = well_ids == wid
+        if m.sum() < min_stations:
+            decisions[wid] = {
+                "use_residual": False,
+                "rmse_res": float("nan"),
+                "rmse_pri": float("nan"),
+                "n": int(m.sum()),
+                "reason": "too_few_stations",
+            }
+            continue
+        r_res = rmse(y_true[m], oof_residual_pred[m])
+        r_pri = rmse(y_true[m], prior_pred[m])
+        use = bool(
+            np.isfinite(r_res)
+            and np.isfinite(r_pri)
+            and r_res <= r_pri + margin
+        )
+        decisions[wid] = {
+            "use_residual": use,
+            "rmse_res": float(r_res) if np.isfinite(r_res) else float("nan"),
+            "rmse_pri": float(r_pri) if np.isfinite(r_pri) else float("nan"),
+            "n": int(m.sum()),
+            "reason": "local_beat" if use else "local_lose",
+        }
+
+    # Adaptive serve RMSE (residual where local win, prior elsewhere)
+    adaptive = np.where(
+        np.array([decisions[w]["use_residual"] for w in well_ids]),
+        oof_residual_pred,
+        prior_pred,
+    )
+    adaptive_rmse = rmse(y_true, adaptive) if len(y_true) else float("nan")
+
+    n_res = sum(1 for d in decisions.values() if d["use_residual"])
+    n_pri = len(decisions) - n_res
+
+    return {
+        "well_decisions": decisions,
+        "n_residual_wells": n_res,
+        "n_prior_wells": n_pri,
+        "adaptive_oof_rmse": float(adaptive_rmse) if np.isfinite(adaptive_rmse) else None,
+        "law": "global Gate3 required; residual fires only on wells that locally beat pure prior",
+    }
 
 
 def run_entry_gates() -> list[dict[str, Any]]:
