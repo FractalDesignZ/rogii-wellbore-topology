@@ -204,7 +204,7 @@ If a change fails (1) and only chases (6) after residual already near Bayes floo
 | A | Keep Wave A residual as public floor | 0,6 | sealed 10.74 12w |
 | B | Pad synthetic GR@TVT + neighbor-only RMSE | 1,3,8 | GR mismatch@true low; transfer beats last_known |
 | C | GR-agreement as conf channel → adaptive | 1,7 | **CODE live + MEASURE:** residual **10.741** holds; adaptive still loses (best channel `pf` 11.10; product 11.98; gr_only 11.35; geomean 11.20). OOF picks channel; `adaptive_serve=false`. Seal `artifacts/exp_c_gr_agree_12w` |
-| D | Private lattice conf-blend prior under Gate3 | 2,5,6 | **12w OPEN residual 10.471**; **40w Gate3 REJECT** residual 11.348 vs pf_blend 11.256 → serve pure pf_blend. Lattice residual features do **not** generalize off 12w. Seals: `exp_d_lattice_12w_confcal`, `exp_d_lattice_40w_confcal` |
+| D | Private lattice conf-blend prior under Gate3 | 2,5,6 | **12w OPEN residual 10.471**; **40w pure stack 11.090** (all residual bases REJECT after Gate3 floor fix). Residual on pf_blend was false OPEN when stack floor dropped for sparse NaN. Seals: `exp_d_lattice_*`, `base_ab_gate3_fix.json` |
 | E | Residual on improved prior_best | 6 | selected OOF drops vs Wave A |
 | F | 40w / 773w seal only after B–E OPEN | all | no surprise form leak |
 

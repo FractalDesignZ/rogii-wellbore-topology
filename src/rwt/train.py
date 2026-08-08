@@ -445,9 +445,15 @@ def train_lgbm_residual(
         if col not in train_df.columns:
             continue
         b = train_df[col].to_numpy(dtype=float)[row_m]
-        if not np.isfinite(b[shared]).all():
+        # Require *some* finite floor values — do NOT drop a floor for sparse NaNs
+        # (prior_stack was excluded at finite frac ~0.99998, letting residual
+        # falsely OPEN vs weaker floors while pure stack was better).
+        b_s = b[shared]
+        if not np.isfinite(b_s).any():
             continue
-        baseline_rmse[name] = rmse(y_s, b[shared])
+        r_floor = rmse(y_s, b_s)  # rmse already pairs on joint finite mask
+        if np.isfinite(r_floor):
+            baseline_rmse[name] = float(r_floor)
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }

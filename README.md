@@ -81,7 +81,8 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Real field slices (773w) | pad XY / section / GR·TVT matrices / heel-toe — `scripts/slice_real_field.py` → `artifacts/field_slices_full` |
 | Adaptive residual serve (name of the game) | OOF-picked conf channel (`pf` / `gr_agree` / product) · thr×lifetime · `adaptive_serve` only if beats residual |
 | Exp C GR-agree conf (12w) | residual **10.741** holds; adaptive still loses (best pf 11.10) — seal `artifacts/exp_c_gr_agree_12w` |
-| Exp D private lattice (local) | **12w residual 10.471** ACCEPT; **40w residual 11.35 REJECT** (serve pure pf_blend 11.26) — Gate3 held |
+| Exp D private lattice (local) | **12w residual 10.471** ACCEPT; **40w pure stack 11.09** (residual REJECT all bases) |
+| Gate3 floor honesty | sparse-NaN pure floors no longer dropped — residual must beat **all** floors incl. stack |
 | Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_conf_channel` · thr · lifetime · channel sweep |
 | GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
 | RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
