@@ -225,7 +225,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
   1. README: private beam residual columns only when kernel_private resolution succeeds; fail-closed PublicKernel omits them.
   2. **Major:** do not publish private stalks via --out/stations.csv — write stripped stations.csv + optional local-only stations_private_full.csv; export bundle also strips prior_beam*.
   3. measure_vs_5ft.json cert includes kernel_id, kernel_private, kernel_note, RWT_KERNEL.
-  4. Unit test non-finite operands → NaN deltas in ttach_private_residual_deltas.
+  4. Unit test non-finite operands → NaN deltas in attach_private_residual_deltas.
 - **MEASURE hold:** 16w private residual still FALLBACK pure stack **11.95** (res ~12.02); 8w smoke ACCEPT not promoted; pilot conf_gate **10.705**; 773w seal **14.67**.
 - A/B residual base default on 16w reaffirmed FALLBACK (residue never forced).
 - **Next lever:** multi-seed ≤32–64w private only if residual beats pure; conf_gate column as residual feature/floor; adaptive mask on prior_beam_conf.
