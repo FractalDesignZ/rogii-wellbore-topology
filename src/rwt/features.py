@@ -722,6 +722,8 @@ FEATURE_COLS_DEFAULT = [
     "prior_lattice_tvt",
     "prior_lattice_blend",
     "lattice_conf",
+    "lattice_conf_eff",
+    "lattice_agree",
     "lattice_pull_weight",
     "gr_mismatch_stack",
     "gr_mismatch_last",

@@ -50,6 +50,10 @@ Discrete **banded** Viterbi over typewell TVT states along MD:
 
 **Exp D:** Gate3 floors include `prior_lattice` / `prior_lattice_blend` when private kernel is live.
 
+**Conf calibration:** `lattice_conf` from path emission NCC (not collapsed Viterbi margins).  
+`lattice_conf_eff = conf × exp(−|lat−stack|/10)` so conf-blend / soft-pull refuse lattice when it fights public stack.  
+MEASURE 12w residual **10.471** (vs public Wave A 10.741).
+
 ## Law
 
 - Never push proprietary sources to the public GitHub remote.

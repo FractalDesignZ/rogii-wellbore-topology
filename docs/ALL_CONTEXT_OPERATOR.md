@@ -181,8 +181,8 @@ GATE3 + ADAPTIVE
 | Seal | Result |
 | --- | ---: |
 | Wave A 12w residual OOF | **10.741** (vs set-19 11.045) |
-| Exp D private lattice residual 12w | **10.635** (Gate3 ACCEPT; kernel private) |
-| Exp D pure lattice / conf-blend floors | 18.0 / 13.40 (lose stack & residual) |
+| Exp D private lattice residual 12w | **10.471** conf-cal (was 10.635; public Wave A 10.741) |
+| Exp D pure lattice / conf-blend floors | 18.0 / ~13.4 (still lose stack) |
 | Adaptive serve 12w | **False** (best adaptive ~11.06 still > residual) |
 | Best pure floor 12w | prior_best ~12.64 |
 | 773w residual (prior seal) | ~15.4 |
