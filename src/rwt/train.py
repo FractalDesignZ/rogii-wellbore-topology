@@ -13,7 +13,10 @@ from sklearn.model_selection import GroupKFold
 
 from rwt.baselines import rmse, smooth_residual_along_well
 from rwt.features import build_station_frame, feature_matrix
-from rwt.gates import DEFAULT_ADAPTIVE_CONF_THRESHOLD
+from rwt.gates import (
+    DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+    DEFAULT_ADAPTIVE_MIN_LIFETIME,
+)
 from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
 from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
 from rwt.priors import DEFAULT_PRIOR_COL, MAX_TVT_DEV, resolve_prior_column
@@ -532,6 +535,9 @@ def train_lgbm_residual(
         adaptive_conf_threshold = float(
             gate3_pw.detail.get("conf_threshold", DEFAULT_ADAPTIVE_CONF_THRESHOLD)
         )
+        adaptive_min_lifetime = int(
+            gate3_pw.detail.get("min_lifetime", DEFAULT_ADAPTIVE_MIN_LIFETIME)
+        )
         if (
             a_oof is not None
             and np.isfinite(float(a_oof))
@@ -545,6 +551,7 @@ def train_lgbm_residual(
                 f"(global residual {oof_r:.3f}; "
                 f"mask={gate3_pw.detail.get('adaptive_mask_mode')} "
                 f"conf_thr={adaptive_conf_threshold:.2f} "
+                f"min_life={adaptive_min_lifetime} "
                 f"tuned={gate3_pw.detail.get('adaptive_threshold_tuned')} "
                 f"station_fire={gate3_pw.detail.get('n_station_fire')} "
                 f"station_fb={gate3_pw.detail.get('n_station_fallback')} "
@@ -556,6 +563,7 @@ def train_lgbm_residual(
     else:
         adaptive_selected = False
         adaptive_conf_threshold = float(DEFAULT_ADAPTIVE_CONF_THRESHOLD)
+        adaptive_min_lifetime = int(DEFAULT_ADAPTIVE_MIN_LIFETIME)
         n_refit = None
         cand: dict[str, float] = {prior_col: float(gate3.detail["oof_rmse_prior"])}
         for n, s in floor_rmses.items():
@@ -631,6 +639,7 @@ def train_lgbm_residual(
         "adaptive_mask_mode": gate3_pw.detail.get("adaptive_mask_mode"),
         "adaptive_serve": bool(adaptive_selected),
         "adaptive_conf_threshold": float(adaptive_conf_threshold),
+        "adaptive_min_lifetime": int(adaptive_min_lifetime),
         "adaptive_threshold_tuned": bool(
             gate3_pw.detail.get("adaptive_threshold_tuned", False)
         ),
@@ -638,8 +647,8 @@ def train_lgbm_residual(
         "cpu": cpu_feature_report(),
         "law": (
             "GroupKFold by well; residual gated by prior OOF; "
-            "adaptive station-conf residual serve (OOF-tuned threshold); "
-            "particle-filter typewell track; SO(3)/SE(3)/spatial features; "
+            "adaptive station-conf residual serve (OOF-tuned thr × lifetime); "
+            "LAS nulls→NaN; particle-filter typewell track; SO(3)/SE(3)/spatial; "
             "open-core public kernel fail-closed"
         ),
         "license": "AGPL-3.0-or-later",
@@ -660,6 +669,7 @@ def train_lgbm_residual(
         "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
         "adaptive_serve": bool(adaptive_selected),
         "adaptive_conf_threshold": float(adaptive_conf_threshold),
+        "adaptive_min_lifetime": int(adaptive_min_lifetime),
     }
 
 
@@ -753,6 +763,12 @@ def main(argv: list[str] | None = None) -> int:
                         result.get(
                             "adaptive_conf_threshold",
                             DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+                        )
+                    ),
+                    "adaptive_min_lifetime": int(
+                        result.get(
+                            "adaptive_min_lifetime",
+                            DEFAULT_ADAPTIVE_MIN_LIFETIME,
                         )
                     ),
                 },

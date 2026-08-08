@@ -117,6 +117,7 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
     # Dual residual: mean over residual_heads (set-15); legacy uses models alone
     from rwt.gates import (
         DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+        DEFAULT_ADAPTIVE_MIN_LIFETIME,
         adaptive_residual_mask,
         apply_adaptive_residual,
     )
@@ -177,6 +178,11 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
                 "adaptive_conf_threshold", DEFAULT_ADAPTIVE_CONF_THRESHOLD
             )
         )
+        min_life = int(
+            model_blob.get(
+                "adaptive_min_lifetime", DEFAULT_ADAPTIVE_MIN_LIFETIME
+            )
+        )
         conf = (
             stations["pf_confidence"].to_numpy(dtype=float)
             if "pf_confidence" in stations.columns
@@ -188,6 +194,7 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
             len(out),
             pf_confidence=conf if well_fire is None else None,
             conf_threshold=conf_thresh,
+            min_lifetime=min_life if well_fire is None else 0,
             well_ids=wids if well_fire is not None else None,
             well_fire=well_fire,
         )

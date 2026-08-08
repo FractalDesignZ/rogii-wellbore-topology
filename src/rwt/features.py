@@ -479,14 +479,28 @@ def build_station_frame(
         else None
     )
     if "GR" in df.columns:
-        gr = df["GR"].to_numpy(dtype=float)
+        from rwt.load import normalize_curve_nulls, GR_ABSURD_LE
+
+        gr = normalize_curve_nulls(
+            df["GR"].to_numpy(dtype=float), absurd_le=GR_ABSURD_LE
+        )
     else:
         gr = np.full(n, np.nan, dtype=float)
     if tw_gr is not None:
-        tw_gr = np.asarray(tw_gr, dtype=float)
+        from rwt.load import normalize_curve_nulls, GR_ABSURD_LE
+
+        tw_gr = normalize_curve_nulls(
+            np.asarray(tw_gr, dtype=float), absurd_le=GR_ABSURD_LE
+        )
+
+    # Wave A: gap abstraction + short-gap fill for rolls only (raw GR stays NaN)
+    from rwt.curves import gr_gap_features
+
+    gr_gaps = gr_gap_features(gr, short_gap=5, window=21)
+    gr_for_rolls = gr_gaps["gr_filled_short"]
 
     # M3: multi-scale GR rolling stats (sensor-noise filter; trees handle NaN via fill)
-    gr_s = pd.Series(gr, dtype=float)
+    gr_s = pd.Series(gr_for_rolls, dtype=float)
     gr_rolls: dict[str, np.ndarray] = {}
     for w in (10, 20, 40):
         gr_rolls[f"GR_mean_{w}"] = (
@@ -549,6 +563,10 @@ def build_station_frame(
             "Y": float(df.loc[i, "Y"]),
             "Z": float(df.loc[i, "Z"]),
             "GR": gi if np.isfinite(gi) else np.nan,
+            "gr_is_null": float(gr_gaps["gr_is_null"][i]),
+            "gr_gap_run": float(gr_gaps["gr_gap_run"][i]),
+            "gr_valid_frac_win": float(gr_gaps["gr_valid_frac_win"][i]),
+            "gr_was_imputed": float(gr_gaps["gr_was_imputed"][i]),
             "is_predict": bool(is_predict_mask[i]),
             "is_known": bool(is_known_mask[i]),
             **{f"well_{k}": v for k, v in well_geom.items() if np.isscalar(v)},
@@ -635,6 +653,10 @@ FEATURE_COLS_DEFAULT = [
     "relative_md",
     "relative_z",
     "GR",
+    "gr_is_null",
+    "gr_gap_run",
+    "gr_valid_frac_win",
+    "gr_was_imputed",
     "GR_mean_10",
     "GR_std_10",
     "GR_mean_20",
