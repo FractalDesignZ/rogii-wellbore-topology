@@ -53,7 +53,7 @@ def public_station_columns(stations: pd.DataFrame) -> list[str]:
     return [
         c
         for c in stations.columns
-        if not any(str(c).startswith(p) for p in PRIV_STATION_PREFIXES)
+        if not any(str(c).casefold().startswith(p) for p in PRIV_STATION_PREFIXES)
     ]
 
 

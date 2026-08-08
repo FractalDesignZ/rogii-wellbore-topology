@@ -80,6 +80,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 11 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | multi-field lattice floor + pure-lat conf_gate; heatmap REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | pure lat multi-field **10.544**; conf_gate **10.699** (delta_cg -0.007 KEEP); heatmap blend **15.98 REJECT**; plateau_B=1 |
 | 12 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR heatmap cohort + lattice residual feats | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w ACCEPT 10.50 smoke | false | conf_gate **10.699** hold; heatmap out of deploy mask; write_stations_csv helper; 8w lattice residual ACCEPT 10.50; plateau no-inc (CR) |
 | 13 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private export + 16w lattice residual FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 | false | conf_gate **10.699** hold; write_private_full default off; pred schema guard; 16w res 12.97 loses stack; 8w smoke not promoted; plateau no-inc (CR) |
+| 14 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR casefold export + lattice residual base REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w lattice-base ACCEPT 10.88 worse | false | casefold priv strip; lattice_tvt base 10.88 / blend 10.87 ACCEPT but lose to prior_best-base 10.50; keep features not base; conf_gate 10.699; plateau no-inc (CR) |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -104,9 +105,9 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 
 ### Stop criteria check
 
-- beats_5ft: **false** (selected OOF still ~14.67; pilot conf_gate **10.699**; 16w private pure 11.95)
-- Plateau B: cycle-13 |Δsel|=0, conf_gate hold, **CR fixed this cycle** → plateau counter does not increment; **continue**
-- Cycle-12 CR: heatmap delta cohort; private_full opt-in; pred schema guard — **fixed cycle-13**
+- beats_5ft: **false** (selected OOF still ~14.67; pilot conf_gate **10.699**)
+- Plateau B: cycle-14 |Δsel|=0, conf_gate hold, **CR fixed this cycle** → plateau counter does not increment; **continue**
+- Cycle-13 CR: casefold proprietary column checks — **fixed cycle-14**
 
 ### Cycle-4 detail (re-arm lattice denser stalk)
 
@@ -278,4 +279,15 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 - **Lever MEASURE:** 16w private multi-field lattice residual features (max_prec_16_lattice_feat): residual OOF **12.968** loses best floor prior_stack **11.949** → Gate3 **FALLBACK_PURE_PRIOR**; selected **11.949**. 8w smoke ACCEPT 10.50 not promoted (cohort-only).
 - Pilot conf_gate hold **10.699**; pure multi-field lattice **10.544**; 773w seal **14.67**. Residue never forced.
 - **Next lever:** pure multi-field lattice as residual **base** (not only feature) on ≤16w if Gate3 honest; or conf-adaptive residual mask; avoid full 773w promote.
+
+### Cycle-14 detail (CR casefold + lattice residual base)
+
+- **CR:** export/features proprietary-prefix checks use `str.casefold()` so mixed-case headers (e.g. `Prior_Beam_TVT`) are rejected; same for `public_station_columns`.
+- **Lever:** residual **base** = multi-field lattice (not only residual X features).
+  - 8w `prior_lattice_tvt` base: residual **ACCEPT** OOF **10.882** vs stack floor **11.393** but **worse** than prior_best-base smoke **10.502** → **REJECT as default base**.
+  - 8w `prior_lattice_blend` base: residual **ACCEPT** OOF **~10.865** (log) — still worse than prior_best base.
+  - 16w lattice-as-feature remains FALLBACK pure 11.95 (cycle-13).
+- Keep lattice as residual **features/floors**; residual base stays `prior_best` / public defaults.
+- Pilot conf_gate **10.699**; pure multi-field lattice floor **10.544**; 773w seal **14.67**. Residue never forced.
+- **Next lever:** conf-adaptive residual mask on lattice conf; or soft-ensemble residual heads (best + lattice) only if OOF improves on ≥16w multi-seed.
 

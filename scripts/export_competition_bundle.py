@@ -64,12 +64,12 @@ def main() -> int:
     bad = [
         c
         for c in pred_df.columns
-        if any(str(c).startswith(p) for p in priv_prefix)
+        if any(str(c).casefold().startswith(p) for p in priv_prefix)
     ]
     if bad:
         print(f"FAIL proprietary columns in --pred: {bad}", file=sys.stderr)
         return 2
-    cols = {str(c).lower() for c in pred_df.columns}
+    cols = {str(c).casefold() for c in pred_df.columns}
     ok_schema = (
         {"well_id", "md", "tvt"}.issubset(cols)
         or {"id", "tvt"}.issubset(cols)
@@ -113,11 +113,16 @@ def main() -> int:
             drop = [
                 c
                 for c in df.columns
-                if c.startswith("private_")
-                or c.startswith("sheaf_")
-                or c.startswith("prior_beam")
-                or c.startswith("prior_lattice")
-                or c.startswith("prior_heatmap")
+                if any(
+                    str(c).casefold().startswith(p)
+                    for p in (
+                        "private_",
+                        "sheaf_",
+                        "prior_beam",
+                        "prior_lattice",
+                        "prior_heatmap",
+                    )
+                )
             ]
             df = df.drop(columns=drop, errors="ignore")
             # keep watermark if present
