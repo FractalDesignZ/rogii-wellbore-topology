@@ -83,6 +83,14 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 14 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR casefold export + lattice residual base REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w lattice-base ACCEPT 10.88 worse | false | casefold priv strip; lattice_tvt base 10.88 / blend 10.87 ACCEPT but lose to prior_best-base 10.50; keep features not base; conf_gate 10.699; plateau no-inc (CR) |
 | 15 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | dual residual best+lattice KEEP micro | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual ACCEPT 10.476 | false | dual --prior-col prior_best --dual-partner prior_lattice_tvt OOF **10.476** (vs single 10.502, Δ−0.026); conf_gate 10.699; not promote 8w; plateau no-inc if CR quiet |
 | 16 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR dual partner + private floor redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.476 (no retrain) | false | reject dual_partner==prior_col; lattice weight tests; public_baseline_rmse redacts beam/lattice floors (RWT_INCLUDE_PRIVATE_METRICS opt-in); 88 tests OK; plateau no-inc (CR) |
+| 17 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | lattice residual X parity + dual re-MEASURE | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual 3f **ACCEPT 10.465** | false | `prior_lattice_delta_best` + `prior_lat_beam_delta`; dual OOF **10.465** (Δ **−0.011** vs c15 10.476); conf_gate hold; not promote (≪0.3); 5f on 8w early-stops@1 footgun; plateau_B=1 |
+
+### Cycle-17 detail (lattice residual feature parity)
+
+- **Lever:** residual X — `prior_lattice_delta_best` (parity w/ beam) + `prior_lat_beam_delta` (label-free stalk disagreement).
+- **MEASURE:** reuse 8w `stations_private_full` dual `prior_best`+`prior_lattice_tvt`, **3-fold** (c15 parity; 5-fold on 8w → early-stop@1 / OOF~11.1 invalid).
+- Dual OOF **10.465** ACCEPT vs stack floor 11.393 (Δ **−0.011** vs c15 dual 10.476). conf_gate pilot **10.699** hold.
+- selected_oof 14.67 unchanged (no full GKF). beats_5ft=false. Micro KEEP residual feats; no 773w promote.
 
 ### Cycle-16 detail (CR on cycle-15 dual residual)
 

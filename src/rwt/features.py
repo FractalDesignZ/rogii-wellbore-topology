@@ -343,6 +343,7 @@ def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
     both arms are finite (no poison mid/extrap).
     """
     out = stations
+    extras: dict[str, np.ndarray] = {}
 
     def _delta(src_col: str, ref_col: str, out_col: str) -> None:
         if src_col not in out.columns or ref_col not in out.columns:
@@ -351,7 +352,7 @@ def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
         b = out[ref_col].to_numpy(dtype=float)
         d = a - b
         d[~np.isfinite(a) | ~np.isfinite(b)] = np.nan
-        out[out_col] = d
+        extras[out_col] = d
 
     if "prior_beam_tvt" in out.columns:
         _delta("prior_beam_tvt", "prior_stack", "prior_beam_delta_stack")
@@ -360,6 +361,15 @@ def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
     if "prior_lattice_tvt" in out.columns:
         _delta("prior_lattice_tvt", "prior_stack", "prior_lattice_delta_stack")
         _delta("prior_lattice_tvt", "prior_last_tvt", "prior_lattice_delta_last")
+        # Parity with beam: lattice vs residual base (prior_best)
+        _delta("prior_lattice_tvt", "prior_best", "prior_lattice_delta_best")
+    # Stalk disagreement (label-free): lattice − beam when both private arms finite
+    if "prior_lattice_tvt" in out.columns and "prior_beam_tvt" in out.columns:
+        _delta("prior_lattice_tvt", "prior_beam_tvt", "prior_lat_beam_delta")
+    if extras:
+        out = out.copy()
+        for k, v in extras.items():
+            out[k] = v
     return out
 
 
@@ -740,6 +750,8 @@ FEATURE_COLS_DEFAULT = [
     "prior_lattice_blend",
     "prior_lattice_delta_stack",
     "prior_lattice_delta_last",
+    "prior_lattice_delta_best",
+    "prior_lat_beam_delta",
 ]
 
 

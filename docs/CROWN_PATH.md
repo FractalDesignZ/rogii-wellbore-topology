@@ -44,8 +44,11 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | pure multi-field lattice v9 | **10.544** | 10.788 | yes (−0.244) — floor; not sole deploy |
 | **v11 conf_gate** (pure-lat boost on multi-field) | **10.699** | 10.788 | **yes (−0.090)** deploy micro |
 | heatmap blend v10 | 15.98 | 10.788 | no (reject) |
+| dual residual 8w 3f (best+lattice) c15 | **10.476** | — | ACCEPT micro (not promote) |
+| dual + lattice Δbest/lat−beam X c17 | **10.465** | — | ACCEPT micro (−0.011); residual X KEEP |
 
 Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.
+**Fold note:** 8-well dual needs `n_splits≤3` (5-fold → 1-well val folds early-stop@1).
 Oracle per-well stalk min (~10.46) is diagnostic only — not a deploy prior.
 Reverse_pass / dense NCC reseed / heatmap field index rejected.
 
