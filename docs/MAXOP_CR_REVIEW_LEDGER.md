@@ -59,3 +59,26 @@ integration via full `train_lgbm_residual` path (constants unit-tested).
 ## Proceed
 
 Public path sealed. Crown gap → private_kernel beam/DTW (gitignored), not more public LGBM alone.
+
+## Loop (sub-5' TVT RMSE scheduled fire)
+
+Track consecutive cycles for plateau stop (`|Δ selected_oof| < 0.05` ×3) and delta vs prior.
+
+| Cycle | Date (UTC) | Branch / PR | Lever | selected_oof_ft | best_floor_ft | beam_blend_ft | last_known_ft | Δ selected | Gate3 | beats_5ft | Note |
+|------:|------------|-------------|-------|----------------:|--------------:|--------------:|--------------:|-----------:|-------|-----------|------|
+| 0 | seal | main | baseline seals | **14.67** (773w) | **15.11** stack | 11.924 | 10.788 | — | ACCEPT residual | false | beam lost to last_known |
+| 1 | 2026-08-07 | `feat/private-beam-conf-clamp` | private beam stalk v2 | 14.67 (unchanged; no full GKF) | 15.11 (public) | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | **beam blend beats last_known** (−0.032); pure beam 10.775; clamp_origin freeze + GR-rel conf + NCC reseed offline |
+
+### Cycle-1 detail (private pilot, 40 wells)
+
+- **Prior pilot seal:** blend 11.924 / last_known 10.788 / `beats_last_known_mean=false`
+- **v2 MEASURE:** blend **10.756** / pure beam **10.775** / last_known 10.788 / `beats_last_known_mean=true` / frac wells beat 0.475 / mean_conf 0.464
+- **Δ blend vs prior pilot:** −1.168 ft (clamp_origin was the main pure-beam fix; relative-GR conf enables blend)
+- **Not yet:** GroupKFold residual stack with beam prior as floor; hunt 5 ft still NEED_IMPROVE
+- **Next lever:** beam residual feature into Gate3-honest residual head **or** lattice/DTW denser stalk; full 773w only if pure floor moves ≥0.3 ft on same cohort (pilot pure-floor gap vs last_known is 0.03 — below threshold)
+
+### Stop criteria check
+
+- beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04)
+- Plateau: only 1 loop cycle recorded — continue
+- No open CR on loop PR at start of cycle-1 (PR #11 merged)

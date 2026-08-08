@@ -89,6 +89,7 @@ def main() -> int:
         r_beam = rmse(y[m], beam["prior_beam_tvt"][m])
         r_blend = rmse(y[m], blend[m])
         r_last = rmse(y[m], last[m]) if np.isfinite(last[m]).all() else float("nan")
+        conf_m = beam["prior_beam_conf"][m]
         rows.append(
             {
                 "well_id": wid,
@@ -96,6 +97,9 @@ def main() -> int:
                 "rmse_beam": r_beam,
                 "rmse_beam_blend": r_blend,
                 "rmse_last_known": r_last,
+                "mean_conf": float(np.nanmean(conf_m)),
+                "frac_conf_ge_0_5": float(np.mean(conf_m >= 0.5)),
+                "beats_last_known": bool(r_blend < r_last) if np.isfinite(r_last) else False,
             }
         )
         if a.max_wells and len(rows) >= a.max_wells:
@@ -117,9 +121,19 @@ def main() -> int:
             if len(R)
             else False
         ),
+        "frac_wells_beat_last_known": (
+            float(R["beats_last_known"].mean()) if len(R) and "beats_last_known" in R else None
+        ),
+        "mean_conf": float(R["mean_conf"].mean()) if len(R) and "mean_conf" in R else None,
+        "delta_blend_vs_last_known": (
+            float(R["rmse_beam_blend"].mean() - R["rmse_last_known"].mean()) if len(R) else None
+        ),
+        "prior_pilot_mean_blend": 11.923837695178506,
+        "prior_pilot_mean_last_known": 10.788491868712727,
         "public_full_cohort_selected": 14.67,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
+        "stalk": "v2 freeze clamp_origin + GR-rel conf + NCC reseed + reversion blend",
         "note": "Per-well predict-zone RMSE of pure beam prior (not full GroupKFold residual stack)",
         "law": "private offline scaffold; export predictions only; Gate3 still owns residual accept",
     }

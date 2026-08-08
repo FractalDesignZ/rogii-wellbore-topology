@@ -23,8 +23,17 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 ## What still is RESIDUE
 
 - Full 773w residual ~14.5 vs LB ~6–7 / hunt 5 ft.
-- Private beam / DTW / sheaf stalk offline.
+- Private beam / DTW / sheaf stalk offline (gitignored).
 - Public PF is discrete particle — not full lattice Viterbi.
+
+### Private beam pilot (local only, 40w)
+
+| Version | blend RMSE | last_known | beats last_known |
+| --- | ---: | ---: | --- |
+| v1 (sliding clamp) | 11.924 | 10.788 | no |
+| **v2** (freeze origin + GR-rel conf + NCC reseed) | **10.756** | 10.788 | **yes** (−0.032) |
+
+Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.
 
 ## Measure (12w crown set-19 — all-suggestions reassemble)
 
