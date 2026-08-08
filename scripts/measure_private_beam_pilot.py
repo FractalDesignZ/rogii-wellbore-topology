@@ -109,11 +109,13 @@ def main() -> int:
             margin=0.08,
         )
         # One comparable cohort: finite truth + all stalk preds + last-known.
+        # Include raw lattice prior so rmse_lattice shares the same stations as blend/gate.
         m = pred[
             np.isfinite(y[pred])
             & np.isfinite(blend[pred])
             & np.isfinite(last[pred])
             & np.isfinite(beam["prior_beam_tvt"][pred])
+            & np.isfinite(lat["prior_lattice_tvt"][pred])
             & np.isfinite(lat_blend[pred])
             & np.isfinite(fused[pred])
             & np.isfinite(gated[pred])

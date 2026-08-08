@@ -70,7 +70,8 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 1 | 2026-08-07 | `feat/private-beam-conf-clamp` / #14 | private beam stalk v2 | 14.67 (unchanged; no full GKF) | 15.11 (public) | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | **beam blend beats last_known** (−0.032); pure beam 10.775; clamp_origin freeze + GR-rel conf + NCC reseed offline |
 | 2 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: comparable last-known cohort | 14.67 | 15.11 | 10.756 (prior pilot) | 10.788 | 0.00 selected | n/a | false | measure script: finite last∩y∩blend∩beam mask; win-rate/delta same cohort |
 | 3 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: drop redundant int(len) | 14.67 | 15.11 | 10.756 | 10.788 | 0.00 selected | n/a | false | Ruff RUF046; 3× abs(Δselected)<0.05 + CR cleared → **coherence plateau STOP** |
-| 4 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | re-arm: lattice Viterbi + conf-gate; CR md pipes | 14.67 | 15.11 | **10.749** conf_gate (beam 10.756) | 10.788 | 0.00 selected | n/a pilot | false | label-free conf_gate −0.007 vs beam, −0.040 vs last; pure lattice 10.804 reject; no GKF (gap≪0.3); plateau continues → **STOP** |
+| 4 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | re-arm: lattice Viterbi + conf-gate; CR md pipes | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (−0.007 vs beam, −0.040 vs last); pure lattice 10.804 reject; no GKF (gap≪0.3); plateau continues |
+| 5 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: lattice mask + ledger honesty | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (Δcg ~0); pure lattice **10.903** (honest shared mask); CR cleared; no GKF; continue (CR fixed this cycle) |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -78,7 +79,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 - **v2 MEASURE:** blend **10.756** / pure beam **10.775** / last_known 10.788 / `beats_last_known_mean=true` / frac wells beat 0.475 / mean_conf 0.464
 - **Δ blend vs prior pilot:** −1.168 ft (clamp_origin was the main pure-beam fix; relative-GR conf enables blend)
 - **Not yet:** GroupKFold residual stack with beam prior as floor; hunt 5 ft still NEED_IMPROVE
-- **Next lever:** beam residual feature into Gate3-honest residual head **or** lattice/DTW denser stalk; full 773w only if pure floor moves ≥0.3 ft on same cohort (pilot pure-floor gap vs last_known is 0.03 — below threshold)
+- **Next lever:** beam residual feature into Gate3-honest residual head **or** lattice/DTW denser stalk; full 773w only if pure floor moves ≥0.3 ft on same cohort (pilot pure-beam gap vs last_known is 0.013; beam_blend gap is 0.032 — both below threshold)
 
 ### Cycle-2 detail (CR on PR #14)
 
@@ -96,8 +97,8 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 ### Stop criteria check
 
 - beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04)
-- Plateau: cycles 1–4 all `abs(Δ selected_oof) = 0.00`; CR md-pipe fixed cycle-4 → **STOP**
-- Open CR on #14: trivial int casts cycle-3; markdown table pipes cycle-4
+- Plateau B: selected flat, conf_gate flat (|Δcg|≪0.02), **but CR fixed this cycle** → plateau counter does not increment; **continue**
+- Cleared CR on #14: trivial int casts cycle-3; Markdown table pipes cycle-4; beam column / pure-floor docs + lattice mask cycle-5
 
 ### Cycle-4 detail (re-arm lattice denser stalk)
 
@@ -114,5 +115,28 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | oracle stalk (diag only) | 10.608 | −0.180 | −0.149 (label leak; not deploy) |
 
 - Selected OOF unchanged 14.67 (no full GKF; pure/selected move ≪ 0.3 ft promote threshold).
-- CR: escape/remove raw `|Δselected|` pipes in loop table (cycle-3 cell broke markdown columns).
-- **STOP:** re-arm lever measured; selected_oof still flat ×4; conf_gate micro-beat not enough to promote; scheduler delete.
+- CR: escape/remove raw `abs(Δselected)` pipes in loop table (cycle-3 cell broke markdown columns).
+- conf_gate micro-beat not enough to promote; CR follow-ups deferred to cycle-5.
+
+### Cycle-5 detail (CR integrity + mask)
+
+- **Lever:** CodeRabbit cycle-4 review (≤4 fixes):
+  1. `measure_private_beam_pilot.py`: include raw `prior_lattice_tvt` in shared comparable mask (Major).
+  2. Ledger: keep `beam_blend_ft=10.756` in column; conf_gate in Note.
+  3. Ledger: pure-beam gap vs last_known = 0.013 (blend gap 0.032) wording.
+  4. Ledger: mark Markdown-pipe / prior CR as Cleared.
+- **40w MEASURE (post-mask, artifacts/private_beam_pilot_v3):**
+
+| Prior | mean RMSE (ft) | vs last_known | vs beam_blend |
+| --- | ---: | ---: | ---: |
+| last_known | 10.788 | — | — |
+| beam_blend | **10.756** | −0.032 | — |
+| pure lattice (honest) | **10.903** | +0.114 | +0.146 reject |
+| lattice_blend | 10.804 | +0.015 | +0.047 reject |
+| fuse | 10.796 | +0.008 | +0.040 reject |
+| **conf_gate (deploy)** | **10.749** | **−0.040** | **−0.007** |
+| oracle stalk (diag) | 10.608 | −0.180 | −0.149 |
+
+- Δ conf_gate vs cycle-4 seal: ~0.000 (still 10.749); Δ selected_oof: 0.00
+- No full GKF (pure/selected move ≪ 0.3 ft). **continue** (CR fixed; do not plateau-stop).
+- **Next lever:** conf_gate/beam process (reseed/band/weights) toward ≤9.0 **or** Gate3 residual with beam conf_gate prior (private measure).
