@@ -17,6 +17,10 @@ from rwt.gates import (  # noqa: E402
     gate_residual_acceptance_per_well,
     select_adaptive_conf_threshold,
 )
+from rwt.gr_match import (  # noqa: E402
+    combine_adaptive_confidence,
+    gr_agreement_confidence,
+)
 
 
 class TestAdaptiveGate(unittest.TestCase):
@@ -147,6 +151,41 @@ class TestAdaptiveGate(unittest.TestCase):
         self.assertGreaterEqual(float(pw.detail["conf_threshold"]), 0.35)
 
 
+class TestGrAgreementConf(unittest.TestCase):
+    def test_zero_mismatch_is_one(self) -> None:
+        c = gr_agreement_confidence(np.array([0.0, 20.0, np.nan]), scale=20.0)
+        self.assertAlmostEqual(float(c[0]), 1.0, places=9)
+        self.assertAlmostEqual(float(c[1]), float(np.exp(-1.0)), places=9)
+        self.assertEqual(float(c[2]), 0.0)
+
+    def test_product_demotes_either_channel(self) -> None:
+        pf = np.array([1.0, 0.5, 0.9, 0.0])
+        ga = np.array([1.0, 0.5, 0.0, 0.9])
+        ac = combine_adaptive_confidence(pf, ga, mode="product")
+        assert ac is not None
+        np.testing.assert_allclose(ac, [1.0, 0.25, 0.0, 0.0])
+
+    def test_product_adaptive_beats_pf_only_when_gr_bad(self) -> None:
+        """Residual wrecks high-PF but low-GR-agree stations; product refuses fire."""
+        y = np.array([10.0, 12.0, 20.0, 22.0])
+        prior = np.array([10.0, 12.0, 20.0, 22.0])
+        res = np.array([10.0, 12.0, 50.0, 50.0])
+        pf = np.array([0.9, 0.9, 0.9, 0.9])  # PF alone would fire everywhere
+        # high GR agree on first two (mm≈0), low on last two (mm large)
+        ga = gr_agreement_confidence(np.array([0.0, 0.0, 60.0, 60.0]), scale=20.0)
+        ac = combine_adaptive_confidence(pf, ga, mode="product")
+        sel = select_adaptive_conf_threshold(
+            y, res, prior, ac, candidates=(0.15, 0.35, 0.55), default=0.35
+        )
+        self.assertLess(float(sel["adaptive_oof_rmse"]), 1e-9)
+        # thr that keeps only high product conf stations
+        mask = adaptive_residual_mask(
+            4, pf_confidence=ac, conf_threshold=float(sel["threshold"])
+        )
+        self.assertTrue(bool(mask[0] and mask[1]))
+        self.assertFalse(bool(mask[2] or mask[3]))
+
+
 class TestServeAdaptiveParity(unittest.TestCase):
     def test_serve_adaptive_matches_helper(self) -> None:
         """predict_stations adaptive mask ≡ adaptive_residual_mask under shared helper."""
@@ -190,6 +229,41 @@ class TestServeAdaptiveParity(unittest.TestCase):
         # low-conf stations fall back to prior
         self.assertAlmostEqual(float(y[0]), 100.0)
         self.assertAlmostEqual(float(y[1]), residual_tvt)
+        self.assertAlmostEqual(float(y[3]), 100.0)
+
+    def test_serve_honors_serialized_conf_channel(self) -> None:
+        """Experiment C: serve uses adaptive_conf_channel from blob (train≡serve)."""
+        from rwt.submit import predict_stations
+
+        class _M:
+            def predict(self, X):
+                return np.full(len(X), 5.0)
+
+        st = pd.DataFrame(
+            {
+                "prior_stack": np.array([100.0, 100.0, 100.0, 100.0]),
+                "pf_confidence": np.array([0.9, 0.9, 0.9, 0.9]),  # would fire all
+                "adaptive_conf": np.array([0.9, 0.9, 0.1, 0.1]),  # product
+                "relative_md": np.arange(4, dtype=float),
+            }
+        )
+        thresh = 0.35
+        blob = {
+            "models": [_M()],
+            "feature_cols": ["relative_md"],
+            "prior_column": "prior_stack",
+            "use_residual": True,
+            "residual_max_dev": 18.0,
+            "feature_medians": {"relative_md": 0.0},
+            "adaptive_serve": True,
+            "adaptive_conf_threshold": thresh,
+            "adaptive_conf_channel": "adaptive_conf",
+        }
+        y = predict_stations(blob, st)
+        residual_tvt = 105.0
+        self.assertAlmostEqual(float(y[0]), residual_tvt)
+        self.assertAlmostEqual(float(y[1]), residual_tvt)
+        self.assertAlmostEqual(float(y[2]), 100.0)
         self.assertAlmostEqual(float(y[3]), 100.0)
 
     def test_serve_uses_blob_tuned_threshold(self) -> None:

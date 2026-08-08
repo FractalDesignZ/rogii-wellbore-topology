@@ -5,6 +5,10 @@ data/processed/
 *.csv
 !data/README.md
 
+# Local contest dump / vendor training (never commit)
+rogii-wellbore-geology-prediction-original/
+MWD Training/
+
 # PROPRIETARY KERNEL — never publish source; keep README only
 private_kernel/*
 !private_kernel/README.md

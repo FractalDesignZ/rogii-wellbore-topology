@@ -8,7 +8,9 @@ import pandas as pd
 
 from rwt.geometry import station_local_geometry, trajectory_in_dip_frame
 from rwt.gr_match import (
+    combine_adaptive_confidence,
     fit_heel_gr_affine,
+    gr_agreement_confidence,
     gr_mismatch_at_tvt,
     multi_scale_ncc,
     ncc_tvt_track,
@@ -168,12 +170,15 @@ def finalize_after_spatial(
     known_full = heel_known_tvt_series(df, split)
 
     n_st = len(stations)
-    if (
+    has_tw_gr = (
         typewell is not None
         and "GR" in typewell.columns
         and "TVT" in typewell.columns
         and "GR" in stations.columns
-    ):
+    )
+    tw_gr_arr = tw_tvt_arr = lat_gr = None
+    mm_kw: dict[str, Any] = {}
+    if has_tw_gr:
         tw_gr_arr = typewell["GR"].to_numpy(dtype=float)
         tw_tvt_arr = typewell["TVT"].to_numpy(dtype=float)
         lat_gr = stations["GR"].to_numpy(dtype=float)
@@ -263,6 +268,21 @@ def finalize_after_spatial(
     delta = np.asarray(best, dtype=float) - stack_arr
     stations["prior_delta_best_stack"] = np.where(np.isfinite(delta), delta, 0.0)
 
+    # Experiment C: GR-agreement conf at residual base (prior_best) → adaptive mask.
+    # Product with PF conf: residual fires only where stalk and book both earn trust.
+    if has_tw_gr and tw_gr_arr is not None and lat_gr is not None:
+        mm_best = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, np.asarray(best, dtype=float), **mm_kw
+        )
+        stations["gr_mismatch_best"] = mm_best
+        abs_best = np.where(np.isfinite(mm_best), np.abs(mm_best), np.nan)
+        stations["gr_mismatch_abs_best"] = abs_best
+        stations["gr_agreement_conf"] = gr_agreement_confidence(abs_best)
+    else:
+        stations["gr_mismatch_best"] = 0.0
+        stations["gr_mismatch_abs_best"] = 0.0
+        stations["gr_agreement_conf"] = 0.0
+
     # Interaction / structure features (from main all-suggestions; non-leaky)
     n_st = len(stations)
     pf_conf = (
@@ -270,6 +290,10 @@ def finalize_after_spatial(
         if "pf_confidence" in stations.columns
         else np.zeros(n_st)
     )
+    gr_agree = stations["gr_agreement_conf"].to_numpy(dtype=float)
+    _ac = combine_adaptive_confidence(pf_conf, gr_agree, mode="product")
+    # Conf channel only (adaptive fire); not residual X — keeps Wave A residual floor.
+    stations["adaptive_conf"] = pf_conf if _ac is None else _ac
     rel_md_arr = (
         stations["relative_md"].to_numpy(dtype=float)
         if "relative_md" in stations.columns

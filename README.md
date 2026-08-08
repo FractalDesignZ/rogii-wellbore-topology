@@ -77,8 +77,11 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
 | Multi-neighbor spatial + residual interactions + adaptive Gate3 | **landed** (PR#13) — synthetic seal confirmed |
 | Task construct (GR@TVT) | geology = typewell book; place laterals; gated residual — [`docs/TASK_GR_TVT_CONSTRUCT.md`](docs/TASK_GR_TVT_CONSTRUCT.md) |
-| Adaptive residual serve (name of the game) | station-conf mask · **OOF-tuned conf threshold** · `adaptive_serve` only if beats global residual |
-| Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_conf_threshold` · station/well fire counts · threshold sweep |
+| All-context two-step | geometry path then GR@TVT placement — [`docs/ALL_CONTEXT_OPERATOR.md`](docs/ALL_CONTEXT_OPERATOR.md) |
+| Real field slices (773w) | pad XY / section / GR·TVT matrices / heel-toe — `scripts/slice_real_field.py` → `artifacts/field_slices_full` |
+| Adaptive residual serve (name of the game) | OOF-picked conf channel (`pf` / `gr_agree` / product) · thr×lifetime · `adaptive_serve` only if beats residual |
+| Exp C GR-agree conf (12w) | residual **10.741** holds; adaptive still loses (best pf 11.10) — seal `artifacts/exp_c_gr_agree_12w` |
+| Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_conf_channel` · thr · lifetime · channel sweep |
 | GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
 | RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
 | Kaggle submit | **OFF** — measure in-repo only (OOF / Gate3 / seals); no competition upload under RESTRICT |

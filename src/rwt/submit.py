@@ -183,11 +183,13 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
                 "adaptive_min_lifetime", DEFAULT_ADAPTIVE_MIN_LIFETIME
             )
         )
-        conf = (
-            stations["pf_confidence"].to_numpy(dtype=float)
-            if "pf_confidence" in stations.columns
-            else None
-        )
+        # Conf channel ≡ train OOF pick (serialized adaptive_conf_channel).
+        ch = str(model_blob.get("adaptive_conf_channel") or "")
+        conf = None
+        for key in (ch, "adaptive_conf", "pf_confidence", "gr_agreement_conf"):
+            if key and key in stations.columns:
+                conf = stations[key].to_numpy(dtype=float)
+                break
         wf_raw = model_blob.get("well_fire")
         well_fire = wf_raw if isinstance(wf_raw, dict) and wf_raw else None
         fire = adaptive_residual_mask(

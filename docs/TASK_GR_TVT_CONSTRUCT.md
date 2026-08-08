@@ -203,10 +203,12 @@ If a change fails (1) and only chases (6) after residual already near Bayes floo
 | --- | --- | --- | --- |
 | A | Keep Wave A residual as public floor | 0,6 | sealed 10.74 12w |
 | B | Pad synthetic GR@TVT + neighbor-only RMSE | 1,3,8 | GR mismatch@true low; transfer beats last_known |
-| C | GR-agreement as conf channel → adaptive | 1,7 | adaptive OOF ≤ residual when it should |
+| C | GR-agreement as conf channel → adaptive | 1,7 | **CODE live + MEASURE:** residual **10.741** holds; adaptive still loses (best channel `pf` 11.10; product 11.98; gr_only 11.35; geomean 11.20). OOF picks channel; `adaptive_serve=false`. Seal `artifacts/exp_c_gr_agree_12w` |
 | D | Private lattice conf-blend prior under Gate3 | 2,5,6 | pure/blend floors beat public stack on OOF |
 | E | Residual on improved prior_best | 6 | selected OOF drops vs Wave A |
 | F | 40w / 773w seal only after B–E OPEN | all | no surprise form leak |
+
+**Exp C encoding:** `|GR − G_tw(prior_best)| → exp(−|mm|/20)` = `gr_agreement_conf`; product with `pf_confidence` = `adaptive_conf` (mask channel). Residual X unchanged (Wave A floor preserved). Gate3 still requires residual OOF ≤ floors before adaptive can select.
 
 ---
 
@@ -266,3 +268,5 @@ If a change fails (1) and only chases (6) after residual already near Bayes floo
 - [`MAXOP_CR_REVIEW_LEDGER.md`](MAXOP_CR_REVIEW_LEDGER.md) — set history  
 
 **Primary API metaphor for the team:** *tensorize the formation as GR@TVT; the rest is placement, fuse, and gated residual.*
+
+**Full stack (MWD + two-step + seals):** [`ALL_CONTEXT_OPERATOR.md`](ALL_CONTEXT_OPERATOR.md)
