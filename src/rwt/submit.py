@@ -115,7 +115,11 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         return prior_arr + res
 
     # Dual residual: mean over residual_heads (set-15); legacy uses models alone
-    from rwt.gates import adaptive_residual_mask, apply_adaptive_residual
+    from rwt.gates import (
+        DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+        adaptive_residual_mask,
+        apply_adaptive_residual,
+    )
 
     heads = model_blob.get("residual_heads") or []
     use_residual = bool(model_blob.get("use_residual", True))
@@ -164,9 +168,15 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
 
     # Adaptive serve: shared mask contract with train adaptive_oof (station-conf
     # by default; optional well_fire map if serialized on the blob).
+    # Adaptive serve: station-conf mask ≡ train adaptive_oof (OOF-tuned threshold
+    # when present on blob). Optional well_fire map if serialized (diagnostic path).
     adaptive = bool(model_blob.get("adaptive_serve", False))
     if adaptive and use_residual:
-        conf_thresh = float(model_blob.get("adaptive_conf_threshold", 0.35))
+        conf_thresh = float(
+            model_blob.get(
+                "adaptive_conf_threshold", DEFAULT_ADAPTIVE_CONF_THRESHOLD
+            )
+        )
         conf = (
             stations["pf_confidence"].to_numpy(dtype=float)
             if "pf_confidence" in stations.columns

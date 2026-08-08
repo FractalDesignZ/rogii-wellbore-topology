@@ -10,10 +10,12 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rwt.gates import (  # noqa: E402
+    DEFAULT_ADAPTIVE_CONF_THRESHOLD,
     adaptive_residual_mask,
     apply_adaptive_residual,
     gate_residual_acceptance,
     gate_residual_acceptance_per_well,
+    select_adaptive_conf_threshold,
 )
 
 
@@ -87,6 +89,7 @@ class TestAdaptiveGate(unittest.TestCase):
             min_stations=2,
             pf_confidence=conf,
             conf_threshold=0.35,
+            tune_threshold=False,  # pin thr so counts are deterministic
         )
         self.assertEqual(pw.detail["adaptive_mask_mode"], "station_conf")
         # station-conf fires only rows 0,1 → adaptive = res,res,prior,prior
@@ -104,6 +107,44 @@ class TestAdaptiveGate(unittest.TestCase):
         # adaptive station counts match conf mask, not well map
         self.assertEqual(pw.detail["n_station_fire"], 2)
         self.assertEqual(pw.detail["n_station_fallback"], 2)
+        # diagnostic well-level adaptive OOF is separate
+        self.assertIn("adaptive_well_oof_rmse", pw.detail)
+
+    def test_select_adaptive_conf_threshold_picks_best(self) -> None:
+        """OOF threshold sweep: high thr keeps residual only where conf earns it."""
+        # residual perfect on high-conf stations; residual disaster on low-conf
+        y = np.array([10.0, 12.0, 20.0, 22.0])
+        prior = np.array([10.0, 12.0, 20.0, 22.0])
+        res = np.array([10.0, 12.0, 50.0, 50.0])  # wrecks low-conf toe
+        conf = np.array([0.9, 0.9, 0.2, 0.2])
+        sel = select_adaptive_conf_threshold(
+            y, res, prior, conf, candidates=(0.15, 0.35, 0.55), default=0.35
+        )
+        # thr 0.35/0.55 fire only first two → perfect; thr 0.15 fires all → disaster
+        self.assertLess(float(sel["adaptive_oof_rmse"]), 1e-9)
+        self.assertGreaterEqual(float(sel["threshold"]), 0.35)
+        self.assertEqual(sel["mask_mode"], "station_conf")
+        self.assertTrue(len(sel["sweep"]) >= 3)
+
+    def test_gate_tunes_threshold_by_default(self) -> None:
+        y = np.array([10.0, 12.0, 20.0, 22.0])
+        prior = np.array([10.0, 12.0, 20.0, 22.0])
+        res = np.array([10.0, 12.0, 50.0, 50.0])
+        conf = np.array([0.9, 0.9, 0.2, 0.2])
+        pw = gate_residual_acceptance_per_well(
+            np.array(["w1", "w1", "w2", "w2"]),
+            y,
+            res,
+            prior,
+            global_gate=None,
+            min_stations=2,
+            pf_confidence=conf,
+            conf_threshold=DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+            tune_threshold=True,
+        )
+        self.assertTrue(pw.detail["adaptive_threshold_tuned"])
+        self.assertLess(float(pw.detail["adaptive_oof_rmse"]), 1e-9)
+        self.assertGreaterEqual(float(pw.detail["conf_threshold"]), 0.35)
 
 
 class TestServeAdaptiveParity(unittest.TestCase):
@@ -150,6 +191,37 @@ class TestServeAdaptiveParity(unittest.TestCase):
         self.assertAlmostEqual(float(y[0]), 100.0)
         self.assertAlmostEqual(float(y[1]), residual_tvt)
         self.assertAlmostEqual(float(y[3]), 100.0)
+
+    def test_serve_uses_blob_tuned_threshold(self) -> None:
+        """Serve must honor OOF-tuned adaptive_conf_threshold from blob."""
+        from rwt.submit import predict_stations
+
+        class _M:
+            def predict(self, X):
+                return np.full(len(X), 5.0)
+
+        st = pd.DataFrame(
+            {
+                "prior_stack": np.array([100.0, 100.0, 100.0]),
+                "pf_confidence": np.array([0.50, 0.40, 0.20]),
+                "relative_md": np.arange(3, dtype=float),
+            }
+        )
+        # thr=0.45 → only first station fires residual
+        blob = {
+            "models": [_M()],
+            "feature_cols": ["relative_md"],
+            "prior_column": "prior_stack",
+            "use_residual": True,
+            "residual_max_dev": 18.0,
+            "feature_medians": {"relative_md": 0.0},
+            "adaptive_serve": True,
+            "adaptive_conf_threshold": 0.45,
+        }
+        y = predict_stations(blob, st)
+        self.assertAlmostEqual(float(y[0]), 105.0)
+        self.assertAlmostEqual(float(y[1]), 100.0)
+        self.assertAlmostEqual(float(y[2]), 100.0)
 
     def test_global_gate3_reject_blocks_residual_at_serve(self) -> None:
         """use_residual=False (Gate3 reject) → pure prior regardless of adaptive flags."""
@@ -243,11 +315,14 @@ class TestServeAdaptiveParity(unittest.TestCase):
             "residual_smooth_window": 0,
             "feature_medians": {"relative_md": 0.0},
             "adaptive_serve": False,
-            "adaptive_conf_threshold": 0.35,
+            "adaptive_conf_threshold": DEFAULT_ADAPTIVE_CONF_THRESHOLD,
         }
         self.assertTrue(required.issubset(blob.keys()))
         self.assertIsInstance(blob["adaptive_serve"], bool)
         self.assertIsInstance(blob["adaptive_conf_threshold"], float)
+        self.assertEqual(
+            blob["adaptive_conf_threshold"], DEFAULT_ADAPTIVE_CONF_THRESHOLD
+        )
 
 
 if __name__ == "__main__":

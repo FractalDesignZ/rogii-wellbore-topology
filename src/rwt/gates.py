@@ -117,6 +117,21 @@ def gate_residual_acceptance(
     )
 
 
+# Adaptive residual serve: station-conf is the train↔serve contract.
+# Default 0.35 held historically; OOF threshold sweep may pick another and
+# serialize it on the model blob so serve uses the same cut.
+DEFAULT_ADAPTIVE_CONF_THRESHOLD = 0.35
+ADAPTIVE_CONF_CANDIDATES: tuple[float, ...] = (
+    0.15,
+    0.25,
+    0.35,
+    0.45,
+    0.55,
+    0.65,
+    0.75,
+)
+
+
 def run_entry_gates() -> list[dict[str, Any]]:
     """Gates that do not need well data (boot)."""
     return [gate_ip_fence().to_dict()]
@@ -126,7 +141,7 @@ def adaptive_residual_mask(
     n: int,
     *,
     pf_confidence: np.ndarray | None = None,
-    conf_threshold: float = 0.35,
+    conf_threshold: float = DEFAULT_ADAPTIVE_CONF_THRESHOLD,
     well_ids: np.ndarray | None = None,
     well_fire: dict[str, bool] | None = None,
 ) -> np.ndarray:
@@ -182,6 +197,104 @@ def apply_adaptive_residual(
     return np.where(fire_mask, residual_pred, prior_pred)
 
 
+def select_adaptive_conf_threshold(
+    y_true: np.ndarray,
+    oof_residual_pred: np.ndarray,
+    prior_pred: np.ndarray,
+    pf_confidence: np.ndarray | None,
+    *,
+    candidates: tuple[float, ...] | list[float] = ADAPTIVE_CONF_CANDIDATES,
+    default: float = DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+) -> dict[str, Any]:
+    """
+    OOF-tune the station-conf fire threshold (adaptive is the serve game).
+
+    Sweeps ``candidates`` under the same :func:`adaptive_residual_mask` contract
+    used at serve. Returns the threshold with lowest adaptive RMSE; ties break
+    toward ``default``, then lower threshold (more residual fire).
+
+    When ``pf_confidence`` is missing, returns all-residual RMSE and ``default``.
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    oof_residual_pred = np.asarray(oof_residual_pred, dtype=float)
+    prior_pred = np.asarray(prior_pred, dtype=float)
+    n = len(y_true)
+    if n == 0:
+        return {
+            "threshold": float(default),
+            "adaptive_oof_rmse": float("nan"),
+            "n_station_fire": 0,
+            "n_station_fallback": 0,
+            "mask_mode": "empty",
+            "sweep": [],
+        }
+
+    if pf_confidence is None:
+        mask = adaptive_residual_mask(n, pf_confidence=None, conf_threshold=default)
+        adaptive = apply_adaptive_residual(oof_residual_pred, prior_pred, mask)
+        r = rmse(y_true, adaptive)
+        return {
+            "threshold": float(default),
+            "adaptive_oof_rmse": float(r) if np.isfinite(r) else None,
+            "n_station_fire": int(mask.sum()),
+            "n_station_fallback": int((~mask).sum()),
+            "mask_mode": "all_residual",
+            "sweep": [],
+        }
+
+    conf = np.asarray(pf_confidence, dtype=float)
+    cand = sorted({float(c) for c in candidates})
+    if float(default) not in cand:
+        cand.append(float(default))
+        cand.sort()
+
+    sweep: list[dict[str, Any]] = []
+    best_thr = float(default)
+    best_rmse = float("inf")
+    best_mask = adaptive_residual_mask(n, pf_confidence=conf, conf_threshold=best_thr)
+
+    for thr in cand:
+        mask = adaptive_residual_mask(n, pf_confidence=conf, conf_threshold=thr)
+        adaptive = apply_adaptive_residual(oof_residual_pred, prior_pred, mask)
+        r = float(rmse(y_true, adaptive))
+        n_fire = int(mask.sum())
+        sweep.append(
+            {
+                "threshold": float(thr),
+                "adaptive_oof_rmse": r if np.isfinite(r) else None,
+                "n_station_fire": n_fire,
+                "n_station_fallback": int(n - n_fire),
+            }
+        )
+        if not np.isfinite(r):
+            continue
+        # Prefer lower RMSE; tie → closer to default; then lower thr (more fire)
+        better = r < best_rmse - 1e-12
+        tie = abs(r - best_rmse) <= 1e-12
+        closer_default = abs(thr - default) < abs(best_thr - default) - 1e-15
+        lower_thr = thr < best_thr - 1e-15
+        if better or (tie and (closer_default or (abs(thr - default) <= abs(best_thr - default) + 1e-15 and lower_thr))):
+            best_rmse = r
+            best_thr = float(thr)
+            best_mask = mask
+
+    if not np.isfinite(best_rmse):
+        best_rmse = float(rmse(y_true, oof_residual_pred))
+        best_thr = float(default)
+        best_mask = adaptive_residual_mask(
+            n, pf_confidence=conf, conf_threshold=best_thr
+        )
+
+    return {
+        "threshold": float(best_thr),
+        "adaptive_oof_rmse": float(best_rmse),
+        "n_station_fire": int(best_mask.sum()),
+        "n_station_fallback": int((~best_mask).sum()),
+        "mask_mode": "station_conf",
+        "sweep": sweep,
+    }
+
+
 def gate_residual_acceptance_per_well(
     well_ids: np.ndarray,
     y_true: np.ndarray,
@@ -191,7 +304,9 @@ def gate_residual_acceptance_per_well(
     global_gate: GateResult | None = None,
     min_stations: int = 20,
     pf_confidence: np.ndarray | None = None,
-    conf_threshold: float = 0.35,
+    conf_threshold: float = DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+    tune_threshold: bool = True,
+    threshold_candidates: tuple[float, ...] | list[float] = ADAPTIVE_CONF_CANDIDATES,
 ) -> GateResult:
     """
     Adaptive measure helper (Layer C) + diagnostic well_fire map.
@@ -200,8 +315,12 @@ def gate_residual_acceptance_per_well(
 
     **Parity contract (adaptive OOF ≡ serve):**
       ``adaptive_oof_rmse`` is computed with :func:`adaptive_residual_mask` under
-      the **station-conf** rule (finite ``pf_confidence`` ≥ ``conf_threshold``),
+      the **station-conf** rule (finite ``pf_confidence`` ≥ selected threshold),
       the same rule ``predict_stations`` applies when ``adaptive_serve=True``.
+
+      When ``tune_threshold=True`` (default), OOF-sweeps
+      :data:`ADAPTIVE_CONF_CANDIDATES` and reports the best cut in
+      ``conf_threshold`` so train serializes the serve-matched threshold.
 
     **Diagnostic well_fire** (not used for adaptive_oof / default serve):
       residual OOF on that well ≤ pure prior on that well
@@ -214,6 +333,7 @@ def gate_residual_acceptance_per_well(
     y_true = np.asarray(y_true, float)
     oof_residual_pred = np.asarray(oof_residual_pred, float)
     prior_pred = np.asarray(prior_pred, float)
+    conf_threshold = float(conf_threshold)
 
     if global_gate is not None and not global_gate.passed:
         return GateResult(
@@ -228,8 +348,47 @@ def gate_residual_acceptance_per_well(
                 "adaptive_oof_rmse": None,
                 "adaptive_mask_mode": "global_reject",
                 "conf_threshold": conf_threshold,
+                "adaptive_threshold_sweep": [],
             },
         )
+
+    # Adaptive OOF: station-conf mask; optionally OOF-tune the threshold.
+    n = len(y_true)
+    if tune_threshold and pf_confidence is not None:
+        sel = select_adaptive_conf_threshold(
+            y_true,
+            oof_residual_pred,
+            prior_pred,
+            pf_confidence,
+            candidates=threshold_candidates,
+            default=conf_threshold,
+        )
+        conf_threshold = float(sel["threshold"])
+        adaptive_rmse = sel["adaptive_oof_rmse"]
+        n_station_fire = int(sel["n_station_fire"])
+        n_station_fallback = int(sel["n_station_fallback"])
+        mask_mode = str(sel["mask_mode"])
+        sweep = list(sel.get("sweep") or [])
+        serve_mask = adaptive_residual_mask(
+            n,
+            pf_confidence=pf_confidence,
+            conf_threshold=conf_threshold,
+        )
+    else:
+        serve_mask = adaptive_residual_mask(
+            n,
+            pf_confidence=pf_confidence,
+            conf_threshold=conf_threshold,
+        )
+        mask_mode = "station_conf" if pf_confidence is not None else "all_residual"
+        adaptive = apply_adaptive_residual(
+            oof_residual_pred, prior_pred, serve_mask
+        )
+        adaptive_rmse = rmse(y_true, adaptive) if n else float("nan")
+        adaptive_rmse = float(adaptive_rmse) if np.isfinite(adaptive_rmse) else None
+        n_station_fire = int(serve_mask.sum())
+        n_station_fallback = int((~serve_mask).sum())
+        sweep = []
 
     unique = np.unique(well_ids)
     well_fire: dict[str, bool] = {}
@@ -241,31 +400,34 @@ def gate_residual_acceptance_per_well(
             continue
         r_res = rmse(y_true[m], oof_residual_pred[m])
         r_pri = rmse(y_true[m], prior_pred[m])
-        beat_local = bool(np.isfinite(r_res) and np.isfinite(r_pri) and r_res <= r_pri + 1e-12)
+        beat_local = bool(
+            np.isfinite(r_res) and np.isfinite(r_pri) and r_res <= r_pri + 1e-12
+        )
 
         conf_ok = True
         if pf_confidence is not None:
             c = np.asarray(pf_confidence, float)[m]
-            conf_ok = bool(np.nanmean(c) >= conf_threshold) if np.isfinite(c).any() else False
+            conf_ok = (
+                bool(np.nanmean(c) >= conf_threshold) if np.isfinite(c).any() else False
+            )
 
         # Diagnostic: fire if residual beats local prior AND (confident PF or prior weak)
         prior_weak = bool(np.isfinite(r_pri) and r_pri > 12.0)  # soft heuristic
         well_fire[str(wid)] = beat_local and (conf_ok or prior_weak)
 
+    # Diagnostic well-level adaptive OOF (not default serve; needs y_true map)
+    well_mask = adaptive_residual_mask(
+        n,
+        well_ids=well_ids,
+        well_fire=well_fire,
+    )
+    well_adaptive = apply_adaptive_residual(
+        oof_residual_pred, prior_pred, well_mask
+    )
+    well_adaptive_rmse = rmse(y_true, well_adaptive) if n else float("nan")
+
     n_fire = int(sum(well_fire.values()))
     n_fb = int(len(unique) - n_fire)
-
-    # Adaptive OOF: SAME station-conf mask as default serve (train↔serve parity).
-    # well_fire is diagnostic only unless explicitly serialized onto the blob.
-    n = len(y_true)
-    serve_mask = adaptive_residual_mask(
-        n,
-        pf_confidence=pf_confidence,
-        conf_threshold=conf_threshold,
-    )
-    mask_mode = "station_conf" if pf_confidence is not None else "all_residual"
-    adaptive = apply_adaptive_residual(oof_residual_pred, prior_pred, serve_mask)
-    adaptive_rmse = rmse(y_true, adaptive) if n else float("nan")
 
     return GateResult(
         name="RESIDUAL_ACCEPTANCE_PER_WELL",
@@ -275,12 +437,21 @@ def gate_residual_acceptance_per_well(
             "well_fire": well_fire,
             "n_fire": n_fire,
             "n_fallback": n_fb,
-            "n_station_fire": int(serve_mask.sum()),
-            "n_station_fallback": int((~serve_mask).sum()),
-            "adaptive_oof_rmse": float(adaptive_rmse) if np.isfinite(adaptive_rmse) else None,
+            "n_station_fire": n_station_fire,
+            "n_station_fallback": n_station_fallback,
+            "adaptive_oof_rmse": (
+                float(adaptive_rmse)
+                if adaptive_rmse is not None and np.isfinite(float(adaptive_rmse))
+                else None
+            ),
+            "adaptive_well_oof_rmse": (
+                float(well_adaptive_rmse) if np.isfinite(well_adaptive_rmse) else None
+            ),
             "adaptive_mask_mode": mask_mode,
             "min_stations": min_stations,
             "conf_threshold": conf_threshold,
+            "adaptive_threshold_tuned": bool(tune_threshold and pf_confidence is not None),
+            "adaptive_threshold_sweep": sweep,
             "global_passed": True if global_gate is None else bool(global_gate.passed),
         },
     )

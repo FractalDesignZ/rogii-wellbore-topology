@@ -76,7 +76,8 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Multi-process assemble + live dashboard | **landed** (PR#5) |
 | Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
 | Multi-neighbor spatial + residual interactions + adaptive Gate3 | **landed** (PR#13) — synthetic seal confirmed |
-| Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_n_fire` · `adaptive_n_fallback` |
+| Adaptive residual serve (name of the game) | station-conf mask · **OOF-tuned conf threshold** · `adaptive_serve` only if beats global residual |
+| Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_conf_threshold` · station/well fire counts · threshold sweep |
 | GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
 | RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
 | Kaggle submit | **OFF** — measure in-repo only (OOF / Gate3 / seals); no competition upload under RESTRICT |

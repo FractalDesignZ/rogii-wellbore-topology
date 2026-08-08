@@ -13,6 +13,7 @@ from sklearn.model_selection import GroupKFold
 
 from rwt.baselines import rmse, smooth_residual_along_well
 from rwt.features import build_station_frame, feature_matrix
+from rwt.gates import DEFAULT_ADAPTIVE_CONF_THRESHOLD
 from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
 from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
 from rwt.priors import DEFAULT_PRIOR_COL, MAX_TVT_DEV, resolve_prior_column
@@ -524,10 +525,13 @@ def train_lgbm_residual(
             final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
         adaptive_selected = False
-        # Prefer adaptive OOF when station-conf mask beats global residual (still
-        # Gate3-accepted: residual head allowed only after global pass).
+        # Prefer adaptive OOF when station-conf mask (OOF-tuned threshold) beats
+        # global residual. Still Gate3-accepted only after global pass.
         # adaptive_oof uses the SAME adaptive_residual_mask rule as predict_stations.
         a_oof = gate3_pw.detail.get("adaptive_oof_rmse")
+        adaptive_conf_threshold = float(
+            gate3_pw.detail.get("conf_threshold", DEFAULT_ADAPTIVE_CONF_THRESHOLD)
+        )
         if (
             a_oof is not None
             and np.isfinite(float(a_oof))
@@ -540,14 +544,18 @@ def train_lgbm_residual(
                 f"[ADAPTIVE] selected OOF {final_oof:.3f} "
                 f"(global residual {oof_r:.3f}; "
                 f"mask={gate3_pw.detail.get('adaptive_mask_mode')} "
+                f"conf_thr={adaptive_conf_threshold:.2f} "
+                f"tuned={gate3_pw.detail.get('adaptive_threshold_tuned')} "
                 f"station_fire={gate3_pw.detail.get('n_station_fire')} "
                 f"station_fb={gate3_pw.detail.get('n_station_fallback')} "
                 f"well_fire_diag={gate3_pw.detail.get('n_fire')}/"
-                f"{gate3_pw.detail.get('n_fallback')})",
+                f"{gate3_pw.detail.get('n_fallback')} "
+                f"well_oof_diag={gate3_pw.detail.get('adaptive_well_oof_rmse')})",
                 flush=True,
             )
     else:
         adaptive_selected = False
+        adaptive_conf_threshold = float(DEFAULT_ADAPTIVE_CONF_THRESHOLD)
         n_refit = None
         cand: dict[str, float] = {prior_col: float(gate3.detail["oof_rmse_prior"])}
         for n, s in floor_rmses.items():
@@ -615,16 +623,22 @@ def train_lgbm_residual(
             gate3_pw.to_dict(),
         ],
         "adaptive_oof_rmse": gate3_pw.detail.get("adaptive_oof_rmse"),
+        "adaptive_well_oof_rmse": gate3_pw.detail.get("adaptive_well_oof_rmse"),
         "adaptive_n_fire": gate3_pw.detail.get("n_fire"),
         "adaptive_n_fallback": gate3_pw.detail.get("n_fallback"),
         "adaptive_n_station_fire": gate3_pw.detail.get("n_station_fire"),
         "adaptive_n_station_fallback": gate3_pw.detail.get("n_station_fallback"),
         "adaptive_mask_mode": gate3_pw.detail.get("adaptive_mask_mode"),
         "adaptive_serve": bool(adaptive_selected),
-        "adaptive_conf_threshold": 0.35,
+        "adaptive_conf_threshold": float(adaptive_conf_threshold),
+        "adaptive_threshold_tuned": bool(
+            gate3_pw.detail.get("adaptive_threshold_tuned", False)
+        ),
+        "adaptive_threshold_sweep": gate3_pw.detail.get("adaptive_threshold_sweep") or [],
         "cpu": cpu_feature_report(),
         "law": (
             "GroupKFold by well; residual gated by prior OOF; "
+            "adaptive station-conf residual serve (OOF-tuned threshold); "
             "particle-filter typewell track; SO(3)/SE(3)/spatial features; "
             "open-core public kernel fail-closed"
         ),
@@ -645,7 +659,7 @@ def train_lgbm_residual(
         "residual_max_dev": residual_max_dev,
         "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
         "adaptive_serve": bool(adaptive_selected),
-        "adaptive_conf_threshold": 0.35,
+        "adaptive_conf_threshold": float(adaptive_conf_threshold),
     }
 
 
@@ -736,7 +750,10 @@ def main(argv: list[str] | None = None) -> int:
                     # only when adaptive path beat global residual OOF.
                     "adaptive_serve": bool(result.get("adaptive_serve", False)),
                     "adaptive_conf_threshold": float(
-                        result.get("adaptive_conf_threshold", 0.35)
+                        result.get(
+                            "adaptive_conf_threshold",
+                            DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+                        )
                     ),
                 },
                 out / "model.joblib",
