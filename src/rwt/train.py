@@ -106,8 +106,8 @@ def public_gate3_dict(gate3_detail: dict[str, Any]) -> dict[str, Any]:
                 d["private_best_floor_redacted"] = True
         elif priv_best:
             d["best_floor_name"] = "private_redacted"
+            d["oof_rmse_best_floor"] = None  # numeric value is still a private metric
             d["private_best_floor_redacted"] = True
-            # keep numeric oof_rmse_best_floor if present (no name leak)
     return d
 
 

@@ -475,6 +475,24 @@ class TestCrownPath(unittest.TestCase):
             self.assertEqual(pub["best_floor_name"], "prior_stack")
             self.assertAlmostEqual(float(pub["oof_rmse_best_floor"]), 11.4)
             self.assertTrue(pub.get("private_best_floor_redacted"))
+            # only-private floors: redact name AND numeric best-floor metric
+            priv_only = {
+                "name": "RESIDUAL_ACCEPTANCE",
+                "passed": True,
+                "oof_rmse_residual": 10.5,
+                "oof_rmse_best_floor": 10.4,
+                "best_floor_name": "prior_lattice_tvt",
+                "floor_rmses": {
+                    "prior_lattice_tvt": 10.4,
+                    "prior_beam_tvt": 10.7,
+                },
+                "decision": "ACCEPT_RESIDUAL",
+            }
+            pub_only = public_gate3_dict(priv_only)
+            self.assertEqual(pub_only["best_floor_name"], "private_redacted")
+            self.assertIsNone(pub_only.get("oof_rmse_best_floor"))
+            self.assertEqual(pub_only.get("floor_rmses") or {}, {})
+            self.assertTrue(pub_only.get("private_best_floor_redacted"))
             os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = "1"
             auth = public_gate3_dict(raw)
             self.assertEqual(auth["best_floor_name"], "prior_lattice_tvt")

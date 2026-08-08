@@ -86,6 +86,12 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 17 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | lattice residual X parity + dual re-MEASURE | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual 3f **ACCEPT 10.465** | false | `prior_lattice_delta_best` + `prior_lat_beam_delta`; dual OOF **10.465** (Δ **−0.011** vs c15 10.476); conf_gate hold; not promote (≪0.3); 5f on 8w early-stops@1 footgun; plateau_B=1 |
 | 18 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR Gate3 floor redact + docs/RUF003 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 (no retrain) | false | public_gate3_dict redacts floor_rmses/best_floor_*; ASCII minus in features comment; 8w dual table split from 40w pilot; tests; plateau no-inc (CR) |
 | 19 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate pure lat arm KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.674** (Δcg **−0.024** vs v11 10.699); lat_arm=pure margin=0.03; pure_lat_boost alone max −0.01 REJECT; pure lat floor 10.544; no GKF; plateau_B **reset** |
+| 20 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private-only Gate3 numeric redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 / conf_gate 10.674 | false | public_gate3_dict nulls oof_rmse_best_floor when only private floors remain; regression test; plateau no-inc (CR) |
+
+### Cycle-20 detail (CR on cycle-19 Gate3 redact edge)
+
+- **Major:** when `floor_rmses` is private-only, redact `oof_rmse_best_floor` (set `None`) not only the name.
+- Selected OOF / conf_gate seals unchanged (CR-only cycle). conf_gate deploy remains **10.674**.
 
 ### Cycle-19 detail (conf_gate pure multi-field lattice arm)
 
