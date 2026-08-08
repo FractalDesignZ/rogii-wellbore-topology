@@ -35,12 +35,16 @@ If import fails or the contract is violated, the public path continues with `Pub
 | beam_blend v6 | **10.729** | heel affine + adaptive gr_sigma |
 | pure lattice v6 | **10.686** | best raw stalk post-affine (not deploy alone) |
 | **conf_gate v6 (deploy)** | **10.705** | −0.083 vs last; −0.042 vs soft v4.1 |
+| pure lattice multi-field v9 | **10.544** | KEEP floor (not sole deploy) |
+| conf_gate v11 pure-lat boost | **10.699** | deploy micro-beat |
+| heatmap blend v10 | 15.98 | REJECT |
 | oracle stalk | ~10.59 | label leak; diag only |
 
 Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):  
-`margin=0.08`, `lat_floor=0.18`, `agree_ft=2.0`, `soft_temp=0.05`, `pure_lat_boost=0`, `n_nodes=97`.  
-Rejected on 40w: denser `n_nodes=129` (pure lat 10.801); beam-led margin0.10 (conf_gate 10.710);
-GR emission gate (emit 10.738 vs conf_gate 10.706).
+`margin=0.06`, `lat_floor=0.15`, `agree_ft=2.0`, `soft_temp=0.05`, `pure_lat_boost=0.45`,
+`n_nodes=97`, `multi_field=True`, conf_gate with `pure_lattice` arm.  
+Rejected on 40w: denser `n_nodes=129`; reverse_pass/dense reseed; GR emission gate;
+GR heatmap field index (blend ~16 ft).
 
 Public residual path **only after successful private resolution** (`kernel_private is
 True` / `resolve_kernel().is_private()` truthy). Then `augment_station_frame` emits

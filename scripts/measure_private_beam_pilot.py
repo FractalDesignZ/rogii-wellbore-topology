@@ -46,6 +46,10 @@ def main() -> int:
             beam_blend_last,
             beam_prior_for_well,
         )
+        from private_kernel.gr_heatmap import (
+            heatmap_blend_last,
+            heatmap_prior_for_well,
+        )
         from private_kernel.lattice_match import (
             conf_gate_beam_lattice,
             fuse_beam_lattice,
@@ -77,13 +81,14 @@ def main() -> int:
     root = Path(a.data)
     rows = []
     n_wells_scanned = 0  # raw train wells seen (pre comparable filter)
-    # Sealed v6 conf_gate knobs (explicit; denser-129 / beam-led-v8 REJECT on 40w)
+    # v11: pure multi-field lattice is strong (~10.54) but conf_gate used lat_blend only.
+    # pure_lat_boost soft-mixes raw lattice into lattice arm when conf supports.
     conf_gate_params = {
-        "margin": 0.08,
+        "margin": 0.06,
         "agree_ft": 2.0,
         "soft_temp": 0.05,
-        "lat_floor": 0.18,
-        "pure_lat_boost": 0.0,
+        "lat_floor": 0.15,
+        "pure_lat_boost": 0.45,
     }
     lattice_n_nodes = 97  # denser 129 REJECT: pure lat 10.801 vs v6 10.686
     multi_field_lattice = True  # v9 manifold overlay emission
@@ -95,7 +100,7 @@ def main() -> int:
             continue
         tw_path = typewell_path_for_well(root, wid, "train")
         tw = load_typewell(tw_path) if tw_path else None
-        # v6 seal beam + v9 multi-field lattice (GR level + shape + e_ref stickiness)
+        # v6 beam + v9 multi-field lattice + v10 GR heatmap field index
         beam = beam_prior_for_well(df, tw, sp, beam_width=48, heel_affine=True)
         lat = lattice_prior_for_well(
             df,
@@ -105,6 +110,7 @@ def main() -> int:
             heel_affine=True,
             multi_field=multi_field_lattice,
         )
+        heat = heatmap_prior_for_well(df, tw, sp, heel_affine=True)
         pred = np.asarray(sp.predict_idx, dtype=int)
         y = df["TVT"].to_numpy(float) if "TVT" in df.columns else np.full(len(df), np.nan)
         # last known series
@@ -120,6 +126,9 @@ def main() -> int:
         lat_blend = lattice_blend_last(
             lat["prior_lattice_tvt"], last, lat["prior_lattice_conf"]
         )
+        heat_blend = heatmap_blend_last(
+            heat["prior_heatmap_tvt"], last, heat["prior_heatmap_conf"]
+        )
         fused, fused_conf = fuse_beam_lattice(
             beam["prior_beam_tvt"],
             beam["prior_beam_conf"],
@@ -127,13 +136,13 @@ def main() -> int:
             lat["prior_lattice_conf"],
             last,
         )
-        # Label-free conf gate (sealed v6 soft params; pure_lattice off)
+        # Label-free conf gate: soft-mix multi-field pure lattice into lat arm
         gated, gated_conf = conf_gate_beam_lattice(
             blend,
             beam["prior_beam_conf"],
             lat_blend,
             lat["prior_lattice_conf"],
-            pure_lattice=None,
+            pure_lattice=lat["prior_lattice_tvt"],
             **conf_gate_params,
         )
         # Cycle-8 lever: GR emission gate (label-free stalk pick by typewell GR)
@@ -156,7 +165,6 @@ def main() -> int:
                 last_known=last,
             )
         # One comparable cohort: finite truth + all stalk preds + last-known.
-        # Include raw lattice prior so rmse_lattice shares the same stations as blend/gate.
         m = pred[
             np.isfinite(y[pred])
             & np.isfinite(blend[pred])
@@ -164,6 +172,8 @@ def main() -> int:
             & np.isfinite(beam["prior_beam_tvt"][pred])
             & np.isfinite(lat["prior_lattice_tvt"][pred])
             & np.isfinite(lat_blend[pred])
+            & np.isfinite(heat["prior_heatmap_tvt"][pred])
+            & np.isfinite(heat_blend[pred])
             & np.isfinite(fused[pred])
             & np.isfinite(gated[pred])
             & np.isfinite(emit[pred])
@@ -174,16 +184,20 @@ def main() -> int:
         r_blend = rmse(y[m], blend[m])
         r_lat = rmse(y[m], lat["prior_lattice_tvt"][m])
         r_lat_blend = rmse(y[m], lat_blend[m])
+        r_heat = rmse(y[m], heat["prior_heatmap_tvt"][m])
+        r_heat_blend = rmse(y[m], heat_blend[m])
         r_fuse = rmse(y[m], fused[m])
         r_gated = rmse(y[m], gated[m])
         r_emit = rmse(y[m], emit[m])
         r_last = rmse(y[m], last[m])
         conf_m = beam["prior_beam_conf"][m]
         lat_conf_m = lat["prior_lattice_conf"][m]
+        heat_conf_m = heat["prior_heatmap_conf"][m]
         # oracle well pick is diagnostic only (label leakage) — not a deploy prior
         candidates = {
             "beam_blend": r_blend,
             "lattice_blend": r_lat_blend,
+            "heatmap_blend": r_heat_blend,
             "fuse_blend": r_fuse,
             "conf_gate": r_gated,
             "emit_gate": r_emit,
@@ -198,6 +212,8 @@ def main() -> int:
                 "rmse_beam_blend": r_blend,
                 "rmse_lattice": r_lat,
                 "rmse_lattice_blend": r_lat_blend,
+                "rmse_heatmap": r_heat,
+                "rmse_heatmap_blend": r_heat_blend,
                 "rmse_fuse_blend": r_fuse,
                 "rmse_conf_gate": r_gated,
                 "rmse_emit_gate": r_emit,
@@ -206,11 +222,13 @@ def main() -> int:
                 "oracle_stalk": best_name,
                 "mean_conf": float(np.nanmean(conf_m)),
                 "mean_lat_conf": float(np.nanmean(lat_conf_m)),
+                "mean_heat_conf": float(np.nanmean(heat_conf_m)),
                 "mean_fuse_conf": float(np.nanmean(fused_conf[m])),
                 "mean_gate_conf": float(np.nanmean(gated_conf[m])),
                 "frac_conf_ge_0_5": float(np.mean(conf_m >= 0.5)),
                 "beats_last_known": bool(r_blend < r_last),
                 "beats_last_known_lat": bool(r_lat_blend < r_last),
+                "beats_last_known_heat": bool(r_heat_blend < r_last),
                 "beats_last_known_fuse": bool(r_fuse < r_last),
                 "beats_last_known_gate": bool(r_gated < r_last),
                 "beats_last_known_emit": bool(r_emit < r_last),
@@ -229,6 +247,8 @@ def main() -> int:
         "rmse_beam_blend",
         "rmse_beam",
         "rmse_lattice_blend",
+        "rmse_heatmap",
+        "rmse_heatmap_blend",
         "rmse_fuse_blend",
         "rmse_conf_gate",
         "rmse_emit_gate",
@@ -249,7 +269,7 @@ def main() -> int:
         "n_wells_scanned": int(n_wells_scanned),
         "min_comparable_stations": min_comparable_stations,
         "comparable_cohort": (
-            "finite y + beam/lattice/fuse/gate/emit + last on predict mask; "
+            "finite y + beam/lattice/heatmap/fuse/gate/emit + last on predict mask; "
             f"min_comparable_stations={min_comparable_stations}"
         ),
         "conf_gate_params": conf_gate_params,
@@ -258,6 +278,8 @@ def main() -> int:
         "mean_rmse_beam_blend": _mean("rmse_beam_blend"),
         "mean_rmse_lattice": _mean("rmse_lattice"),
         "mean_rmse_lattice_blend": _mean("rmse_lattice_blend"),
+        "mean_rmse_heatmap": _mean("rmse_heatmap"),
+        "mean_rmse_heatmap_blend": _mean("rmse_heatmap_blend"),
         "mean_rmse_fuse_blend": _mean("rmse_fuse_blend"),
         "mean_rmse_conf_gate": _mean("rmse_conf_gate"),
         "mean_rmse_emit_gate": _mean("rmse_emit_gate"),
@@ -265,6 +287,7 @@ def main() -> int:
         "mean_rmse_last_known": _mean("rmse_last_known"),
         "median_rmse_beam_blend": float(C["rmse_beam_blend"].median()) if len(C) else None,
         "median_rmse_lattice_blend": float(C["rmse_lattice_blend"].median()) if len(C) else None,
+        "median_rmse_heatmap_blend": float(C["rmse_heatmap_blend"].median()) if len(C) else None,
         "median_rmse_conf_gate": float(C["rmse_conf_gate"].median()) if len(C) else None,
         "median_rmse_emit_gate": float(C["rmse_emit_gate"].median()) if len(C) else None,
         "beats_last_known_mean": (
@@ -274,6 +297,11 @@ def main() -> int:
         ),
         "beats_last_known_lat_mean": (
             float(C["rmse_lattice_blend"].mean()) < float(C["rmse_last_known"].mean())
+            if len(C)
+            else False
+        ),
+        "beats_last_known_heat_mean": (
+            float(C["rmse_heatmap_blend"].mean()) < float(C["rmse_last_known"].mean())
             if len(C)
             else False
         ),
@@ -311,6 +339,15 @@ def main() -> int:
         "delta_lattice_blend_vs_last_known": (
             float(C["rmse_lattice_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
         ),
+        "delta_heatmap_vs_last_known": (
+            float(C["rmse_heatmap"].mean() - C["rmse_last_known"].mean()) if len(C) else None
+        ),
+        "delta_heatmap_blend_vs_last_known": (
+            float(C["rmse_heatmap_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
+        ),
+        "delta_heatmap_vs_conf_gate": (
+            float(C["rmse_heatmap"].mean() - C[deploy_col].mean()) if len(C) else None
+        ),
         "delta_fuse_vs_last_known": (
             float(C["rmse_fuse_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
         ),
@@ -343,12 +380,14 @@ def main() -> int:
         "public_all_stack_selected_reject": 15.199496423546888,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v9 multi-field lattice emission (GR level+shape+e_ref) + v6 conf_gate deploy; heel affine; n_nodes=97",
+        "stalk": "v11 conf_gate pure-lat boost on multi-field lattice; v10 heatmap trial; v9 multi-field lattice floor",
         "deploy_prior": "conf_gate",
         "prior_conf_gate_seal_v3": 10.748919252940581,
         "prior_conf_gate_seal_v6": 10.705360833184525,
         "trial_v8_conf_gate_40w": 10.709574438415903,
         "trial_v8_pure_lattice_40w": 10.800656754206665,
+        "trial_v9_multi_field_lattice_40w": 10.543693969346446,
+        "trial_v10_heatmap_blend_40w": 15.024615268235916,
         "note": "Per-well predict-zone RMSE of private priors (not full GroupKFold residual stack)",
         "law": "private offline scaffold; export predictions only; Gate3 still owns residual accept",
     }

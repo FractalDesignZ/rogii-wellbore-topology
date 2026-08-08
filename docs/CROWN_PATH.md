@@ -2,6 +2,10 @@
 
 **RESTRICT:** no Kaggle submit. Measure = GroupKFold OOF + Gate3 + seals.
 
+**Manifold construct:** typewell = interpolated formation grid; lateral = test manifold;
+stalks **index** stations onto TVT; geometry/neighbor/conf are a **multi-dim overlay**.
+See [MANIFOLD_OVERLAY.md](MANIFOLD_OVERLAY.md) (integrate → fully dimensionalize → proceed).
+
 ## Goal
 
 Push pure prior floor and residual toward best-in-class (~6–7 LB) without cloning
@@ -37,10 +41,13 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | v4.1 soft conf_gate | 10.747 | 10.788 | yes (−0.041) |
 | **v6 conf_gate** (heel affine + adaptive σ) | **10.705** | 10.788 | **yes (−0.083 vs last; −0.051 vs v2 blend)** |
 | pure lattice v6 (diag) | 10.686 | 10.788 | yes (−0.102) — not deploy alone |
+| pure multi-field lattice v9 | **10.544** | 10.788 | yes (−0.244) — floor; not sole deploy |
+| **v11 conf_gate** (pure-lat boost on multi-field) | **10.699** | 10.788 | **yes (−0.090)** deploy micro |
+| heatmap blend v10 | 15.98 | 10.788 | no (reject) |
 
 Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.
-Oracle per-well stalk min (~10.59) is diagnostic only — not a deploy prior.
-Reverse_pass / dense NCC reseed rejected (regressed to ~11.06).
+Oracle per-well stalk min (~10.46) is diagnostic only — not a deploy prior.
+Reverse_pass / dense NCC reseed / heatmap field index rejected.
 
 ## Measure (12w crown set-19 — all-suggestions reassemble)
 
