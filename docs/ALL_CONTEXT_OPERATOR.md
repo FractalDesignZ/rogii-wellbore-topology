@@ -182,7 +182,8 @@ GATE3 + ADAPTIVE
 | --- | ---: |
 | Wave A 12w residual OOF | **10.741** (vs set-19 11.045) |
 | Exp D private lattice residual 12w | **10.471** conf-cal (was 10.635; public Wave A 10.741) |
-| Exp D pure lattice / conf-blend floors | 18.0 / ~13.4 (still lose stack) |
+| Exp D private lattice **40w** | residual **11.348** loses pf_blend floor **11.256** → Gate3 **REJECT** → pure `prior_pf_blend` selected |
+| Exp D pure lattice / conf-blend floors | 18.0 / ~13.4 (still lose stack; 40w lattice floor 17.2) |
 | Adaptive serve 12w | **False** (best adaptive ~11.06 still > residual) |
 | Best pure floor 12w | prior_best ~12.64 |
 | 773w residual (prior seal) | ~15.4 |
