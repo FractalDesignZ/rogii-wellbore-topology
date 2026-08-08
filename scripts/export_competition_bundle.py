@@ -84,6 +84,8 @@ def main() -> int:
                 if c.startswith("private_")
                 or c.startswith("sheaf_")
                 or c.startswith("prior_beam")
+                or c.startswith("prior_lattice")
+                or c.startswith("prior_heatmap")
             ]
             df = df.drop(columns=drop, errors="ignore")
             # keep watermark if present

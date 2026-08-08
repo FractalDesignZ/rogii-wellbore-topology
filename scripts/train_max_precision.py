@@ -120,32 +120,10 @@ def main() -> int:
         flush=True,
     )
     # Guard proprietary columns on disk: residual train uses full in-memory frame.
-    # Competition export strips prior_beam_*; keep artifacts free of private stalks
-    # when writing stations.csv (artifacts/** already gitignored).
-    _PRIV_PREFIXES = ("prior_beam", "private_", "sheaf_")
-    public_cols = [
-        c
-        for c in stations.columns
-        if not any(str(c).startswith(p) for p in _PRIV_PREFIXES)
-    ]
-    stripped = [c for c in stations.columns if c not in public_cols]
-    stations[public_cols].to_csv(out / "stations.csv", index=False)
-    if stripped:
-        # optional full frame for local offline only (gitignored path)
-        stations.to_csv(out / "stations_private_full.csv", index=False)
-        (out / "stations_strip_manifest.json").write_text(
-            json.dumps(
-                {
-                    "public_csv": "stations.csv",
-                    "private_full_csv": "stations_private_full.csv",
-                    "stripped_columns": stripped,
-                    "note": "private_full is local-only; do not publish or bundle",
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+    from rwt.train import write_stations_csv
+
+    strip_meta = write_stations_csv(stations, out, write_private_full=True)
+    stripped = list(strip_meta.get("stripped_columns") or [])
 
     # LightGBM: deeper + more leaves for max accuracy on this CPU
     result = train_lgbm_residual(

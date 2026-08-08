@@ -164,7 +164,7 @@ def main() -> int:
                 gr_sigma=gr_sig,
                 last_known=last,
             )
-        # One comparable cohort: finite truth + all stalk preds + last-known.
+        # Deploy comparable cohort: NO rejected heatmap (diag-only stalk).
         m = pred[
             np.isfinite(y[pred])
             & np.isfinite(blend[pred])
@@ -172,32 +172,40 @@ def main() -> int:
             & np.isfinite(beam["prior_beam_tvt"][pred])
             & np.isfinite(lat["prior_lattice_tvt"][pred])
             & np.isfinite(lat_blend[pred])
-            & np.isfinite(heat["prior_heatmap_tvt"][pred])
-            & np.isfinite(heat_blend[pred])
             & np.isfinite(fused[pred])
             & np.isfinite(gated[pred])
             & np.isfinite(emit[pred])
         ]
         if len(m) < min_comparable_stations:
             continue
+        # Heatmap support mask (rejected stalk): score only; never gates deploy cohort
+        m_heat = m[
+            np.isfinite(heat["prior_heatmap_tvt"][m]) & np.isfinite(heat_blend[m])
+        ]
         r_beam = rmse(y[m], beam["prior_beam_tvt"][m])
         r_blend = rmse(y[m], blend[m])
         r_lat = rmse(y[m], lat["prior_lattice_tvt"][m])
         r_lat_blend = rmse(y[m], lat_blend[m])
-        r_heat = rmse(y[m], heat["prior_heatmap_tvt"][m])
-        r_heat_blend = rmse(y[m], heat_blend[m])
+        r_heat = (
+            rmse(y[m_heat], heat["prior_heatmap_tvt"][m_heat]) if len(m_heat) >= 20 else float("nan")
+        )
+        r_heat_blend = (
+            rmse(y[m_heat], heat_blend[m_heat]) if len(m_heat) >= 20 else float("nan")
+        )
         r_fuse = rmse(y[m], fused[m])
         r_gated = rmse(y[m], gated[m])
         r_emit = rmse(y[m], emit[m])
         r_last = rmse(y[m], last[m])
         conf_m = beam["prior_beam_conf"][m]
         lat_conf_m = lat["prior_lattice_conf"][m]
-        heat_conf_m = heat["prior_heatmap_conf"][m]
+        heat_conf_m = (
+            heat["prior_heatmap_conf"][m_heat] if len(m_heat) else heat["prior_heatmap_conf"][m]
+        )
         # oracle well pick is diagnostic only (label leakage) — not a deploy prior
+        # heatmap excluded (rejected stalk)
         candidates = {
             "beam_blend": r_blend,
             "lattice_blend": r_lat_blend,
-            "heatmap_blend": r_heat_blend,
             "fuse_blend": r_fuse,
             "conf_gate": r_gated,
             "emit_gate": r_emit,
@@ -241,22 +249,28 @@ def main() -> int:
             print(f"scored {len(rows)} wells…", flush=True)
 
     R = pd.DataFrame(rows)
-    # Rows already require finite last-known; keep a named cohort for clarity / future filters.
+    # Deploy cohort: no heatmap requirement (rejected stalk is diag-only)
     need = [
         "rmse_last_known",
         "rmse_beam_blend",
         "rmse_beam",
         "rmse_lattice_blend",
-        "rmse_heatmap",
-        "rmse_heatmap_blend",
         "rmse_fuse_blend",
         "rmse_conf_gate",
         "rmse_emit_gate",
     ]
     C = R.dropna(subset=need) if len(R) else R
+    H = (
+        R.dropna(subset=["rmse_heatmap", "rmse_heatmap_blend"])
+        if len(R)
+        else R
+    )
 
     def _mean(col: str) -> float | None:
         return float(C[col].mean()) if len(C) and col in C else None
+
+    def _mean_h(col: str) -> float | None:
+        return float(H[col].mean()) if len(H) and col in H else None
 
     # Deploy prior for this pilot: conf_gate (label-free). Beam remains seal baseline.
     # emit_gate is trial-only until it beats conf_gate on the comparable cohort.
@@ -269,7 +283,8 @@ def main() -> int:
         "n_wells_scanned": int(n_wells_scanned),
         "min_comparable_stations": min_comparable_stations,
         "comparable_cohort": (
-            "finite y + beam/lattice/heatmap/fuse/gate/emit + last on predict mask; "
+            "finite y + beam/lattice/fuse/gate/emit + last on predict mask "
+            f"(heatmap diag-only, separate support mask); "
             f"min_comparable_stations={min_comparable_stations}"
         ),
         "conf_gate_params": conf_gate_params,
@@ -278,8 +293,9 @@ def main() -> int:
         "mean_rmse_beam_blend": _mean("rmse_beam_blend"),
         "mean_rmse_lattice": _mean("rmse_lattice"),
         "mean_rmse_lattice_blend": _mean("rmse_lattice_blend"),
-        "mean_rmse_heatmap": _mean("rmse_heatmap"),
-        "mean_rmse_heatmap_blend": _mean("rmse_heatmap_blend"),
+        "mean_rmse_heatmap": _mean_h("rmse_heatmap"),
+        "mean_rmse_heatmap_blend": _mean_h("rmse_heatmap_blend"),
+        "n_wells_heatmap_scored": len(H),
         "mean_rmse_fuse_blend": _mean("rmse_fuse_blend"),
         "mean_rmse_conf_gate": _mean("rmse_conf_gate"),
         "mean_rmse_emit_gate": _mean("rmse_emit_gate"),
@@ -287,7 +303,9 @@ def main() -> int:
         "mean_rmse_last_known": _mean("rmse_last_known"),
         "median_rmse_beam_blend": float(C["rmse_beam_blend"].median()) if len(C) else None,
         "median_rmse_lattice_blend": float(C["rmse_lattice_blend"].median()) if len(C) else None,
-        "median_rmse_heatmap_blend": float(C["rmse_heatmap_blend"].median()) if len(C) else None,
+        "median_rmse_heatmap_blend": (
+            float(H["rmse_heatmap_blend"].median()) if len(H) else None
+        ),
         "median_rmse_conf_gate": float(C["rmse_conf_gate"].median()) if len(C) else None,
         "median_rmse_emit_gate": float(C["rmse_emit_gate"].median()) if len(C) else None,
         "beats_last_known_mean": (
@@ -301,8 +319,8 @@ def main() -> int:
             else False
         ),
         "beats_last_known_heat_mean": (
-            float(C["rmse_heatmap_blend"].mean()) < float(C["rmse_last_known"].mean())
-            if len(C)
+            float(H["rmse_heatmap_blend"].mean()) < float(H["rmse_last_known"].mean())
+            if len(H)
             else False
         ),
         "beats_last_known_fuse_mean": (
@@ -340,13 +358,15 @@ def main() -> int:
             float(C["rmse_lattice_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
         ),
         "delta_heatmap_vs_last_known": (
-            float(C["rmse_heatmap"].mean() - C["rmse_last_known"].mean()) if len(C) else None
+            float(H["rmse_heatmap"].mean() - H["rmse_last_known"].mean()) if len(H) else None
         ),
         "delta_heatmap_blend_vs_last_known": (
-            float(C["rmse_heatmap_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
+            float(H["rmse_heatmap_blend"].mean() - H["rmse_last_known"].mean()) if len(H) else None
         ),
         "delta_heatmap_vs_conf_gate": (
-            float(C["rmse_heatmap"].mean() - C[deploy_col].mean()) if len(C) else None
+            float(H["rmse_heatmap"].mean() - C[deploy_col].mean())
+            if len(H) and len(C)
+            else None
         ),
         "delta_fuse_vs_last_known": (
             float(C["rmse_fuse_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None

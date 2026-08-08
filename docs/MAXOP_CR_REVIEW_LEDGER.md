@@ -78,7 +78,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 9 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + private beam residual feats; 16w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 | false | beam residual X wired; 8w ACCEPT 10.58 cohort; 16w res 12.02 loses stack; CR emit_conf+Gate3 wording; plateau no-inc (CR) |
 | 10 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private output guard + cert kernel | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 hold | false | strip prior_beam from stations.csv; export strip; cert kernel_*; nan delta tests; plateau no-inc (CR) |
 | 11 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | multi-field lattice floor + pure-lat conf_gate; heatmap REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | pure lat multi-field **10.544**; conf_gate **10.699** (delta_cg -0.007 KEEP); heatmap blend **15.98 REJECT**; plateau_B=1 |
-eat/private-beam-conf-clamp\ / #14 | multi-field lattice floor + pure-lat conf_gate; heatmap REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | pure lat multi-field **10.544**; conf_gate **10.699** (Δcg −0.007 KEEP); heatmap blend **15.98 REJECT**; plateau_B=1 |
+| 12 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR heatmap cohort + lattice residual feats | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w ACCEPT 10.50 smoke | false | conf_gate **10.699** hold; heatmap out of deploy mask; write_stations_csv helper; 8w lattice residual ACCEPT 10.50; plateau no-inc (CR) |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -103,9 +103,9 @@ eat/private-beam-conf-clamp\ / #14 | multi-field lattice floor + pure-lat conf_g
 
 ### Stop criteria check
 
-- beats_5ft: **false** (selected OOF still ~14.67; pilot conf_gate **10.699**)
-- Plateau B: cycle-11 |Δsel|=0, |Δcg|≈0.007 < 0.02, no open CR → **plateau_B count=1/3**; **continue**
-- Cycle-10 CR cleared (APPROVED); cycle-11 lever only
+- beats_5ft: **false** (selected OOF still ~14.67; pilot conf_gate **10.699**; 8w private residual smoke 10.50)
+- Plateau B: cycle-12 |Δsel|=0, conf_gate hold, **CR fixed this cycle** → plateau counter does not increment; **continue**
+- Cycle-11 CR: heatmap out of deploy cohort; strip helper shared; ledger dupe row — **fixed cycle-12**
 
 ### Cycle-4 detail (re-arm lattice denser stalk)
 
@@ -252,4 +252,18 @@ eat/private-beam-conf-clamp\ / #14 | multi-field lattice floor + pure-lat conf_g
 
 - Selected OOF 14.67 unchanged (pure/deploy move ≪ 0.3 promote). Residue never forced.
 - **Next lever:** export multi-field lattice + conf as residual features/floors on ≤32–64w private; conf_gate further lattice-led only if conf calibrated; kill heatmap until template match beats last_known.
+
+### Cycle-12 detail (CR + multi-field lattice residual features)
+
+- **CR (≤4 from cycle-11 review):**
+  1. Ledger: delete truncated duplicate Cycle-11 table row.
+  2. **Major:** deploy cohort mask no longer requires finite heatmap (diag-only); separate heatmap support mask for heat RMSEs.
+  3. Shared write_stations_csv / public_station_columns in src/rwt/train.py used by train CLIs.
+  4. Export strip extends to prior_lattice* / prior_heatmap*.
+- **Lever:** private kernel exports multi-field prior_lattice_tvt/conf/blend + deltas in residual X and floors.
+- **MEASURE:**
+  - 40w pilot remeasure (private_beam_pilot_v12_cohort): conf_gate **10.699** hold; pure multi-field lattice **10.544**; heatmap still REJECT (~16 blend) on separate mask.
+  - 8w private residual smoke (max_prec_8_lattice_feat): residual **ACCEPT** OOF **10.502** vs floor stack **11.393** (beam-only smoke was 10.576) — cohort-only; not promoted.
+- Selected 773w seal **14.67** unchanged. Residue never forced.
+- **Next lever:** ≤16–32w multi-seed private lattice residual if 8w holds; adaptive mask on lattice conf; do not promote smoke.
 

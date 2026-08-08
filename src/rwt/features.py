@@ -336,30 +336,30 @@ def finalize_after_spatial(
 
 def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
     """
-    Label-free residual X helpers when private kernel attached prior_beam_*.
+    Label-free residual X helpers when private kernel attached prior_beam_* /
+    prior_lattice_*.
 
-    Public path has no prior_beam columns → no-op. Deltas are finite only when
+    Public path has no private columns → no-op. Deltas are finite only when
     both arms are finite (no poison mid/extrap).
     """
     out = stations
-    if "prior_beam_tvt" not in out.columns:
-        return out
-    beam = out["prior_beam_tvt"].to_numpy(dtype=float)
-    if "prior_stack" in out.columns:
-        stack = out["prior_stack"].to_numpy(dtype=float)
-        d = beam - stack
-        d[~np.isfinite(beam) | ~np.isfinite(stack)] = np.nan
-        out["prior_beam_delta_stack"] = d
-    if "prior_last_tvt" in out.columns:
-        last = out["prior_last_tvt"].to_numpy(dtype=float)
-        d = beam - last
-        d[~np.isfinite(beam) | ~np.isfinite(last)] = np.nan
-        out["prior_beam_delta_last"] = d
-    if "prior_best" in out.columns:
-        best = out["prior_best"].to_numpy(dtype=float)
-        d = beam - best
-        d[~np.isfinite(beam) | ~np.isfinite(best)] = np.nan
-        out["prior_beam_delta_best"] = d
+
+    def _delta(src_col: str, ref_col: str, out_col: str) -> None:
+        if src_col not in out.columns or ref_col not in out.columns:
+            return
+        a = out[src_col].to_numpy(dtype=float)
+        b = out[ref_col].to_numpy(dtype=float)
+        d = a - b
+        d[~np.isfinite(a) | ~np.isfinite(b)] = np.nan
+        out[out_col] = d
+
+    if "prior_beam_tvt" in out.columns:
+        _delta("prior_beam_tvt", "prior_stack", "prior_beam_delta_stack")
+        _delta("prior_beam_tvt", "prior_last_tvt", "prior_beam_delta_last")
+        _delta("prior_beam_tvt", "prior_best", "prior_beam_delta_best")
+    if "prior_lattice_tvt" in out.columns:
+        _delta("prior_lattice_tvt", "prior_stack", "prior_lattice_delta_stack")
+        _delta("prior_lattice_tvt", "prior_last_tvt", "prior_lattice_delta_last")
     return out
 
 
@@ -735,6 +735,11 @@ FEATURE_COLS_DEFAULT = [
     "prior_beam_delta_stack",
     "prior_beam_delta_last",
     "prior_beam_delta_best",
+    "prior_lattice_tvt",
+    "prior_lattice_conf",
+    "prior_lattice_blend",
+    "prior_lattice_delta_stack",
+    "prior_lattice_delta_last",
 ]
 
 

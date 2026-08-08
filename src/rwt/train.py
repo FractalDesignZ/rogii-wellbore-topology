@@ -38,6 +38,57 @@ CROWN_DEEP_RESIDUAL = True
 N_REFIT_FLOOR_DEEP = 400
 N_REFIT_FLOOR_SHALLOW = 200
 
+# Private / proprietary station columns never published in stations.csv
+PRIV_STATION_PREFIXES: tuple[str, ...] = (
+    "prior_beam",
+    "prior_lattice",
+    "prior_heatmap",
+    "private_",
+    "sheaf_",
+)
+
+
+def public_station_columns(stations: pd.DataFrame) -> list[str]:
+    """Columns safe to write to public stations.csv (no private stalks)."""
+    return [
+        c
+        for c in stations.columns
+        if not any(str(c).startswith(p) for p in PRIV_STATION_PREFIXES)
+    ]
+
+
+def write_stations_csv(
+    stations: pd.DataFrame,
+    out_dir: Path,
+    *,
+    write_private_full: bool = True,
+) -> dict[str, Any]:
+    """
+    Write stations.csv without proprietary columns.
+
+    Residual train should use the full in-memory frame. Optional
+    stations_private_full.csv is local-only (artifacts/** gitignored).
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    public_cols = public_station_columns(stations)
+    stripped = [c for c in stations.columns if c not in public_cols]
+    stations[public_cols].to_csv(out_dir / "stations.csv", index=False)
+    manifest: dict[str, Any] = {
+        "public_csv": "stations.csv",
+        "stripped_columns": stripped,
+        "n_public_cols": len(public_cols),
+        "n_stripped": len(stripped),
+        "note": "stripped columns are private stalks; do not publish or bundle",
+    }
+    if stripped and write_private_full:
+        stations.to_csv(out_dir / "stations_private_full.csv", index=False)
+        manifest["private_full_csv"] = "stations_private_full.csv"
+        (out_dir / "stations_strip_manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        )
+    return manifest
+
 
 def dual_residual_weights_for_bases(
     bases: list[str] | tuple[str, ...],
@@ -435,6 +486,8 @@ def train_lgbm_residual(
         # private kernel pure floor (present only when RWT_KERNEL=private)
         "prior_beam_blend": "prior_beam_blend",
         "prior_beam_tvt": "prior_beam_tvt",
+        "prior_lattice_blend": "prior_lattice_blend",
+        "prior_lattice_tvt": "prior_lattice_tvt",
     }
     baseline_rmse: dict[str, float] = {}
     for name, col in _FLOOR_COL.items():
@@ -694,7 +747,7 @@ def main(argv: list[str] | None = None) -> int:
             workers=int(cfg["workers"]),
             progress=progress,
         )
-        stations.to_csv(out / "stations.csv", index=False)
+        write_stations_csv(stations, out, write_private_full=True)
         progress.set_phase(
             "train",
             total=args.folds,
