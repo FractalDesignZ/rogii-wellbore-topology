@@ -334,6 +334,35 @@ def finalize_after_spatial(
     return stations
 
 
+def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
+    """
+    Label-free residual X helpers when private kernel attached prior_beam_*.
+
+    Public path has no prior_beam columns → no-op. Deltas are finite only when
+    both arms are finite (no poison mid/extrap).
+    """
+    out = stations
+    if "prior_beam_tvt" not in out.columns:
+        return out
+    beam = out["prior_beam_tvt"].to_numpy(dtype=float)
+    if "prior_stack" in out.columns:
+        stack = out["prior_stack"].to_numpy(dtype=float)
+        d = beam - stack
+        d[~np.isfinite(beam) | ~np.isfinite(stack)] = np.nan
+        out["prior_beam_delta_stack"] = d
+    if "prior_last_tvt" in out.columns:
+        last = out["prior_last_tvt"].to_numpy(dtype=float)
+        d = beam - last
+        d[~np.isfinite(beam) | ~np.isfinite(last)] = np.nan
+        out["prior_beam_delta_last"] = d
+    if "prior_best" in out.columns:
+        best = out["prior_best"].to_numpy(dtype=float)
+        d = beam - best
+        d[~np.isfinite(beam) | ~np.isfinite(best)] = np.nan
+        out["prior_beam_delta_best"] = d
+    return out
+
+
 def seal_station_frame(
     stations: pd.DataFrame,
     lateral: pd.DataFrame,
@@ -347,6 +376,7 @@ def seal_station_frame(
     stations = finalize_after_spatial(stations, df, split, typewell)
     kernel = resolve_kernel()
     stations = kernel.augment_station_frame(stations, df, typewell)
+    stations = attach_private_residual_deltas(stations)
     stations = embed_column(stations)
     return stations
 
@@ -698,6 +728,13 @@ FEATURE_COLS_DEFAULT = [
     "curv_x_pf_std",
     "ncc_lag_consistency",
     "nb_offset_x_ok",
+    # private kernel residual features (present only when RWT_KERNEL=private)
+    "prior_beam_tvt",
+    "prior_beam_conf",
+    "prior_beam_blend",
+    "prior_beam_delta_stack",
+    "prior_beam_delta_last",
+    "prior_beam_delta_best",
 ]
 
 

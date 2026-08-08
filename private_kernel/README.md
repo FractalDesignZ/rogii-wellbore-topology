@@ -6,7 +6,7 @@ This directory is **gitignored** in the public tree. Keep a local (or private-re
 
 ```text
 private_kernel/
-  __init__.py          # MUST expose get_kernel() → kernel with is_private()==True
+  __init__.py          # MUST expose get_kernel() → kernel with truthy is_private()
   kernel_impl.py       # PrivateKernel: beam + sheaf station columns
   beam_match.py        # beam stalk v2 knobs + v6 heel GR affine / adaptive sigma
   lattice_match.py     # band-lattice Viterbi + conf_gate (measure pins sealed knobs)
@@ -20,7 +20,7 @@ When `RWT_KERNEL=private`, the public resolver does:
 
 1. `import private_kernel`
 2. `k = private_kernel.get_kernel()`  — **required entry point** (not just KernelImpl class)
-3. require `k.is_private() is True` — else RuntimeError / fail-closed to `PublicKernel`
+3. require truthy `k.is_private()` (`if not k.is_private():` → fail-closed to `PublicKernel`)
 
 If import fails or the contract is violated, the public path continues with `PublicKernel` (fail-closed). Implement `get_kernel()` in `__init__.py`.
 
@@ -42,6 +42,10 @@ Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):
 Rejected on 40w: denser `n_nodes=129` (pure lat 10.801); beam-led margin0.10 (conf_gate 10.710);
 GR emission gate (emit 10.738 vs conf_gate 10.706).
 
+Public residual path (when `RWT_KERNEL=private`): `augment_station_frame` emits
+`prior_beam_tvt/conf/blend`; `rwt.features` adds deltas and residual X includes them.
+16w pilot: residual lost pure stack (FALLBACK); 8w smoke ACCEPT was cohort-specific.
+
 Target hunt: conf_gate ≤ 9.0 then Gate3 residual / full GKF promote if pure moves ≥0.3 ft.
 
 ## Contract
@@ -52,7 +56,7 @@ Implement `rwt.kernel_api.GeometryKernel` (see `src/rwt/kernel_api.py`):
 - `trajectory_features(md, x, y, z) -> dict`
 - `station_features(lateral_df, typewell_df, split) -> pd.DataFrame`  # optional columns
 - `kernel_id() -> str`
-- `is_private() -> True`  # must be True or resolver fails closed
+- `is_private() -> bool`  # must be truthy or resolver fails closed
 
 Load with:
 

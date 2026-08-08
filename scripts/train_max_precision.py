@@ -24,7 +24,9 @@ os.environ.setdefault("RWT_NUM_THREADS", "20")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "20")
 
 ROOT = Path(__file__).resolve().parents[1]
+# src for rwt; repo root so private_kernel is importable under RWT_KERNEL=private
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 import numpy as np  # noqa: E402
 
@@ -62,17 +64,32 @@ def main() -> int:
         default=None,
         help="residual base prior column (default: resolve DEFAULT_PRIOR_COL / fallbacks)",
     )
+    ap.add_argument(
+        "--kernel",
+        default=None,
+        choices=["public", "private"],
+        help="force RWT_KERNEL=public|private (default: leave env / public)",
+    )
     a = ap.parse_args()
+    if a.kernel:
+        os.environ["RWT_KERNEL"] = a.kernel
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
+    from rwt.kernel_api import resolve_kernel  # after path + RWT_KERNEL
+
+    _k = resolve_kernel()
     print(
         json.dumps(
             {
                 "phase": "MEASURE",
                 "law": "restrict→measure→audit→OPEN|STOP",
                 "target_ft": TARGET_FT,
+                "kernel_id": _k.kernel_id(),
+                "kernel_private": _k.is_private(),
+                "kernel_note": getattr(_k, "_load_note", None),
+                "RWT_KERNEL": os.environ.get("RWT_KERNEL"),
                 "threads": {
                     "OMP": os.environ.get("OMP_NUM_THREADS"),
                     "OPENBLAS": os.environ.get("OPENBLAS_NUM_THREADS"),

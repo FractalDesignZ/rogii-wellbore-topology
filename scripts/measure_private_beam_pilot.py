@@ -86,6 +86,7 @@ def main() -> int:
         "pure_lat_boost": 0.0,
     }
     lattice_n_nodes = 97  # denser 129 REJECT: pure lat 10.801 vs v6 10.686
+    multi_field_lattice = True  # v9 manifold overlay emission
     min_comparable_stations = 20
     for wid, df in iter_well_frames(root, "train"):
         n_wells_scanned += 1
@@ -94,10 +95,15 @@ def main() -> int:
             continue
         tw_path = typewell_path_for_well(root, wid, "train")
         tw = load_typewell(tw_path) if tw_path else None
-        # v6 seal: heel GR affine + adaptive sigma; v2 beam knobs; n_nodes=97
+        # v6 seal beam + v9 multi-field lattice (GR level + shape + e_ref stickiness)
         beam = beam_prior_for_well(df, tw, sp, beam_width=48, heel_affine=True)
         lat = lattice_prior_for_well(
-            df, tw, sp, n_nodes=lattice_n_nodes, heel_affine=True
+            df,
+            tw,
+            sp,
+            n_nodes=lattice_n_nodes,
+            heel_affine=True,
+            multi_field=multi_field_lattice,
         )
         pred = np.asarray(sp.predict_idx, dtype=int)
         y = df["TVT"].to_numpy(float) if "TVT" in df.columns else np.full(len(df), np.nan)
@@ -132,14 +138,13 @@ def main() -> int:
         )
         # Cycle-8 lever: GR emission gate (label-free stalk pick by typewell GR)
         emit = gated.copy()
-        emit_conf = gated_conf.copy()
         if tw is not None and "GR" in df.columns:
             tw_tvt, tw_gr, _ = _prep_typewell(tw)
             known = np.asarray(sp.known_idx, dtype=int)
             tw_gr_cal, gr_sig = _calibrate_typewell_gr(
                 tw_tvt, tw_gr, df, known, base_gr_sigma=10.0
             )
-            emit, emit_conf = gr_emission_gate(
+            emit, _ = gr_emission_gate(
                 blend,
                 lat_blend,
                 df["GR"].to_numpy(float),
@@ -338,7 +343,7 @@ def main() -> int:
         "public_all_stack_selected_reject": 15.199496423546888,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v9: GR emission gate trial + sealed v6 conf_gate deploy; heel affine; n_nodes=97",
+        "stalk": "v9 multi-field lattice emission (GR level+shape+e_ref) + v6 conf_gate deploy; heel affine; n_nodes=97",
         "deploy_prior": "conf_gate",
         "prior_conf_gate_seal_v3": 10.748919252940581,
         "prior_conf_gate_seal_v6": 10.705360833184525,

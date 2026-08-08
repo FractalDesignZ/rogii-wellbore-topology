@@ -74,7 +74,8 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 5 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: lattice mask + ledger honesty | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (Δcg ~0); pure lattice **10.903** (honest shared mask); CR cleared; no GKF; continue (CR fixed this cycle) |
 | 6 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | heel GR affine + soft conf_gate; reverse REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.705** (Δcg **−0.044**); reverse_pass →11.056 REJECT; pure lat 10.686; no GKF; plateau reset (Δcg≥0.02) |
 | 7 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + denser/beam-led REJECT; 64w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | FALLBACK 64w pure 12.40 | false | denser129 pure lat **10.801 REJECT**; v8 conf_gate **10.710 REJECT**; keep v6 **10.705**; CR header/loader/params; plateau no-inc (CR fixed) |
-| 8 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + emit_gate REJECT; all_stack REGRESS | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | all_stack 15.20 REJECT promote | false | emit_gate **10.738 REJECT** vs conf_gate **10.706**; keep deploy 10.705; CR B007+min_stations; plateau no-inc (CR) |
+| 8 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + emit_gate REJECT; all_stack REGRESS | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | all_stack 15.20 ACCEPT; promotion rejected | false | emit_gate **10.738 REJECT** vs conf_gate **10.706**; keep deploy 10.705; CR B007+min_stations; plateau no-inc (CR) |
+| 9 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + private beam residual feats; 16w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 | false | beam residual X wired; 8w ACCEPT 10.58 cohort; 16w res 12.02 loses stack; CR emit_conf+Gate3 wording; plateau no-inc (CR) |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -99,9 +100,9 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 
 ### Stop criteria check
 
-- beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04; 64w pure 12.40; all_stack 15.20 reject)
-- Plateau B: cycle-8 |Δsel|=0, deploy conf_gate hold ~10.705, **CR fixed this cycle** → plateau counter does not increment; **continue**
-- Cycle-7 CR cleared; cycle-8 CR: unused enumerate + min_comparable_stations — **fixed**
+- beats_5ft: **false** (selected OOF still ~14.67; 16w private pure stack 11.95; pilot conf_gate ~10.705)
+- Plateau B: cycle-9 |Δsel|=0, deploy conf_gate hold ~10.705, **CR fixed this cycle** → plateau counter does not increment; **continue**
+- Cycle-8 CR: Gate3 vs promote wording + unused emit_conf + is_private truthy docs — **fixed cycle-9**
 
 ### Cycle-4 detail (re-arm lattice denser stalk)
 
@@ -203,3 +204,17 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 - **Public full 773w `max_prec_all_stack`** (prior_col=prior_stack residual base): selected residual **15.200** vs floor stack **15.760** (Gate3 ACCEPT) but **worse than sealed max_prec_all 14.67** → **do not promote**; seal remains 14.67 / best floor 15.11.
 - Δ selected_oof (promoted seal): 0.00; Δ deploy conf_gate: ~0; no 773w promote from pilot.
 - **Next lever:** private conf_gate / beam columns as residual **features** (not residual base alone) on ≤64w; or soft-neighbor / multi-scale NCC stalk denser only when conf drops.
+
+### Cycle-9 detail (CR + private beam residual features)
+
+- **CR (≤4 from cycle-8 review):**
+  1. Ledger cycle-8 Gate3 cell: `ACCEPT; promotion rejected` (not conflated with promotion).
+  2. measure: drop unused `emit_conf` (Ruff RUF059).
+  3. private_kernel README: `is_private()` contract is **truthy** (matches `if not k.is_private()`).
+- **Lever:** residual **features** from private beam (`prior_beam_tvt/conf/blend` + deltas vs stack/last/best) in `FEATURE_COLS_DEFAULT`; floors include beam pure; `train_max_precision --kernel private` + repo root on `sys.path`.
+- **MEASURE:**
+  - 8w private (smoke): residual **ACCEPT** OOF **10.576** vs floor stack **11.393** (beam feats present).
+  - 16w private (`artifacts/max_prec_16_beam_feat`): residual OOF **12.018** loses best floor prior_stack **11.949** → Gate3 **FALLBACK_PURE_PRIOR**; selected **11.949**; beam pure floor ~12.86–12.97 (worse than stack).
+- Deploy pilot conf_gate hold **10.705**; 773w seal **14.67** unchanged (no ≥0.3 promote).
+- **Next lever:** conf_gate export as residual feature/floor; adaptive residual mask on beam conf; or ≤64w only when residual beats pure on multi-seed. Do not force residue.
+

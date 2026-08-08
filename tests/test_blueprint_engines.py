@@ -56,6 +56,29 @@ class TestBlueprintEngines(unittest.TestCase):
         self.assertIn("relative_md", FEATURE_COLS_DEFAULT)
         self.assertIn("prior_local_dip", FEATURE_COLS_DEFAULT)
         self.assertIn("prior_last_tvt", FEATURE_COLS_DEFAULT)
+        # private residual columns allowed (filtered out when absent from stations)
+        self.assertIn("prior_beam_tvt", FEATURE_COLS_DEFAULT)
+        self.assertIn("prior_beam_delta_stack", FEATURE_COLS_DEFAULT)
+
+    def test_attach_private_residual_deltas_noop_and_deltas(self) -> None:
+        from rwt.features import attach_private_residual_deltas
+
+        pub = pd.DataFrame({"prior_stack": [1.0, 2.0], "prior_last_tvt": [1.0, 2.0]})
+        out = attach_private_residual_deltas(pub)
+        self.assertNotIn("prior_beam_delta_stack", out.columns)
+
+        priv = pd.DataFrame(
+            {
+                "prior_beam_tvt": [3.0, 5.0],
+                "prior_stack": [1.0, 2.0],
+                "prior_last_tvt": [0.0, 1.0],
+                "prior_best": [2.0, 4.0],
+            }
+        )
+        out2 = attach_private_residual_deltas(priv)
+        self.assertAlmostEqual(float(out2["prior_beam_delta_stack"].iloc[0]), 2.0)
+        self.assertAlmostEqual(float(out2["prior_beam_delta_last"].iloc[1]), 4.0)
+        self.assertAlmostEqual(float(out2["prior_beam_delta_best"].iloc[0]), 1.0)
 
     def test_feature_matrix_rejects_form_leak(self) -> None:
         for leaked in FORM_SURFACE_LEAK_COLS:

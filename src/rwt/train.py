@@ -432,6 +432,9 @@ def train_lgbm_residual(
         "prior_stack": "prior_stack",
         "prior_best": "prior_best",
         "prior_ncc": "prior_ncc_tvt",
+        # private kernel pure floor (present only when RWT_KERNEL=private)
+        "prior_beam_blend": "prior_beam_blend",
+        "prior_beam_tvt": "prior_beam_tvt",
     }
     baseline_rmse: dict[str, float] = {}
     for name, col in _FLOOR_COL.items():
