@@ -36,6 +36,24 @@ def main() -> int:
     ap.add_argument("--data", default=str(ROOT / "data" / "raw"))
     ap.add_argument("--max-wells", type=int, default=40)
     ap.add_argument("--out", default=str(ROOT / "artifacts" / "private_beam_pilot"))
+    ap.add_argument(
+        "--pure-lat-boost",
+        type=float,
+        default=0.0,
+        help="soft mix of pure lattice into conf_gate lat arm (0 when --lat-arm pure; v11 blend-arm used 0.45)",
+    )
+    ap.add_argument(
+        "--margin",
+        type=float,
+        default=0.03,
+        help="conf_gate lattice-vs-beam margin (v12 pure-arm seal 0.03; v11 was 0.06)",
+    )
+    ap.add_argument(
+        "--lat-arm",
+        choices=["blend", "pure"],
+        default="pure",
+        help="conf_gate lattice arm: pure multi-field lattice (v12 deploy) or last-protected blend",
+    )
     a = ap.parse_args()
 
     # Fail-closed imports: public clones have no private_kernel package body
@@ -84,11 +102,11 @@ def main() -> int:
     # v11: pure multi-field lattice is strong (~10.54) but conf_gate used lat_blend only.
     # pure_lat_boost soft-mixes raw lattice into lattice arm when conf supports.
     conf_gate_params = {
-        "margin": 0.06,
+        "margin": float(a.margin),
         "agree_ft": 2.0,
         "soft_temp": 0.05,
         "lat_floor": 0.15,
-        "pure_lat_boost": 0.45,
+        "pure_lat_boost": float(a.pure_lat_boost),
     }
     lattice_n_nodes = 97  # denser 129 REJECT: pure lat 10.801 vs v6 10.686
     multi_field_lattice = True  # v9 manifold overlay emission
@@ -136,13 +154,21 @@ def main() -> int:
             lat["prior_lattice_conf"],
             last,
         )
-        # Label-free conf gate: soft-mix multi-field pure lattice into lat arm
+        # Label-free conf gate: soft-mix multi-field pure lattice into lat arm.
+        # --lat-arm pure: use raw multi-field lattice as lattice arm (beam arm
+        # still last-protected; low lat_conf falls back to beam_blend).
+        lat_arm = (
+            lat["prior_lattice_tvt"] if a.lat_arm == "pure" else lat_blend
+        )
+        pure_for_gate = (
+            None if a.lat_arm == "pure" else lat["prior_lattice_tvt"]
+        )
         gated, gated_conf = conf_gate_beam_lattice(
             blend,
             beam["prior_beam_conf"],
-            lat_blend,
+            lat_arm,
             lat["prior_lattice_conf"],
-            pure_lattice=lat["prior_lattice_tvt"],
+            pure_lattice=pure_for_gate,
             **conf_gate_params,
         )
         # Cycle-8 lever: GR emission gate (label-free stalk pick by typewell GR)
@@ -288,6 +314,7 @@ def main() -> int:
             f"min_comparable_stations={min_comparable_stations}"
         ),
         "conf_gate_params": conf_gate_params,
+        "lat_arm": a.lat_arm,
         "lattice_n_nodes": lattice_n_nodes,
         "mean_rmse_beam": _mean("rmse_beam"),
         "mean_rmse_beam_blend": _mean("rmse_beam_blend"),
@@ -400,10 +427,12 @@ def main() -> int:
         "public_all_stack_selected_reject": 15.199496423546888,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v11 conf_gate pure-lat boost on multi-field lattice; v10 heatmap trial; v9 multi-field lattice floor",
+        "stalk": "v12 conf_gate pure multi-field lattice arm + margin 0.03; v11 pure_lat_boost blend-arm; heatmap REJECT",
         "deploy_prior": "conf_gate",
         "prior_conf_gate_seal_v3": 10.748919252940581,
         "prior_conf_gate_seal_v6": 10.705360833184525,
+        "prior_conf_gate_seal_v11": 10.69853456634771,
+        "trial_v12_conf_gate_pure_arm_40w": float(C[deploy_col].mean()) if len(C) else None,
         "trial_v8_conf_gate_40w": 10.709574438415903,
         "trial_v8_pure_lattice_40w": 10.800656754206665,
         "trial_v9_multi_field_lattice_40w": 10.543693969346446,

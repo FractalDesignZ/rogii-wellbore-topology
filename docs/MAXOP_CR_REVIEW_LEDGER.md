@@ -85,6 +85,14 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 16 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR dual partner + private floor redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.476 (no retrain) | false | reject dual_partner==prior_col; lattice weight tests; public_baseline_rmse redacts beam/lattice floors (RWT_INCLUDE_PRIVATE_METRICS opt-in); 88 tests OK; plateau no-inc (CR) |
 | 17 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | lattice residual X parity + dual re-MEASURE | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual 3f **ACCEPT 10.465** | false | `prior_lattice_delta_best` + `prior_lat_beam_delta`; dual OOF **10.465** (Δ **−0.011** vs c15 10.476); conf_gate hold; not promote (≪0.3); 5f on 8w early-stops@1 footgun; plateau_B=1 |
 | 18 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR Gate3 floor redact + docs/RUF003 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 (no retrain) | false | public_gate3_dict redacts floor_rmses/best_floor_*; ASCII minus in features comment; 8w dual table split from 40w pilot; tests; plateau no-inc (CR) |
+| 19 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate pure lat arm KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.674** (Δcg **−0.024** vs v11 10.699); lat_arm=pure margin=0.03; pure_lat_boost alone max −0.01 REJECT; pure lat floor 10.544; no GKF; plateau_B **reset** |
+
+### Cycle-19 detail (conf_gate pure multi-field lattice arm)
+
+- **Lever:** conf_gate lattice arm = raw multi-field pure lattice (not last-protected lat_blend); beam arm still blend; soft conf switch + margin **0.03**.
+- **MEASURE 40w:** conf_gate **10.674** / pure lat 10.544 / beam_blend 10.729 / last 10.788. Δ vs v11 conf_gate **−0.024** (≥0.02 KEEP deploy).
+- Rejected: pure_lat_boost 0.7/1.0 on blend arm only (−0.005/−0.010).
+- selected_oof 14.67 (no full GKF; pure gap ≪0.3). beats_5ft=false. dual residual 10.465 hold.
 
 ### Cycle-18 detail (CR on cycle-17)
 
