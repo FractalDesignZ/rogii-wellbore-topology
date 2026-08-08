@@ -67,7 +67,8 @@ Track consecutive cycles for plateau stop (`|Δ selected_oof| < 0.05` ×3) and d
 | Cycle | Date (UTC) | Branch / PR | Lever | selected_oof_ft | best_floor_ft | beam_blend_ft | last_known_ft | Δ selected | Gate3 | beats_5ft | Note |
 |------:|------------|-------------|-------|----------------:|--------------:|--------------:|--------------:|-----------:|-------|-----------|------|
 | 0 | seal | main | baseline seals | **14.67** (773w) | **15.11** stack | 11.924 | 10.788 | — | ACCEPT residual | false | beam lost to last_known |
-| 1 | 2026-08-07 | `feat/private-beam-conf-clamp` | private beam stalk v2 | 14.67 (unchanged; no full GKF) | 15.11 (public) | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | **beam blend beats last_known** (−0.032); pure beam 10.775; clamp_origin freeze + GR-rel conf + NCC reseed offline |
+| 1 | 2026-08-07 | `feat/private-beam-conf-clamp` / #14 | private beam stalk v2 | 14.67 (unchanged; no full GKF) | 15.11 (public) | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | **beam blend beats last_known** (−0.032); pure beam 10.775; clamp_origin freeze + GR-rel conf + NCC reseed offline |
+| 2 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: comparable last-known cohort | 14.67 | 15.11 | 10.756 (prior pilot) | 10.788 | 0.00 selected | n/a | false | measure script: finite last∩y∩blend∩beam mask; win-rate/delta same cohort |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -77,8 +78,14 @@ Track consecutive cycles for plateau stop (`|Δ selected_oof| < 0.05` ×3) and d
 - **Not yet:** GroupKFold residual stack with beam prior as floor; hunt 5 ft still NEED_IMPROVE
 - **Next lever:** beam residual feature into Gate3-honest residual head **or** lattice/DTW denser stalk; full 773w only if pure floor moves ≥0.3 ft on same cohort (pilot pure-floor gap vs last_known is 0.03 — below threshold)
 
+### Cycle-2 detail (CR on PR #14)
+
+- CodeRabbit **Major**: non-finite `last[m]` made `r_last=NaN` but `beats_last_known=False` → win-rate counted losses; aggregates mixed cohorts.
+- Fix: require finite `last` (and beam) on predict mask before scoring; aggregates use shared comparable cohort only.
+- Selected OOF unchanged (no GKF this cycle). Next: lattice/DTW stalk or Gate3 beam residual feature.
+
 ### Stop criteria check
 
 - beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04)
-- Plateau: only 1 loop cycle recorded — continue
-- No open CR on loop PR at start of cycle-1 (PR #11 merged)
+- Plateau: cycles 1–2 have `|Δ selected_oof| < 0.05` (both 0.00) — need 3 consecutive for STOP; continue after CR close
+- Open CR on #14 addressed in cycle-2

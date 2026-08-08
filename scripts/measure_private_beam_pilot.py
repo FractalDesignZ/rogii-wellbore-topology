@@ -83,23 +83,30 @@ def main() -> int:
                     fill = ti[j]
                 last[j] = fill
         blend = beam_blend_last(beam["prior_beam_tvt"], last, beam["prior_beam_conf"])
-        m = pred[np.isfinite(y[pred]) & np.isfinite(blend[pred])]
+        # One comparable cohort: finite truth, blend, and last-known on every scored station.
+        # Non-comparable wells are skipped so win-rate / delta denominators stay honest.
+        m = pred[
+            np.isfinite(y[pred])
+            & np.isfinite(blend[pred])
+            & np.isfinite(last[pred])
+            & np.isfinite(beam["prior_beam_tvt"][pred])
+        ]
         if len(m) < 20:
             continue
         r_beam = rmse(y[m], beam["prior_beam_tvt"][m])
         r_blend = rmse(y[m], blend[m])
-        r_last = rmse(y[m], last[m]) if np.isfinite(last[m]).all() else float("nan")
+        r_last = rmse(y[m], last[m])
         conf_m = beam["prior_beam_conf"][m]
         rows.append(
             {
                 "well_id": wid,
-                "n_pred": int(len(m)),
+                "n_pred": len(m),
                 "rmse_beam": r_beam,
                 "rmse_beam_blend": r_blend,
                 "rmse_last_known": r_last,
                 "mean_conf": float(np.nanmean(conf_m)),
                 "frac_conf_ge_0_5": float(np.mean(conf_m >= 0.5)),
-                "beats_last_known": bool(r_blend < r_last) if np.isfinite(r_last) else False,
+                "beats_last_known": bool(r_blend < r_last),
             }
         )
         if a.max_wells and len(rows) >= a.max_wells:
@@ -108,25 +115,29 @@ def main() -> int:
             print(f"scored {len(rows)} wells…", flush=True)
 
     R = pd.DataFrame(rows)
+    # Rows already require finite last-known; keep a named cohort for clarity / future filters.
+    C = R.dropna(subset=["rmse_last_known", "rmse_beam_blend", "rmse_beam"]) if len(R) else R
     summary = {
-        "ok": len(R) > 0,
+        "ok": len(C) > 0,
         "kernel_id": k.kernel_id(),
-        "n_wells": int(len(R)),
-        "mean_rmse_beam": float(R["rmse_beam"].mean()) if len(R) else None,
-        "mean_rmse_beam_blend": float(R["rmse_beam_blend"].mean()) if len(R) else None,
-        "mean_rmse_last_known": float(R["rmse_last_known"].mean()) if len(R) else None,
-        "median_rmse_beam_blend": float(R["rmse_beam_blend"].median()) if len(R) else None,
+        "n_wells": int(len(C)),
+        "n_wells_scored_raw": int(len(R)),
+        "comparable_cohort": "finite y + blend + last + beam on predict mask",
+        "mean_rmse_beam": float(C["rmse_beam"].mean()) if len(C) else None,
+        "mean_rmse_beam_blend": float(C["rmse_beam_blend"].mean()) if len(C) else None,
+        "mean_rmse_last_known": float(C["rmse_last_known"].mean()) if len(C) else None,
+        "median_rmse_beam_blend": float(C["rmse_beam_blend"].median()) if len(C) else None,
         "beats_last_known_mean": (
-            float(R["rmse_beam_blend"].mean()) < float(R["rmse_last_known"].mean())
-            if len(R)
+            float(C["rmse_beam_blend"].mean()) < float(C["rmse_last_known"].mean())
+            if len(C)
             else False
         ),
         "frac_wells_beat_last_known": (
-            float(R["beats_last_known"].mean()) if len(R) and "beats_last_known" in R else None
+            float(C["beats_last_known"].mean()) if len(C) and "beats_last_known" in C else None
         ),
-        "mean_conf": float(R["mean_conf"].mean()) if len(R) and "mean_conf" in R else None,
+        "mean_conf": float(C["mean_conf"].mean()) if len(C) and "mean_conf" in C else None,
         "delta_blend_vs_last_known": (
-            float(R["rmse_beam_blend"].mean() - R["rmse_last_known"].mean()) if len(R) else None
+            float(C["rmse_beam_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
         ),
         "prior_pilot_mean_blend": 11.923837695178506,
         "prior_pilot_mean_last_known": 10.788491868712727,
@@ -139,7 +150,7 @@ def main() -> int:
     }
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    R.to_csv(out / "per_well_beam.csv", index=False)
+    C.to_csv(out / "per_well_beam.csv", index=False)
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2), flush=True)
     return 0 if summary["ok"] else 1
