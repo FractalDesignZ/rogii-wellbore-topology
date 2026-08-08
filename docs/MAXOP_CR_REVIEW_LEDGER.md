@@ -76,6 +76,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 7 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + denser/beam-led REJECT; 64w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | FALLBACK 64w pure 12.40 | false | denser129 pure lat **10.801 REJECT**; v8 conf_gate **10.710 REJECT**; keep v6 **10.705**; CR header/loader/params; plateau no-inc (CR fixed) |
 | 8 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + emit_gate REJECT; all_stack REGRESS | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | all_stack 15.20 ACCEPT; promotion rejected | false | emit_gate **10.738 REJECT** vs conf_gate **10.706**; keep deploy 10.705; CR B007+min_stations; plateau no-inc (CR) |
 | 9 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + private beam residual feats; 16w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 | false | beam residual X wired; 8w ACCEPT 10.58 cohort; 16w res 12.02 loses stack; CR emit_conf+Gate3 wording; plateau no-inc (CR) |
+| 10 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private output guard + cert kernel | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 hold | false | strip prior_beam from stations.csv; export strip; cert kernel_*; nan delta tests; plateau no-inc (CR) |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -101,8 +102,8 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 ### Stop criteria check
 
 - beats_5ft: **false** (selected OOF still ~14.67; 16w private pure stack 11.95; pilot conf_gate ~10.705)
-- Plateau B: cycle-9 |Δsel|=0, deploy conf_gate hold ~10.705, **CR fixed this cycle** → plateau counter does not increment; **continue**
-- Cycle-8 CR: Gate3 vs promote wording + unused emit_conf + is_private truthy docs — **fixed cycle-9**
+- Plateau B: cycle-10 |Δsel|=0, deploy conf_gate hold ~10.705, **CR fixed this cycle** → plateau counter does not increment; **continue**
+- Cycle-9 CR: private fallback docs, stations.csv beam strip, cert kernel provenance, nan delta tests — **fixed cycle-10**
 
 ### Cycle-4 detail (re-arm lattice denser stalk)
 
@@ -217,4 +218,15 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
   - 16w private (`artifacts/max_prec_16_beam_feat`): residual OOF **12.018** loses best floor prior_stack **11.949** → Gate3 **FALLBACK_PURE_PRIOR**; selected **11.949**; beam pure floor ~12.86–12.97 (worse than stack).
 - Deploy pilot conf_gate hold **10.705**; 773w seal **14.67** unchanged (no ≥0.3 promote).
 - **Next lever:** conf_gate export as residual feature/floor; adaptive residual mask on beam conf; or ≤64w only when residual beats pure on multi-seed. Do not force residue.
+
+### Cycle-10 detail (CR private output guard + cert provenance)
+
+- **CR (≤4 from cycle-9 review):**
+  1. README: private beam residual columns only when kernel_private resolution succeeds; fail-closed PublicKernel omits them.
+  2. **Major:** do not publish private stalks via --out/stations.csv — write stripped stations.csv + optional local-only stations_private_full.csv; export bundle also strips prior_beam*.
+  3. measure_vs_5ft.json cert includes kernel_id, kernel_private, kernel_note, RWT_KERNEL.
+  4. Unit test non-finite operands → NaN deltas in ttach_private_residual_deltas.
+- **MEASURE hold:** 16w private residual still FALLBACK pure stack **11.95** (res ~12.02); 8w smoke ACCEPT not promoted; pilot conf_gate **10.705**; 773w seal **14.67**.
+- A/B residual base default on 16w reaffirmed FALLBACK (residue never forced).
+- **Next lever:** multi-seed ≤32–64w private only if residual beats pure; conf_gate column as residual feature/floor; adaptive mask on prior_beam_conf.
 

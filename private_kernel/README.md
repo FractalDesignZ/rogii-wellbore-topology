@@ -42,8 +42,13 @@ Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):
 Rejected on 40w: denser `n_nodes=129` (pure lat 10.801); beam-led margin0.10 (conf_gate 10.710);
 GR emission gate (emit 10.738 vs conf_gate 10.706).
 
-Public residual path (when `RWT_KERNEL=private`): `augment_station_frame` emits
-`prior_beam_tvt/conf/blend`; `rwt.features` adds deltas and residual X includes them.
+Public residual path **only after successful private resolution** (`kernel_private is
+True` / `resolve_kernel().is_private()` truthy). Then `augment_station_frame` emits
+`prior_beam_tvt/conf/blend`; `rwt.features` adds deltas and residual X includes them
+when those columns exist. If private load/contract fails, resolver **fail-closes to
+`PublicKernel`** and those columns are **omitted** (env `RWT_KERNEL=private` alone
+is not sufficient). Artifacts under `artifacts/**` are gitignored; competition export
+must strip `prior_beam_*` as well as `private_*`/`sheaf_*`.
 16w pilot: residual lost pure stack (FALLBACK); 8w smoke ACCEPT was cohort-specific.
 
 Target hunt: conf_gate ≤ 9.0 then Gate3 residual / full GKF promote if pure moves ≥0.3 ft.

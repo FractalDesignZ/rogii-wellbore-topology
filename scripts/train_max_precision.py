@@ -119,7 +119,33 @@ def main() -> int:
         f"gate2_passed={gate2.get('n_passed')} t={time.perf_counter()-t0:.1f}s",
         flush=True,
     )
-    stations.to_csv(out / "stations.csv", index=False)
+    # Guard proprietary columns on disk: residual train uses full in-memory frame.
+    # Competition export strips prior_beam_*; keep artifacts free of private stalks
+    # when writing stations.csv (artifacts/** already gitignored).
+    _PRIV_PREFIXES = ("prior_beam", "private_", "sheaf_")
+    public_cols = [
+        c
+        for c in stations.columns
+        if not any(str(c).startswith(p) for p in _PRIV_PREFIXES)
+    ]
+    stripped = [c for c in stations.columns if c not in public_cols]
+    stations[public_cols].to_csv(out / "stations.csv", index=False)
+    if stripped:
+        # optional full frame for local offline only (gitignored path)
+        stations.to_csv(out / "stations_private_full.csv", index=False)
+        (out / "stations_strip_manifest.json").write_text(
+            json.dumps(
+                {
+                    "public_csv": "stations.csv",
+                    "private_full_csv": "stations_private_full.csv",
+                    "stripped_columns": stripped,
+                    "note": "private_full is local-only; do not publish or bundle",
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     # LightGBM: deeper + more leaves for max accuracy on this CPU
     result = train_lgbm_residual(
@@ -163,6 +189,13 @@ def main() -> int:
         "delta_vs_5ft": selected - TARGET_FT,
         "n_stations": int(rep.get("n_stations") or 0),
         "n_wells": int(rep.get("n_wells") or 0),
+        "kernel_id": _k.kernel_id(),
+        "kernel_private": bool(_k.is_private()),
+        "kernel_note": getattr(_k, "_load_note", None),
+        "RWT_KERNEL": os.environ.get("RWT_KERNEL"),
+        "report_kernel_id": rep.get("kernel_id"),
+        "report_kernel_private": rep.get("kernel_private"),
+        "stations_csv_stripped_columns": stripped,
         "gate2": gate2,
         "gates": rep.get("gates"),
         "baseline_rmse": floors,

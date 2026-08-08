@@ -80,6 +80,20 @@ class TestBlueprintEngines(unittest.TestCase):
         self.assertAlmostEqual(float(out2["prior_beam_delta_last"].iloc[1]), 4.0)
         self.assertAlmostEqual(float(out2["prior_beam_delta_best"].iloc[0]), 1.0)
 
+        poison = pd.DataFrame(
+            {
+                "prior_beam_tvt": [3.0, np.nan, 7.0],
+                "prior_stack": [np.inf, 2.0, 3.0],
+                "prior_last_tvt": [0.0, 1.0, np.inf],
+                "prior_best": [2.0, np.inf, 4.0],
+            }
+        )
+        out3 = attach_private_residual_deltas(poison)
+        self.assertTrue(np.isnan(out3["prior_beam_delta_stack"].iloc[0]))
+        self.assertTrue(np.isnan(out3["prior_beam_delta_stack"].iloc[1]))
+        self.assertTrue(np.isnan(out3["prior_beam_delta_last"].iloc[2]))
+        self.assertTrue(np.isnan(out3["prior_beam_delta_best"].iloc[1]))
+
     def test_feature_matrix_rejects_form_leak(self) -> None:
         for leaked in FORM_SURFACE_LEAK_COLS:
             st = pd.DataFrame(

@@ -77,8 +77,14 @@ def main() -> int:
         fpath = Path(args.features)
         if fpath.is_file():
             df = pd.read_csv(fpath)
-            # strip anything that looks proprietary
-            drop = [c for c in df.columns if c.startswith("private_") or c.startswith("sheaf_")]
+            # strip anything that looks proprietary (incl. private beam residual cols)
+            drop = [
+                c
+                for c in df.columns
+                if c.startswith("private_")
+                or c.startswith("sheaf_")
+                or c.startswith("prior_beam")
+            ]
             df = df.drop(columns=drop, errors="ignore")
             # keep watermark if present
             pub = out / "features_public.csv"
