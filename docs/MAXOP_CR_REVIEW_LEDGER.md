@@ -72,8 +72,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 3 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: drop redundant int(len) | 14.67 | 15.11 | 10.756 | 10.788 | 0.00 selected | n/a | false | Ruff RUF046; 3× abs(Δselected)<0.05 + CR cleared → **coherence plateau STOP** |
 | 4 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | re-arm: lattice Viterbi + conf-gate; CR md pipes | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (−0.007 vs beam, −0.040 vs last); pure lattice 10.804 reject; no GKF (gap≪0.3); plateau continues |
 | 5 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: lattice mask + ledger honesty | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (Δcg ~0); pure lattice **10.903** (honest shared mask); CR cleared; no GKF; continue (CR fixed this cycle) |
-| 6 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | v4 reverse beam REJECT; soft conf_gate keep | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | reverse_pass+dense reseed → conf_gate **11.056** REJECT; soft gate restore conf_gate **10.747** (Δcg −0.002); no GKF; plateau_B count=1 |
-| 7 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | heel GR affine + adaptive gr_sigma | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.705** (Δcg −0.042 vs soft v4.1); pure lattice **10.686** (was 10.903); pure beam 10.730; no GKF (gap≪0.3); plateau_B reset |
+| 6 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | heel GR affine + soft conf_gate; reverse REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.705** (Δcg **−0.044**); reverse_pass →11.056 REJECT; pure lat 10.686; no GKF; plateau reset (Δcg≥0.02) |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -99,7 +98,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 ### Stop criteria check
 
 - beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04)
-- Plateau B: cycle-7 |Δsel|=0 but |Δcg|≈0.042 ≥ 0.02 → **plateau_B reset to 0/3**; **continue**
+- Plateau B: cycle-6 |Δsel|=0 but |Δcg|=0.044 ≥ 0.02 → **plateau_B reset to 0/3**; **continue**
 - Cleared CR on #14 (APPROVED at 83dae80): mask + ledger honesty
 
 ### Cycle-4 detail (re-arm lattice denser stalk)
@@ -143,45 +142,27 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 - No full GKF (pure/selected move ≪ 0.3 ft). **continue** (CR fixed; do not plateau-stop).
 - **Next lever:** conf_gate/beam process (reseed/band/weights) toward ≤9.0 **or** Gate3 residual with beam conf_gate prior (private measure).
 
-### Cycle-6 detail (v4 reverse REJECT + soft conf_gate)
+### Cycle-6 detail (heel GR affine KEEP + reverse REJECT)
 
-- **Lever A (rejected):** beam `reverse_pass=True`, reversion 0.04, ncc_reseed_every=120, peak-scaled inject → **40w conf_gate 11.056 / beam_blend 11.076** (beats_last false). Restored v2 beam defaults.
-- **Lever B (kept):** soft conf_gate (logistic weight + agreement fuse @ 2.0 ft) on v2 beam + v3 lattice.
-- **40w MEASURE (artifacts/private_beam_pilot_v4b):**
+- **Lever A (rejected):** beam `reverse_pass=True`, reversion 0.04, ncc_reseed_every=120 → **conf_gate 11.056 / beam 11.076**. Restored v2 stalk knobs.
+- **Lever B (kept):** heel GR affine (`fit_heel_gr_affine`) + adaptive gr_sigma on beam/lattice; soft conf_gate (logistic + agree@2ft).
+- **40w MEASURE (artifacts/private_beam_pilot_v6):**
 
-| Prior | mean RMSE (ft) | vs last_known | vs beam_blend |
-| --- | ---: | ---: | ---: |
-| last_known | 10.788 | — | — |
-| beam_blend v2 seal | **10.756** | −0.032 | — |
-| lattice_blend | 10.804 | +0.015 | +0.047 |
-| fuse | 10.796 | +0.008 | +0.040 |
-| conf_gate hard v3 | 10.749 | −0.040 | −0.007 |
-| **conf_gate soft v4.1** | **10.747** | **−0.041** | **−0.009** |
-| reverse_pass trial (rej.) | 11.056 | +0.267 | — |
-
-- Δ conf_gate vs cycle-5: **−0.002** (< 0.02 flat); Δ selected_oof: 0.00; no open CR
-- No full GKF (gap ≪ 0.3). **plateau_B = 1/3**, continue.
-- **Next lever:** Gate3 residual feature from beam conf_gate prior (private measure) **or** local DTW band stalk; avoid reverse_pass / dense reseed without per-well guard.
-
-### Cycle-7 detail (heel GR affine + adaptive gr_sigma)
-
-- **Lever:** public `fit_heel_gr_affine` on private beam + lattice typewell GR; MAD-based adaptive emission `gr_sigma` ∈ [5, 22]; soft conf_gate `lat_floor=0.18` demote; sealed v2 beam knobs (no reverse/dense reseed).
-- **40w MEASURE (artifacts/private_beam_pilot_v4):**
-
-| Prior | mean RMSE (ft) | vs last_known | vs beam_blend v2 |
+| Prior | mean RMSE (ft) | vs last_known | vs prior seal |
 | --- | ---: | ---: | ---: |
 | last_known | 10.788 | — | — |
 | beam_blend v2 seal | 10.756 | −0.032 | — |
-| **beam_blend v6 (affine)** | **10.729** | **−0.060** | **−0.027** |
-| pure beam v6 | 10.730 | −0.058 | −0.026 |
-| pure lattice v6 | **10.686** | **−0.102** | **−0.070** |
-| lattice_blend v6 | 10.760 | −0.028 | +0.004 |
-| fuse v6 | 10.769 | −0.020 | +0.013 |
-| conf_gate soft v4.1 (prior) | 10.747 | −0.041 | −0.009 |
-| **conf_gate v6 (deploy)** | **10.705** | **−0.083** | **−0.051** vs v2 blend / **−0.042** vs soft v4.1 |
-| oracle stalk (diag) | 10.594 | −0.195 | −0.135 |
+| **beam_blend v6 affine** | **10.729** | **−0.060** | −0.027 vs v2 |
+| pure beam v6 | 10.730 | −0.058 | — |
+| pure lattice v6 | **10.686** | −0.102 | beats pure beam |
+| lattice_blend v6 | 10.760 | −0.028 | — |
+| fuse v6 | 10.769 | −0.020 | — |
+| conf_gate v3 hard seal | 10.749 | −0.040 | — |
+| **conf_gate v6 (deploy)** | **10.705** | **−0.083** | **Δcg −0.044** |
+| reverse_pass trial (rej.) | 11.056 | +0.267 | — |
+| oracle stalk (diag) | 10.594 | −0.195 | label leak |
 
-- Δ conf_gate vs cycle-6 soft seal: **−0.042** (≥0.02 → plateau_B reset); Δ selected_oof: 0.00
-- Pure floor move 0.042 ≪ 0.3 → **no full 773w GKF this cycle**
-- Note: pure lattice now best raw stalk; conf_gate still preferred deploy (label-free floor protect via blends)
-- **Next lever:** Gate3 residual on conf_gate prior (private measure) **or** lattice-led conf_gate weights (pure lattice 10.686 beats conf_gate 10.705 by 0.019 — reweight) **or** local DTW
+- Δ conf_gate vs cycle-5: **−0.044** (≥0.02 → plateau reset); Δ selected_oof: 0.00; no open CR
+- No full GKF (pure move 0.027–0.044 ≪ 0.3 promote). **continue**
+- Note: pure lattice (10.686) best raw stalk; conf_gate still preferred deploy (label-free floor protect via blends).
+- **Next lever:** denser lattice on affine GR / lattice-led conf_gate weights / Gate3 residual from conf_gate prior; do not re-enable reverse_pass without per-well guard.
