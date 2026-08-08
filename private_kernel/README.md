@@ -39,7 +39,8 @@ If import fails or the contract is violated, the public path continues with `Pub
 
 Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):  
 `margin=0.08`, `lat_floor=0.18`, `agree_ft=2.0`, `soft_temp=0.05`, `pure_lat_boost=0`, `n_nodes=97`.  
-Rejected on 40w: denser `n_nodes=129` (pure lat 10.801) and beam-led margin0.10 (conf_gate 10.710).
+Rejected on 40w: denser `n_nodes=129` (pure lat 10.801); beam-led margin0.10 (conf_gate 10.710);
+GR emission gate (emit 10.738 vs conf_gate 10.706).
 
 Target hunt: conf_gate ≤ 9.0 then Gate3 residual / full GKF promote if pure moves ≥0.3 ft.
 
