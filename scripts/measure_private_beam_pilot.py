@@ -45,14 +45,14 @@ def main() -> int:
     ap.add_argument(
         "--margin",
         type=float,
-        default=-0.05,
-        help="conf_gate lattice-vs-beam margin (v13 lattice-led -0.05; v12 pure-arm 0.03)",
+        default=-0.08,
+        help="conf_gate lattice-vs-beam margin (v14 -0.08; v13 -0.05; v12 pure-arm 0.03)",
     )
     ap.add_argument(
         "--lat-floor",
         type=float,
         default=0.08,
-        help="zero lattice weight when lat_conf below this (v13 0.08; v12 0.15)",
+        help="zero lattice weight when lat_conf below this (v13/v14 0.08; v12 0.15)",
     )
     ap.add_argument(
         "--soft-temp",
@@ -462,13 +462,14 @@ def main() -> int:
         "public_all_stack_selected_reject": 15.199496423546888,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v13 conf_gate lattice-led (margin -0.05, lat_floor 0.08) pure arm; v12 pure arm m0.03; heatmap REJECT",
+        "stalk": "v14 conf_gate lattice-led margin -0.08 lat_floor 0.08 pure arm; v13 m-0.05; heatmap REJECT",
         "deploy_prior": "conf_gate",
         "prior_conf_gate_seal_v3": 10.748919252940581,
         "prior_conf_gate_seal_v6": 10.705360833184525,
         "prior_conf_gate_seal_v11": 10.69853456634771,
         "prior_conf_gate_seal_v12": 10.674338375466238,
-        "trial_v13_conf_gate_40w": float(C[deploy_col].mean()) if len(C) else None,
+        "prior_conf_gate_seal_v13": 10.608324725784495,
+        "trial_v14_conf_gate_40w": float(C[deploy_col].mean()) if len(C) else None,
         "trial_v8_conf_gate_40w": 10.709574438415903,
         "trial_v8_pure_lattice_40w": 10.800656754206665,
         "trial_v9_multi_field_lattice_40w": 10.543693969346446,
