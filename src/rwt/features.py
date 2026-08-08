@@ -363,7 +363,7 @@ def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
         _delta("prior_lattice_tvt", "prior_last_tvt", "prior_lattice_delta_last")
         # Parity with beam: lattice vs residual base (prior_best)
         _delta("prior_lattice_tvt", "prior_best", "prior_lattice_delta_best")
-    # Stalk disagreement (label-free): lattice − beam when both private arms finite
+    # Stalk disagreement (label-free): lattice - beam when both private arms finite
     if "prior_lattice_tvt" in out.columns and "prior_beam_tvt" in out.columns:
         _delta("prior_lattice_tvt", "prior_beam_tvt", "prior_lat_beam_delta")
     if extras:

@@ -445,6 +445,46 @@ class TestCrownPath(unittest.TestCase):
             else:
                 os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = prev
 
+    def test_public_gate3_dict_redacts_private_floors(self) -> None:
+        """Nested Gate3 report detail must not leak private floor names by default."""
+        import os
+
+        from rwt.train import PRIV_FLOOR_NAMES, public_gate3_dict
+
+        raw = {
+            "name": "RESIDUAL_ACCEPTANCE",
+            "passed": True,
+            "oof_rmse_residual": 10.5,
+            "oof_rmse_best_floor": 10.4,
+            "best_floor_name": "prior_lattice_tvt",
+            "floor_rmses": {
+                "prior_stack": 11.4,
+                "last_known": 12.0,
+                "prior_lattice_tvt": 10.4,
+                "prior_beam_tvt": 10.7,
+            },
+            "decision": "ACCEPT_RESIDUAL",
+        }
+        prev = os.environ.pop("RWT_INCLUDE_PRIVATE_METRICS", None)
+        try:
+            pub = public_gate3_dict(raw)
+            self.assertEqual(pub["decision"], "ACCEPT_RESIDUAL")
+            self.assertTrue(pub["passed"])
+            for n in PRIV_FLOOR_NAMES:
+                self.assertNotIn(n, pub.get("floor_rmses") or {})
+            self.assertEqual(pub["best_floor_name"], "prior_stack")
+            self.assertAlmostEqual(float(pub["oof_rmse_best_floor"]), 11.4)
+            self.assertTrue(pub.get("private_best_floor_redacted"))
+            os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = "1"
+            auth = public_gate3_dict(raw)
+            self.assertEqual(auth["best_floor_name"], "prior_lattice_tvt")
+            self.assertIn("prior_lattice_tvt", auth["floor_rmses"])
+        finally:
+            if prev is None:
+                os.environ.pop("RWT_INCLUDE_PRIVATE_METRICS", None)
+            else:
+                os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = prev
+
     def test_dual_partner_equals_prior_col_raises(self) -> None:
         """Explicit dual_partner == prior_col is a hard config error (CR)."""
         from rwt.train import train_lgbm_residual

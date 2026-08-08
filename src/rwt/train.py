@@ -59,6 +59,11 @@ PRIV_FLOOR_NAMES: frozenset[str] = frozenset(
 )
 
 
+def _include_private_metrics() -> bool:
+    flag = os.environ.get("RWT_INCLUDE_PRIVATE_METRICS", "").strip().lower()
+    return flag in ("1", "true", "yes", "on")
+
+
 def public_baseline_rmse(baseline_rmse: dict[str, float]) -> dict[str, float]:
     """
     Drop private-kernel floor metrics from serialized reports by default.
@@ -68,10 +73,42 @@ def public_baseline_rmse(baseline_rmse: dict[str, float]) -> dict[str, float]:
     """
     if not baseline_rmse:
         return {}
-    flag = os.environ.get("RWT_INCLUDE_PRIVATE_METRICS", "").strip().lower()
-    if flag in ("1", "true", "yes", "on"):
+    if _include_private_metrics():
         return dict(baseline_rmse)
     return {k: float(v) for k, v in baseline_rmse.items() if k not in PRIV_FLOOR_NAMES}
+
+
+def public_gate3_dict(gate3_detail: dict[str, Any]) -> dict[str, Any]:
+    """
+    Redact private pure-floor names/values from Gate3 report serialization.
+
+    In-process Gate3 already decided with full floors. Public JSON keeps decision
+    fields but filters floor_rmses / best_floor_* unless authorized.
+    Accepts either GateResult.to_dict() output or a raw detail mapping.
+    """
+    d = dict(gate3_detail)
+    if _include_private_metrics():
+        return d
+    floors = d.get("floor_rmses")
+    if isinstance(floors, dict):
+        pub = {
+            str(k): float(v)
+            for k, v in floors.items()
+            if str(k) not in PRIV_FLOOR_NAMES and np.isfinite(float(v))
+        }
+        d["floor_rmses"] = pub
+        priv_best = str(d.get("best_floor_name") or "") in PRIV_FLOOR_NAMES
+        if pub:
+            best_name = min(pub, key=pub.get)
+            d["best_floor_name"] = best_name
+            d["oof_rmse_best_floor"] = float(pub[best_name])
+            if priv_best:
+                d["private_best_floor_redacted"] = True
+        elif priv_best:
+            d["best_floor_name"] = "private_redacted"
+            d["private_best_floor_redacted"] = True
+            # keep numeric oof_rmse_best_floor if present (no name leak)
+    return d
 
 
 def public_station_columns(stations: pd.DataFrame) -> list[str]:
@@ -712,7 +749,8 @@ def train_lgbm_residual(
                 "evaluated": False,
                 "note": "not evaluated (caller assembled stations externally)",
             },
-            gate3.to_dict(),
+            # Redact private floor maps from serialized Gate3 (decision already made).
+            public_gate3_dict(gate3.to_dict()),
             gate3_pw.to_dict(),
         ],
         "adaptive_oof_rmse": gate3_pw.detail.get("adaptive_oof_rmse"),

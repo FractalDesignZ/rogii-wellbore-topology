@@ -44,13 +44,21 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | pure multi-field lattice v9 | **10.544** | 10.788 | yes (−0.244) — floor; not sole deploy |
 | **v11 conf_gate** (pure-lat boost on multi-field) | **10.699** | 10.788 | **yes (−0.090)** deploy micro |
 | heatmap blend v10 | 15.98 | 10.788 | no (reject) |
-| dual residual 8w 3f (best+lattice) c15 | **10.476** | — | ACCEPT micro (not promote) |
-| dual + lattice Δbest/lat−beam X c17 | **10.465** | — | ACCEPT micro (−0.011); residual X KEEP |
 
 Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.
-**Fold note:** 8-well dual needs `n_splits≤3` (5-fold → 1-well val folds early-stop@1).
 Oracle per-well stalk min (~10.46) is diagnostic only — not a deploy prior.
 Reverse_pass / dense NCC reseed / heatmap field index rejected.
+
+### Dual residual smoke (local only, 8w, 3-fold)
+
+Not comparable to the 40w pure-prior pilot table above (different cohort + residual head).
+
+| Version | OOF selected (ft) | best pure floor | Gate3 |
+| --- | ---: | ---: | --- |
+| dual residual best+lattice c15 | **10.476** | stack 11.393 | ACCEPT micro (not promote) |
+| dual + lattice delta_best / lat-beam X c17 | **10.465** | stack 11.393 | ACCEPT micro (−0.011); residual X KEEP |
+
+**Fold note:** 8-well dual needs `n_splits≤3` (5-fold → 1-well val folds early-stop@1).
 
 ## Measure (12w crown set-19 — all-suggestions reassemble)
 

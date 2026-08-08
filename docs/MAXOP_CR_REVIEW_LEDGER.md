@@ -84,6 +84,14 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 15 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | dual residual best+lattice KEEP micro | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual ACCEPT 10.476 | false | dual --prior-col prior_best --dual-partner prior_lattice_tvt OOF **10.476** (vs single 10.502, Δ−0.026); conf_gate 10.699; not promote 8w; plateau no-inc if CR quiet |
 | 16 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR dual partner + private floor redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.476 (no retrain) | false | reject dual_partner==prior_col; lattice weight tests; public_baseline_rmse redacts beam/lattice floors (RWT_INCLUDE_PRIVATE_METRICS opt-in); 88 tests OK; plateau no-inc (CR) |
 | 17 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | lattice residual X parity + dual re-MEASURE | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual 3f **ACCEPT 10.465** | false | `prior_lattice_delta_best` + `prior_lat_beam_delta`; dual OOF **10.465** (Δ **−0.011** vs c15 10.476); conf_gate hold; not promote (≪0.3); 5f on 8w early-stops@1 footgun; plateau_B=1 |
+| 18 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR Gate3 floor redact + docs/RUF003 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 (no retrain) | false | public_gate3_dict redacts floor_rmses/best_floor_*; ASCII minus in features comment; 8w dual table split from 40w pilot; tests; plateau no-inc (CR) |
+
+### Cycle-18 detail (CR on cycle-17)
+
+- **Major:** nested Gate3 report detail redacts private floors (`public_gate3_dict`) unless `RWT_INCLUDE_PRIVATE_METRICS=1`; in-process Gate3 still uses full floors.
+- **Minor:** RUF003 Unicode minus → ASCII `-` in `features.py` stalk-disagreement comment.
+- **Minor:** CROWN_PATH 8w dual residual rows moved out of 40w pure-prior pilot table.
+- Selected OOF / conf_gate seals unchanged (CR-only cycle).
 
 ### Cycle-17 detail (lattice residual feature parity)
 
