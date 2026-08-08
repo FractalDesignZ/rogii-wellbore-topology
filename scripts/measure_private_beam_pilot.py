@@ -230,6 +230,13 @@ def main() -> int:
         r_heat_blend = (
             rmse(y[m_heat], heat_blend[m_heat]) if len(m_heat) >= 20 else float("nan")
         )
+        # Paired heatmap-support RMSEs (same stations as r_heat / r_heat_blend)
+        r_last_heat = (
+            rmse(y[m_heat], last[m_heat]) if len(m_heat) >= 20 else float("nan")
+        )
+        r_gated_heat = (
+            rmse(y[m_heat], gated[m_heat]) if len(m_heat) >= 20 else float("nan")
+        )
         r_fuse = rmse(y[m], fused[m])
         r_gated = rmse(y[m], gated[m])
         r_emit = rmse(y[m], emit[m])
@@ -254,12 +261,15 @@ def main() -> int:
             {
                 "well_id": wid,
                 "n_pred": len(m),
+                "n_pred_heat": int(len(m_heat)),
                 "rmse_beam": r_beam,
                 "rmse_beam_blend": r_blend,
                 "rmse_lattice": r_lat,
                 "rmse_lattice_blend": r_lat_blend,
                 "rmse_heatmap": r_heat,
                 "rmse_heatmap_blend": r_heat_blend,
+                "rmse_last_known_heat": r_last_heat,
+                "rmse_conf_gate_heat": r_gated_heat,
                 "rmse_fuse_blend": r_fuse,
                 "rmse_conf_gate": r_gated,
                 "rmse_emit_gate": r_emit,
@@ -274,7 +284,12 @@ def main() -> int:
                 "frac_conf_ge_0_5": float(np.mean(conf_m >= 0.5)),
                 "beats_last_known": bool(r_blend < r_last),
                 "beats_last_known_lat": bool(r_lat_blend < r_last),
-                "beats_last_known_heat": bool(r_heat_blend < r_last),
+                # heatmap beats-last uses paired heat-support last_known
+                "beats_last_known_heat": bool(
+                    np.isfinite(r_heat_blend)
+                    and np.isfinite(r_last_heat)
+                    and r_heat_blend < r_last_heat
+                ),
                 "beats_last_known_fuse": bool(r_fuse < r_last),
                 "beats_last_known_gate": bool(r_gated < r_last),
                 "beats_last_known_emit": bool(r_emit < r_last),
@@ -358,8 +373,11 @@ def main() -> int:
             else False
         ),
         "beats_last_known_heat_mean": (
-            float(H["rmse_heatmap_blend"].mean()) < float(H["rmse_last_known"].mean())
+            float(H["rmse_heatmap_blend"].mean())
+            < float(H["rmse_last_known_heat"].mean())
             if len(H)
+            and "rmse_heatmap_blend" in H
+            and "rmse_last_known_heat" in H
             else False
         ),
         "beats_last_known_fuse_mean": (
@@ -396,15 +414,20 @@ def main() -> int:
         "delta_lattice_blend_vs_last_known": (
             float(C["rmse_lattice_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
         ),
+        # Heatmap deltas: all terms on heatmap station-support cohort (paired)
         "delta_heatmap_vs_last_known": (
-            float(H["rmse_heatmap"].mean() - H["rmse_last_known"].mean()) if len(H) else None
+            float(H["rmse_heatmap"].mean() - H["rmse_last_known_heat"].mean())
+            if len(H) and "rmse_last_known_heat" in H
+            else None
         ),
         "delta_heatmap_blend_vs_last_known": (
-            float(H["rmse_heatmap_blend"].mean() - H["rmse_last_known"].mean()) if len(H) else None
+            float(H["rmse_heatmap_blend"].mean() - H["rmse_last_known_heat"].mean())
+            if len(H) and "rmse_last_known_heat" in H
+            else None
         ),
         "delta_heatmap_vs_conf_gate": (
-            float(H["rmse_heatmap"].mean() - H[deploy_col].mean())
-            if len(H)
+            float(H["rmse_heatmap"].mean() - H["rmse_conf_gate_heat"].mean())
+            if len(H) and "rmse_conf_gate_heat" in H
             else None
         ),
         "delta_fuse_vs_last_known": (
