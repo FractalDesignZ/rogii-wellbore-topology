@@ -31,6 +31,8 @@ DUAL_RESIDUAL_ENSEMBLE = False
 DUAL_RESIDUAL_WEIGHT_BY_BASE: dict[str, float] = {
     "prior_best": 0.75,
     "prior_stack": 0.25,
+    "prior_lattice_tvt": 0.25,
+    "prior_lattice_blend": 0.25,
 }
 # Crown residual LGBM: deep profile is the measure-tuned default (set-16/17).
 CROWN_DEEP_RESIDUAL = True
@@ -238,6 +240,7 @@ def train_lgbm_residual(
     prior_col: str | None = None,
     gate2_meta: dict[str, Any] | None = None,
     max_precision: bool = False,
+    dual_partner: str | None = None,
 ) -> dict[str, Any]:
     """
     Residual learner on labeled *toe* (is_predict).
@@ -247,6 +250,9 @@ def train_lgbm_residual(
 
     max_precision=True: deeper trees, more rounds, more leaves — for 24c/32GB kits
     hunting sub-5ft RMSE (still Gate3 gated).
+
+    dual_partner: optional second residual base (e.g. prior_lattice_tvt) for
+    weighted dual-head ensemble; also enabled by DUAL_RESIDUAL_ENSEMBLE (best↔stack).
     """
     if "is_predict" in stations.columns:
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
@@ -258,13 +264,18 @@ def train_lgbm_residual(
         prior_col = resolve_prior_column(train_df, prior_col, strict=True)
     from rwt.features import compute_feature_medians, impute_feature_frame
 
-    # Residual bases: primary + optional dual ensemble partner (best+stack)
+    # Residual bases: primary + optional dual ensemble partner
     residual_bases: list[str] = [prior_col]
-    if DUAL_RESIDUAL_ENSEMBLE:
-        for partner in ("prior_best", "prior_stack"):
-            if partner != prior_col and partner in train_df.columns:
-                residual_bases.append(partner)
-                break  # one partner only: best↔stack pair
+    partner = dual_partner
+    if partner is None and DUAL_RESIDUAL_ENSEMBLE:
+        for cand in ("prior_best", "prior_stack"):
+            if cand != prior_col and cand in train_df.columns:
+                partner = cand
+                break
+    if partner and partner != prior_col:
+        if partner not in train_df.columns:
+            raise ValueError(f"dual residual partner column missing: {partner}")
+        residual_bases.append(partner)
     residual_bases = list(dict.fromkeys(residual_bases))
 
     # require finite TVT and *all* residual bases (PF may NaN without typewell)

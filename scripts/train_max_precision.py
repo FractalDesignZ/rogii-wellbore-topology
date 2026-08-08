@@ -75,6 +75,11 @@ def main() -> int:
         action="store_true",
         help="opt-in: also write stations_private_full.csv (local-only; never publish)",
     )
+    ap.add_argument(
+        "--dual-partner",
+        default=None,
+        help="optional dual residual base column (e.g. prior_lattice_tvt) for ensemble",
+    )
     a = ap.parse_args()
     if a.kernel:
         os.environ["RWT_KERNEL"] = a.kernel
@@ -140,6 +145,7 @@ def main() -> int:
         prior_col=a.prior_col,
         gate2_meta=gate2,
         max_precision=not a.no_max_precision,
+        dual_partner=a.dual_partner,
     )
     rep = result["report"]
     selected = float(rep.get("oof_rmse_selected") or rep.get("oof_rmse") or 1e9)
