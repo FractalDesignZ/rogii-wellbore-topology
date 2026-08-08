@@ -82,6 +82,14 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 13 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private export + 16w lattice residual FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 | false | conf_gate **10.699** hold; write_private_full default off; pred schema guard; 16w res 12.97 loses stack; 8w smoke not promoted; plateau no-inc (CR) |
 | 14 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR casefold export + lattice residual base REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w lattice-base ACCEPT 10.88 worse | false | casefold priv strip; lattice_tvt base 10.88 / blend 10.87 ACCEPT but lose to prior_best-base 10.50; keep features not base; conf_gate 10.699; plateau no-inc (CR) |
 | 15 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | dual residual best+lattice KEEP micro | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual ACCEPT 10.476 | false | dual --prior-col prior_best --dual-partner prior_lattice_tvt OOF **10.476** (vs single 10.502, Δ−0.026); conf_gate 10.699; not promote 8w; plateau no-inc if CR quiet |
+| 16 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR dual partner + private floor redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.476 (no retrain) | false | reject dual_partner==prior_col; lattice weight tests; public_baseline_rmse redacts beam/lattice floors (RWT_INCLUDE_PRIVATE_METRICS opt-in); 88 tests OK; plateau no-inc (CR) |
+
+### Cycle-16 detail (CR on cycle-15 dual residual)
+
+- **Major:** `baseline_rmse` / `beats_baselines` no longer serialize private floors (`prior_beam_*`, `prior_lattice_*`) by default; Gate3 still scores full in-process floors. Opt-in: `RWT_INCLUDE_PRIVATE_METRICS=1`.
+- **Minor:** explicit `dual_partner == prior_col` → `ValueError` (no silent single-head).
+- **Trivial:** order-independent weight assertions for `prior_lattice_tvt` / `prior_lattice_blend`.
+- Selected OOF / conf_gate seals unchanged (no GKF this cycle).
 
 ### Cycle-1 detail (private pilot, 40 wells)
 

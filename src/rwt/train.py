@@ -48,6 +48,30 @@ PRIV_STATION_PREFIXES: tuple[str, ...] = (
     "private_",
     "sheaf_",
 )
+# Private pure-floor names (Gate3 still scores them; report JSON redacts by default)
+PRIV_FLOOR_NAMES: frozenset[str] = frozenset(
+    {
+        "prior_beam_blend",
+        "prior_beam_tvt",
+        "prior_lattice_blend",
+        "prior_lattice_tvt",
+    }
+)
+
+
+def public_baseline_rmse(baseline_rmse: dict[str, float]) -> dict[str, float]:
+    """
+    Drop private-kernel floor metrics from serialized reports by default.
+
+    Gate3 still evaluates private floors in-process. Set
+    RWT_INCLUDE_PRIVATE_METRICS=1 to keep them in baseline_rmse / beats maps.
+    """
+    if not baseline_rmse:
+        return {}
+    flag = os.environ.get("RWT_INCLUDE_PRIVATE_METRICS", "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return dict(baseline_rmse)
+    return {k: float(v) for k, v in baseline_rmse.items() if k not in PRIV_FLOOR_NAMES}
 
 
 def public_station_columns(stations: pd.DataFrame) -> list[str]:
@@ -267,15 +291,21 @@ def train_lgbm_residual(
     # Residual bases: primary + optional dual ensemble partner
     residual_bases: list[str] = [prior_col]
     partner = dual_partner
+    # Explicit dual_partner == prior_col is a config error (silent single-head is wrong).
+    if partner is not None and partner == prior_col:
+        raise ValueError(
+            f"dual_partner={partner!r} equals prior_col; refuse duplicate residual base"
+        )
     if partner is None and DUAL_RESIDUAL_ENSEMBLE:
         for cand in ("prior_best", "prior_stack"):
             if cand != prior_col and cand in train_df.columns:
                 partner = cand
                 break
-    if partner and partner != prior_col:
+    if partner is not None:
         if partner not in train_df.columns:
             raise ValueError(f"dual residual partner column missing: {partner}")
-        residual_bases.append(partner)
+        if partner != prior_col:
+            residual_bases.append(partner)
     residual_bases = list(dict.fromkeys(residual_bases))
 
     # require finite TVT and *all* residual bases (PF may NaN without typewell)
@@ -662,8 +692,10 @@ def train_lgbm_residual(
         "residual_max_dev": float(residual_max_dev),
         "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
         "feature_medians": {k: float(v) for k, v in feature_medians.items()},
-        "baseline_rmse": baseline_rmse,
-        "beats_baselines": beats,
+        # Public report: redact private-kernel floor metrics unless authorized.
+        # Gate3 already used the full in-process floor_rmses map above.
+        "baseline_rmse": (pub_base := public_baseline_rmse(baseline_rmse)),
+        "beats_baselines": {n: b for n, b in beats.items() if n in pub_base},
         "kernel_id": k.kernel_id(),
         "kernel_private": k.is_private(),
         "prior_column": serve_prior_col if not use_residual else prior_col,
