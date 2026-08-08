@@ -37,12 +37,13 @@ If import fails or the contract is violated, the public path continues with `Pub
 | **conf_gate v6 (deploy)** | **10.705** | −0.083 vs last; −0.042 vs soft v4.1 |
 | pure lattice multi-field v9 | **10.544** | KEEP floor (not sole deploy) |
 | conf_gate v11 pure-lat boost (blend arm) | 10.699 | prior deploy |
-| **conf_gate v12 pure lat arm** | **10.674** | **deploy** (−0.025 vs v11; margin 0.03) |
+| conf_gate v12 pure lat arm (margin 0.03) | 10.674 | prior deploy |
+| **conf_gate v13 lattice-led** | **10.608** | **deploy** (−0.066 vs v12; margin −0.05, lat_floor 0.08) |
 | heatmap blend v10 | 15.98 | REJECT |
 | oracle stalk | ~10.59 | label leak; diag only |
 
 Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):  
-`lat_arm=pure`, `margin=0.03`, `lat_floor=0.15`, `agree_ft=2.0`, `soft_temp=0.05`,
+`lat_arm=pure`, `margin=-0.05`, `lat_floor=0.08`, `agree_ft=2.0`, `soft_temp=0.04`,
 `pure_lat_boost=0.0`, `n_nodes=97`, `multi_field=True`.  
 Rejected on 40w: denser `n_nodes=129`; reverse_pass/dense reseed; GR emission gate;
 GR heatmap field index (blend ~16 ft); pure_lat_boost alone on blend arm (max −0.01).

@@ -43,7 +43,8 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | pure lattice v6 (diag) | 10.686 | 10.788 | yes (−0.102) — not deploy alone |
 | pure multi-field lattice v9 | **10.544** | 10.788 | yes (−0.244) — floor; not sole deploy |
 | v11 conf_gate (pure-lat boost on multi-field blend arm) | 10.699 | 10.788 | yes (−0.090) prior deploy |
-| **v12 conf_gate** (pure multi-field lat arm, margin 0.03) | **10.674** | 10.788 | **yes (−0.114)** deploy KEEP |
+| v12 conf_gate (pure multi-field lat arm, margin 0.03) | 10.674 | 10.788 | yes (−0.114) prior deploy |
+| **v13 conf_gate** (lattice-led margin −0.05, lat_floor 0.08) | **10.608** | 10.788 | **yes (−0.180)** deploy KEEP |
 | heatmap blend v10 | 15.98 | 10.788 | no (reject) |
 
 Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.

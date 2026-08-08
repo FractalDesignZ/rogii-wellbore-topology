@@ -45,14 +45,26 @@ def main() -> int:
     ap.add_argument(
         "--margin",
         type=float,
-        default=0.03,
-        help="conf_gate lattice-vs-beam margin (v12 pure-arm seal 0.03; v11 was 0.06)",
+        default=-0.05,
+        help="conf_gate lattice-vs-beam margin (v13 lattice-led -0.05; v12 pure-arm 0.03)",
+    )
+    ap.add_argument(
+        "--lat-floor",
+        type=float,
+        default=0.08,
+        help="zero lattice weight when lat_conf below this (v13 0.08; v12 0.15)",
+    )
+    ap.add_argument(
+        "--soft-temp",
+        type=float,
+        default=0.04,
+        help="conf_gate soft-switch temperature",
     )
     ap.add_argument(
         "--lat-arm",
         choices=["blend", "pure"],
         default="pure",
-        help="conf_gate lattice arm: pure multi-field lattice (v12 deploy) or last-protected blend",
+        help="conf_gate lattice arm: pure multi-field lattice (v12+ deploy) or last-protected blend",
     )
     a = ap.parse_args()
 
@@ -104,8 +116,8 @@ def main() -> int:
     conf_gate_params = {
         "margin": float(a.margin),
         "agree_ft": 2.0,
-        "soft_temp": 0.05,
-        "lat_floor": 0.15,
+        "soft_temp": float(a.soft_temp),
+        "lat_floor": float(a.lat_floor),
         "pure_lat_boost": float(a.pure_lat_boost),
     }
     lattice_n_nodes = 97  # denser 129 REJECT: pure lat 10.801 vs v6 10.686
@@ -427,12 +439,13 @@ def main() -> int:
         "public_all_stack_selected_reject": 15.199496423546888,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v12 conf_gate pure multi-field lattice arm + margin 0.03; v11 pure_lat_boost blend-arm; heatmap REJECT",
+        "stalk": "v13 conf_gate lattice-led (margin -0.05, lat_floor 0.08) pure arm; v12 pure arm m0.03; heatmap REJECT",
         "deploy_prior": "conf_gate",
         "prior_conf_gate_seal_v3": 10.748919252940581,
         "prior_conf_gate_seal_v6": 10.705360833184525,
         "prior_conf_gate_seal_v11": 10.69853456634771,
-        "trial_v12_conf_gate_pure_arm_40w": float(C[deploy_col].mean()) if len(C) else None,
+        "prior_conf_gate_seal_v12": 10.674338375466238,
+        "trial_v13_conf_gate_40w": float(C[deploy_col].mean()) if len(C) else None,
         "trial_v8_conf_gate_40w": 10.709574438415903,
         "trial_v8_pure_lattice_40w": 10.800656754206665,
         "trial_v9_multi_field_lattice_40w": 10.543693969346446,

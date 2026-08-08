@@ -87,6 +87,14 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 18 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR Gate3 floor redact + docs/RUF003 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 (no retrain) | false | public_gate3_dict redacts floor_rmses/best_floor_*; ASCII minus in features comment; 8w dual table split from 40w pilot; tests; plateau no-inc (CR) |
 | 19 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate pure lat arm KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.674** (Δcg **−0.024** vs v11 10.699); lat_arm=pure margin=0.03; pure_lat_boost alone max −0.01 REJECT; pure lat floor 10.544; no GKF; plateau_B **reset** |
 | 20 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private-only Gate3 numeric redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 / conf_gate 10.674 | false | public_gate3_dict nulls oof_rmse_best_floor when only private floors remain; regression test; plateau no-inc (CR) |
+| 21 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate lattice-led KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.608** (Δcg **−0.066** vs v12 10.674); margin −0.05 lat_floor 0.08 soft_temp 0.04 pure arm; pure lat 10.544; no GKF; plateau_B **reset** |
+
+### Cycle-21 detail (conf_gate lattice-led)
+
+- **Lever:** lattice-led conf_gate — `margin=-0.05`, `lat_floor=0.08`, `soft_temp=0.04`, pure multi-field lat arm.
+- **MEASURE 40w:** conf_gate **10.608** / pure lat 10.544 / beam_blend 10.729 / last 10.788. Δ vs v12 **−0.066** (≥0.02 KEEP).
+- A/B rejected as sole deploy: margin −0.10 lat_floor 0 → ~pure (10.54); keep soft gate.
+- selected_oof 14.67 (no full GKF; pure gap ≪0.3). beats_5ft=false. dual residual 10.465 hold.
 
 ### Cycle-20 detail (CR on cycle-19 Gate3 redact edge)
 
