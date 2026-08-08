@@ -61,13 +61,14 @@ def write_stations_csv(
     stations: pd.DataFrame,
     out_dir: Path,
     *,
-    write_private_full: bool = True,
+    write_private_full: bool = False,
 ) -> dict[str, Any]:
     """
     Write stations.csv without proprietary columns.
 
     Residual train should use the full in-memory frame. Optional
-    stations_private_full.csv is local-only (artifacts/** gitignored).
+    stations_private_full.csv is opt-in only (artifacts/** gitignored) —
+    never default-on under caller-controlled --out.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -79,14 +80,15 @@ def write_stations_csv(
         "stripped_columns": stripped,
         "n_public_cols": len(public_cols),
         "n_stripped": len(stripped),
+        "write_private_full": bool(write_private_full),
         "note": "stripped columns are private stalks; do not publish or bundle",
     }
     if stripped and write_private_full:
         stations.to_csv(out_dir / "stations_private_full.csv", index=False)
         manifest["private_full_csv"] = "stations_private_full.csv"
-        (out_dir / "stations_strip_manifest.json").write_text(
-            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-        )
+    (out_dir / "stations_strip_manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
     return manifest
 
 
@@ -747,7 +749,7 @@ def main(argv: list[str] | None = None) -> int:
             workers=int(cfg["workers"]),
             progress=progress,
         )
-        write_stations_csv(stations, out, write_private_full=True)
+        write_stations_csv(stations, out, write_private_full=False)
         progress.set_phase(
             "train",
             total=args.folds,

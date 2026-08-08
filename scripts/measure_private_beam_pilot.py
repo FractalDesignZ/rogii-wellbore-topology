@@ -364,8 +364,8 @@ def main() -> int:
             float(H["rmse_heatmap_blend"].mean() - H["rmse_last_known"].mean()) if len(H) else None
         ),
         "delta_heatmap_vs_conf_gate": (
-            float(H["rmse_heatmap"].mean() - C[deploy_col].mean())
-            if len(H) and len(C)
+            float(H["rmse_heatmap"].mean() - H[deploy_col].mean())
+            if len(H)
             else None
         ),
         "delta_fuse_vs_last_known": (

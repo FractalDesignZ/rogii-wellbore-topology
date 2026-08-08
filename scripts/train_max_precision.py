@@ -70,6 +70,11 @@ def main() -> int:
         choices=["public", "private"],
         help="force RWT_KERNEL=public|private (default: leave env / public)",
     )
+    ap.add_argument(
+        "--write-private-stations",
+        action="store_true",
+        help="opt-in: also write stations_private_full.csv (local-only; never publish)",
+    )
     a = ap.parse_args()
     if a.kernel:
         os.environ["RWT_KERNEL"] = a.kernel
@@ -122,7 +127,9 @@ def main() -> int:
     # Guard proprietary columns on disk: residual train uses full in-memory frame.
     from rwt.train import write_stations_csv
 
-    strip_meta = write_stations_csv(stations, out, write_private_full=True)
+    strip_meta = write_stations_csv(
+        stations, out, write_private_full=bool(a.write_private_stations)
+    )
     stripped = list(strip_meta.get("stripped_columns") or [])
 
     # LightGBM: deeper + more leaves for max accuracy on this CPU
