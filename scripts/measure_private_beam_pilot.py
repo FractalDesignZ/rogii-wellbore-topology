@@ -120,8 +120,8 @@ def main() -> int:
     summary = {
         "ok": len(C) > 0,
         "kernel_id": k.kernel_id(),
-        "n_wells": int(len(C)),
-        "n_wells_scored_raw": int(len(R)),
+        "n_wells": len(C),
+        "n_wells_scored_raw": len(R),
         "comparable_cohort": "finite y + blend + last + beam on predict mask",
         "mean_rmse_beam": float(C["rmse_beam"].mean()) if len(C) else None,
         "mean_rmse_beam_blend": float(C["rmse_beam_blend"].mean()) if len(C) else None,
