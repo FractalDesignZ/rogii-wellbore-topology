@@ -76,8 +76,9 @@ def main() -> int:
             continue
         tw_path = typewell_path_for_well(root, wid, "train")
         tw = load_typewell(tw_path) if tw_path else None
-        beam = beam_prior_for_well(df, tw, sp, beam_width=48)
-        lat = lattice_prior_for_well(df, tw, sp, n_nodes=97)
+        # v6: sealed v2 stalk knobs + heel GR affine / adaptive sigma (default True)
+        beam = beam_prior_for_well(df, tw, sp, beam_width=48, heel_affine=True)
+        lat = lattice_prior_for_well(df, tw, sp, n_nodes=97, heel_affine=True)
         pred = np.asarray(sp.predict_idx, dtype=int)
         y = df["TVT"].to_numpy(float) if "TVT" in df.columns else np.full(len(df), np.nan)
         # last known series
@@ -269,8 +270,9 @@ def main() -> int:
         "public_full_cohort_selected": 14.67,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v3 lattice Viterbi + conf-gate vs beam (label-free); freeze clamp_origin",
+        "stalk": "v6 heel GR affine + adaptive gr_sigma; sealed v2 beam knobs; soft conf-gate",
         "deploy_prior": "conf_gate",
+        "prior_conf_gate_seal_v3": 10.748919252940581,
         "note": "Per-well predict-zone RMSE of private priors (not full GroupKFold residual stack)",
         "law": "private offline scaffold; export predictions only; Gate3 still owns residual accept",
     }

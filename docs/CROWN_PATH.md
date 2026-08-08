@@ -32,11 +32,15 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | --- | ---: | ---: | --- |
 | v1 (sliding clamp) | 11.924 | 10.788 | no |
 | v2 (freeze origin + GR-rel conf + NCC reseed) | 10.756 | 10.788 | yes (−0.032) |
-| lattice_blend pure | 10.804 | 10.788 | no (reject) |
-| **v3 conf_gate** (beam default; lattice if conf+margin) | **10.749** | 10.788 | **yes** (−0.040 vs last; −0.007 vs beam) |
+| lattice_blend (pre-affine) | 10.804 | 10.788 | no (reject) |
+| v3 conf_gate | 10.749 | 10.788 | yes (−0.040 vs last) |
+| v4.1 soft conf_gate | 10.747 | 10.788 | yes (−0.041) |
+| **v6 conf_gate** (heel affine + adaptive σ) | **10.705** | 10.788 | **yes (−0.083 vs last; −0.051 vs v2 blend)** |
+| pure lattice v6 (diag) | 10.686 | 10.788 | yes (−0.102) — not deploy alone |
 
 Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.
-Oracle per-well stalk min (~10.61) is diagnostic only — not a deploy prior.
+Oracle per-well stalk min (~10.59) is diagnostic only — not a deploy prior.
+Reverse_pass / dense NCC reseed rejected (regressed to ~11.06).
 
 ## Measure (12w crown set-19 — all-suggestions reassemble)
 
