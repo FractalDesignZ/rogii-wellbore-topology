@@ -6,13 +6,23 @@ This directory is **gitignored** in the public tree. Keep a local (or private-re
 
 ```text
 private_kernel/
-  __init__.py          # exposes KernelImpl
+  __init__.py          # MUST expose get_kernel() → kernel with is_private()==True
   kernel_impl.py       # PrivateKernel: beam + sheaf station columns
   beam_match.py        # beam stalk v2 knobs + v6 heel GR affine / adaptive sigma
-  lattice_match.py     # band-lattice Viterbi + soft conf-gate (v6 lat_floor)
+  lattice_match.py     # band-lattice Viterbi + conf_gate (measure pins sealed knobs)
   sheaf_features.py    # path Laplacian / energy features
   residual_map.py      # optional proprietary residual transforms
 ```
+
+### Loader contract (`src/rwt/kernel_api.resolve_kernel`)
+
+When `RWT_KERNEL=private`, the public resolver does:
+
+1. `import private_kernel`
+2. `k = private_kernel.get_kernel()`  — **required entry point** (not just KernelImpl class)
+3. require `k.is_private() is True` — else RuntimeError / fail-closed to `PublicKernel`
+
+If import fails or the contract is violated, the public path continues with `PublicKernel` (fail-closed). Implement `get_kernel()` in `__init__.py`.
 
 ## Pilot seals (40w comparable cohort)
 
@@ -27,16 +37,21 @@ private_kernel/
 | **conf_gate v6 (deploy)** | **10.705** | −0.083 vs last; −0.042 vs soft v4.1 |
 | oracle stalk | ~10.59 | label leak; diag only |
 
+Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):  
+`margin=0.08`, `lat_floor=0.18`, `agree_ft=2.0`, `soft_temp=0.05`, `pure_lat_boost=0`, `n_nodes=97`.  
+Rejected on 40w: denser `n_nodes=129` (pure lat 10.801) and beam-led margin0.10 (conf_gate 10.710).
+
 Target hunt: conf_gate ≤ 9.0 then Gate3 residual / full GKF promote if pure moves ≥0.3 ft.
 
 ## Contract
 
 Implement `rwt.kernel_api.GeometryKernel` (see `src/rwt/kernel_api.py`):
 
+- `get_kernel() -> GeometryKernel`  # package entry; resolver calls this
 - `trajectory_features(md, x, y, z) -> dict`
 - `station_features(lateral_df, typewell_df, split) -> pd.DataFrame`  # optional columns
 - `kernel_id() -> str`
-- `is_private() -> True`
+- `is_private() -> True`  # must be True or resolver fails closed
 
 Load with:
 

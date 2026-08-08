@@ -73,6 +73,7 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 4 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | re-arm: lattice Viterbi + conf-gate; CR md pipes | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (−0.007 vs beam, −0.040 vs last); pure lattice 10.804 reject; no GKF (gap≪0.3); plateau continues |
 | 5 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: lattice mask + ledger honesty | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (Δcg ~0); pure lattice **10.903** (honest shared mask); CR cleared; no GKF; continue (CR fixed this cycle) |
 | 6 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | heel GR affine + soft conf_gate; reverse REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.705** (Δcg **−0.044**); reverse_pass →11.056 REJECT; pure lat 10.686; no GKF; plateau reset (Δcg≥0.02) |
+| 7 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + denser/beam-led REJECT; 64w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | FALLBACK 64w pure 12.40 | false | denser129 pure lat **10.801 REJECT**; v8 conf_gate **10.710 REJECT**; keep v6 **10.705**; CR header/loader/params; plateau no-inc (CR fixed) |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -97,9 +98,9 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 
 ### Stop criteria check
 
-- beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04)
-- Plateau B: cycle-6 |Δsel|=0 but |Δcg|=0.044 ≥ 0.02 → **plateau_B reset to 0/3**; **continue**
-- Cleared CR on #14 (APPROVED at 83dae80): mask + ledger honesty
+- beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04; 64w public pure 12.40)
+- Plateau B: cycle-7 |Δsel|=0, deploy conf_gate hold 10.705, **CR fixed this cycle** → plateau counter does not increment; **continue**
+- Open CR on #14 after cycle-6 review: column rename, get_kernel loader, n_wells_eligible, explicit lat_floor — **fixed cycle-7**
 
 ### Cycle-4 detail (re-arm lattice denser stalk)
 
@@ -166,3 +167,17 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 - No full GKF (pure move 0.027–0.044 ≪ 0.3 promote). **continue**
 - Note: pure lattice (10.686) best raw stalk; conf_gate still preferred deploy (label-free floor protect via blends).
 - **Next lever:** denser lattice on affine GR / lattice-led conf_gate weights / Gate3 residual from conf_gate prior; do not re-enable reverse_pass without per-well guard.
+
+### Cycle-7 detail (CR integrity + denser/beam-led REJECT + 64w Gate3)
+
+- **CR (≤4 from cycle-6 review):**
+  1. `docs/CROWN_PATH.md`: table header `blend RMSE` → `mean RMSE (ft)`.
+  2. `private_kernel/README.md`: document `get_kernel()` + `is_private()==True` loader contract.
+  3. `measure_private_beam_pilot.py`: `n_wells_scanned` + `n_wells_eligible` (not mislabeled raw).
+  4. Explicit `conf_gate_params` / `lattice_n_nodes` in measure summary for seal reproducibility.
+- **Lever A (REJECT):** denser lattice `n_nodes=129` → pure lattice **10.801** (vs v6 **10.686**).
+- **Lever B (REJECT):** beam-led conf_gate margin0.10/lat_floor0.20 → conf_gate **10.710** (vs seal **10.705**). Artifacts: `private_beam_pilot_v8_40w`.
+- **Deploy hold:** conf_gate **10.705** / beam_blend **10.729** / last_known 10.788 (v6 seal).
+- **Public 64w GroupKFold** (`artifacts/max_prec_64_now`): residual OOF **12.547** vs best floor prior_stack **12.398** → Gate3 **FALLBACK_PURE_PRIOR**; selected **12.398**; beats_5ft false. Honest residual reject.
+- Δ selected_oof (773w seal): 0.00; Δ deploy conf_gate: 0.00; no 773w promote (gap ≪ 0.3). Concurrent full-stack train may still be running offline — not promoted from this pilot gap.
+- **Next lever:** Gate3 residual features from private conf_gate prior (export columns only) / multi-scale GR NCC stalk; avoid denser lattice without per-well adaptive nodes.

@@ -28,7 +28,7 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 
 ### Private beam pilot (local only, 40w)
 
-| Version | blend RMSE | last_known | beats last_known |
+| Version | mean RMSE (ft) | last_known | beats last_known |
 | --- | ---: | ---: | --- |
 | v1 (sliding clamp) | 11.924 | 10.788 | no |
 | v2 (freeze origin + GR-rel conf + NCC reseed) | 10.756 | 10.788 | yes (−0.032) |

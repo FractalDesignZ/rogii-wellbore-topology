@@ -70,15 +70,28 @@ def main() -> int:
 
     root = Path(a.data)
     rows = []
+    n_wells_scanned = 0  # raw train wells seen (pre comparable filter)
+    # Sealed v6 conf_gate knobs (explicit; denser-129 / beam-led-v8 REJECT on 40w)
+    conf_gate_params = {
+        "margin": 0.08,
+        "agree_ft": 2.0,
+        "soft_temp": 0.05,
+        "lat_floor": 0.18,
+        "pure_lat_boost": 0.0,
+    }
+    lattice_n_nodes = 97  # denser 129 REJECT: pure lat 10.801 vs v6 10.686
     for i, (wid, df) in enumerate(iter_well_frames(root, "train")):
+        n_wells_scanned += 1
         sp = resolve_middle_out(df, well_id=wid)
         if sp.n_predict < 10:
             continue
         tw_path = typewell_path_for_well(root, wid, "train")
         tw = load_typewell(tw_path) if tw_path else None
-        # v6: sealed v2 stalk knobs + heel GR affine / adaptive sigma (default True)
+        # v6 seal: heel GR affine + adaptive sigma; v2 beam knobs; n_nodes=97
         beam = beam_prior_for_well(df, tw, sp, beam_width=48, heel_affine=True)
-        lat = lattice_prior_for_well(df, tw, sp, n_nodes=97, heel_affine=True)
+        lat = lattice_prior_for_well(
+            df, tw, sp, n_nodes=lattice_n_nodes, heel_affine=True
+        )
         pred = np.asarray(sp.predict_idx, dtype=int)
         y = df["TVT"].to_numpy(float) if "TVT" in df.columns else np.full(len(df), np.nan)
         # last known series
@@ -101,13 +114,14 @@ def main() -> int:
             lat["prior_lattice_conf"],
             last,
         )
-        # Label-free conf gate (defaults to beam; lattice only when conf wins + margin)
+        # Label-free conf gate (sealed v6 soft params; pure_lattice off)
         gated, gated_conf = conf_gate_beam_lattice(
             blend,
             beam["prior_beam_conf"],
             lat_blend,
             lat["prior_lattice_conf"],
-            margin=0.08,
+            pure_lattice=None,
+            **conf_gate_params,
         )
         # One comparable cohort: finite truth + all stalk preds + last-known.
         # Include raw lattice prior so rmse_lattice shares the same stations as blend/gate.
@@ -191,8 +205,11 @@ def main() -> int:
         "ok": len(C) > 0,
         "kernel_id": k.kernel_id(),
         "n_wells": len(C),
-        "n_wells_scored_raw": len(R),
+        "n_wells_eligible": len(R),  # post finite-mask + min-stations (not raw scan)
+        "n_wells_scanned": int(n_wells_scanned),
         "comparable_cohort": "finite y + beam/lattice/fuse/gate + last on predict mask",
+        "conf_gate_params": conf_gate_params,
+        "lattice_n_nodes": lattice_n_nodes,
         "mean_rmse_beam": _mean("rmse_beam"),
         "mean_rmse_beam_blend": _mean("rmse_beam_blend"),
         "mean_rmse_lattice": _mean("rmse_lattice"),
@@ -270,9 +287,12 @@ def main() -> int:
         "public_full_cohort_selected": 14.67,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v6 heel GR affine + adaptive gr_sigma; sealed v2 beam knobs; soft conf-gate",
+        "stalk": "v6 seal restore: heel affine + soft conf_gate (margin0.08/lat_floor0.18); n_nodes=97; denser129+v8 beam-led REJECT",
         "deploy_prior": "conf_gate",
         "prior_conf_gate_seal_v3": 10.748919252940581,
+        "prior_conf_gate_seal_v6": 10.705360833184525,
+        "trial_v8_conf_gate_40w": 10.709574438415903,
+        "trial_v8_pure_lattice_40w": 10.800656754206665,
         "note": "Per-well predict-zone RMSE of private priors (not full GroupKFold residual stack)",
         "law": "private offline scaffold; export predictions only; Gate3 still owns residual accept",
     }
