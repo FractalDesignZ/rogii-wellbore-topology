@@ -31,9 +31,12 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 | Version | blend RMSE | last_known | beats last_known |
 | --- | ---: | ---: | --- |
 | v1 (sliding clamp) | 11.924 | 10.788 | no |
-| **v2** (freeze origin + GR-rel conf + NCC reseed) | **10.756** | 10.788 | **yes** (−0.032) |
+| v2 (freeze origin + GR-rel conf + NCC reseed) | 10.756 | 10.788 | yes (−0.032) |
+| lattice_blend pure | 10.804 | 10.788 | no (reject) |
+| **v3 conf_gate** (beam default; lattice if conf+margin) | **10.749** | 10.788 | **yes** (−0.040 vs last; −0.007 vs beam) |
 
 Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.
+Oracle per-well stalk min (~10.61) is diagnostic only — not a deploy prior.
 
 ## Measure (12w crown set-19 — all-suggestions reassemble)
 

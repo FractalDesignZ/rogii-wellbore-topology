@@ -7,8 +7,10 @@ This directory is **gitignored** in the public tree. Keep a local (or private-re
 ```text
 private_kernel/
   __init__.py          # exposes KernelImpl
-  holonomy_advanced.py # optional richer transport / invariants
-  sheaf_features.py    # optional λ₁ / coboundary style features
+  kernel_impl.py       # PrivateKernel: beam + sheaf station columns
+  beam_match.py        # beam stalk v2 (clamp_origin freeze + GR-rel conf)
+  lattice_match.py     # band-lattice Viterbi + conf-gate vs beam (v3 pilot)
+  sheaf_features.py    # path Laplacian / energy features
   residual_map.py      # optional proprietary residual transforms
 ```
 

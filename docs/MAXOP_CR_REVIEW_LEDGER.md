@@ -62,14 +62,15 @@ Public path sealed. Crown gap → private_kernel beam/DTW (gitignored), not more
 
 ## Loop (sub-5' TVT RMSE scheduled fire)
 
-Track consecutive cycles for plateau stop (`|Δ selected_oof| < 0.05` ×3) and delta vs prior.
+Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) and delta vs prior.
 
 | Cycle | Date (UTC) | Branch / PR | Lever | selected_oof_ft | best_floor_ft | beam_blend_ft | last_known_ft | Δ selected | Gate3 | beats_5ft | Note |
 |------:|------------|-------------|-------|----------------:|--------------:|--------------:|--------------:|-----------:|-------|-----------|------|
 | 0 | seal | main | baseline seals | **14.67** (773w) | **15.11** stack | 11.924 | 10.788 | — | ACCEPT residual | false | beam lost to last_known |
 | 1 | 2026-08-07 | `feat/private-beam-conf-clamp` / #14 | private beam stalk v2 | 14.67 (unchanged; no full GKF) | 15.11 (public) | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | **beam blend beats last_known** (−0.032); pure beam 10.775; clamp_origin freeze + GR-rel conf + NCC reseed offline |
 | 2 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: comparable last-known cohort | 14.67 | 15.11 | 10.756 (prior pilot) | 10.788 | 0.00 selected | n/a | false | measure script: finite last∩y∩blend∩beam mask; win-rate/delta same cohort |
-| 3 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: drop redundant int(len) | 14.67 | 15.11 | 10.756 | 10.788 | 0.00 selected | n/a | false | Ruff RUF046; 3× |Δselected|<0.05 + CR cleared → **coherence plateau STOP** |
+| 3 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: drop redundant int(len) | 14.67 | 15.11 | 10.756 | 10.788 | 0.00 selected | n/a | false | Ruff RUF046; 3× abs(Δselected)<0.05 + CR cleared → **coherence plateau STOP** |
+| 4 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | re-arm: lattice Viterbi + conf-gate; CR md pipes | 14.67 | 15.11 | **10.749** conf_gate (beam 10.756) | 10.788 | 0.00 selected | n/a pilot | false | label-free conf_gate −0.007 vs beam, −0.040 vs last; pure lattice 10.804 reject; no GKF (gap≪0.3); plateau continues → **STOP** |
 
 ### Cycle-1 detail (private pilot, 40 wells)
 
@@ -90,10 +91,28 @@ Track consecutive cycles for plateau stop (`|Δ selected_oof| < 0.05` ×3) and d
 - CodeRabbit Trivial: remove redundant `int(len(C))` / `int(len(R))` (RUF046).
 - Major from cycle-1 review already resolved in cycle-2 (line outdated).
 - Selected OOF still 14.67 (no full GKF; pilot pure gap to last_known 0.03 < 0.3 promote).
-- **STOP — coherence plateau:** three consecutive cycles with `|Δ selected_oof| < 0.05` (all 0.00) and open CR fixes cleared. Sub-5 not sealed; resume only on new lever / user re-arm.
+- **STOP — coherence plateau:** three consecutive cycles with `abs(Δ selected_oof) < 0.05` (all 0.00) and open CR fixes cleared. Sub-5 not sealed; resume only on new lever / user re-arm.
 
 ### Stop criteria check
 
 - beats_5ft: **false** (selected OOF still ~14.67 / crown ~11.04)
-- Plateau: cycles 1–2–3 all `|Δ selected_oof| = 0.00` and CR cleared → **STOP**
-- Open CR on #14: trivial int casts fixed cycle-3
+- Plateau: cycles 1–4 all `abs(Δ selected_oof) = 0.00`; CR md-pipe fixed cycle-4 → **STOP**
+- Open CR on #14: trivial int casts cycle-3; markdown table pipes cycle-4
+
+### Cycle-4 detail (re-arm lattice denser stalk)
+
+- **Lever:** private band-lattice Viterbi (`lattice_match.py`, gitignored) + label-free conf-gate vs beam blend.
+- **40w MEASURE (shared comparable cohort):**
+
+| Prior | mean RMSE (ft) | vs last_known | vs beam_blend |
+| --- | ---: | ---: | ---: |
+| last_known | 10.788 | — | — |
+| beam_blend (v2 seal) | **10.756** | −0.032 | — |
+| lattice_blend | 10.804 | +0.015 | +0.047 **reject pure** |
+| fuse conf-weight | 10.796 | +0.008 | +0.040 reject |
+| **conf_gate (deploy)** | **10.749** | **−0.040** | **−0.007** |
+| oracle stalk (diag only) | 10.608 | −0.180 | −0.149 (label leak; not deploy) |
+
+- Selected OOF unchanged 14.67 (no full GKF; pure/selected move ≪ 0.3 ft promote threshold).
+- CR: escape/remove raw `|Δselected|` pipes in loop table (cycle-3 cell broke markdown columns).
+- **STOP:** re-arm lever measured; selected_oof still flat ×4; conf_gate micro-beat not enough to promote; scheduler delete.

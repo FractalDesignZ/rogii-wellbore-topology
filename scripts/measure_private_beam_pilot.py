@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Private kernel pilot MEASURE — beam prior RMSE vs public floors (local only).
+Private kernel pilot MEASURE — beam + lattice prior RMSE vs public floors (local only).
 
   set RWT_KERNEL=private
   python scripts/measure_private_beam_pilot.py --max-wells 40
 
 Never ships private_kernel. Gate3 still owns residual accept on public path;
-this script reports beam prior OOF-style holdout by well for gap diagnosis.
+this script reports beam/lattice prior OOF-style holdout by well for gap diagnosis.
 """
 from __future__ import annotations
 
@@ -41,6 +41,12 @@ def main() -> int:
     # Fail-closed imports: public clones have no private_kernel package body
     try:
         from private_kernel.beam_match import beam_blend_last, beam_prior_for_well
+        from private_kernel.lattice_match import (
+            conf_gate_beam_lattice,
+            fuse_beam_lattice,
+            lattice_blend_last,
+            lattice_prior_for_well,
+        )
     except ImportError as e:
         summary = {
             "ok": False,
@@ -71,6 +77,7 @@ def main() -> int:
         tw_path = typewell_path_for_well(root, wid, "train")
         tw = load_typewell(tw_path) if tw_path else None
         beam = beam_prior_for_well(df, tw, sp, beam_width=48)
+        lat = lattice_prior_for_well(df, tw, sp, n_nodes=97)
         pred = np.asarray(sp.predict_idx, dtype=int)
         y = df["TVT"].to_numpy(float) if "TVT" in df.columns else np.full(len(df), np.nan)
         # last known series
@@ -83,30 +90,76 @@ def main() -> int:
                     fill = ti[j]
                 last[j] = fill
         blend = beam_blend_last(beam["prior_beam_tvt"], last, beam["prior_beam_conf"])
-        # One comparable cohort: finite truth, blend, and last-known on every scored station.
-        # Non-comparable wells are skipped so win-rate / delta denominators stay honest.
+        lat_blend = lattice_blend_last(
+            lat["prior_lattice_tvt"], last, lat["prior_lattice_conf"]
+        )
+        fused, fused_conf = fuse_beam_lattice(
+            beam["prior_beam_tvt"],
+            beam["prior_beam_conf"],
+            lat["prior_lattice_tvt"],
+            lat["prior_lattice_conf"],
+            last,
+        )
+        # Label-free conf gate (defaults to beam; lattice only when conf wins + margin)
+        gated, gated_conf = conf_gate_beam_lattice(
+            blend,
+            beam["prior_beam_conf"],
+            lat_blend,
+            lat["prior_lattice_conf"],
+            margin=0.08,
+        )
+        # One comparable cohort: finite truth + all stalk preds + last-known.
         m = pred[
             np.isfinite(y[pred])
             & np.isfinite(blend[pred])
             & np.isfinite(last[pred])
             & np.isfinite(beam["prior_beam_tvt"][pred])
+            & np.isfinite(lat_blend[pred])
+            & np.isfinite(fused[pred])
+            & np.isfinite(gated[pred])
         ]
         if len(m) < 20:
             continue
         r_beam = rmse(y[m], beam["prior_beam_tvt"][m])
         r_blend = rmse(y[m], blend[m])
+        r_lat = rmse(y[m], lat["prior_lattice_tvt"][m])
+        r_lat_blend = rmse(y[m], lat_blend[m])
+        r_fuse = rmse(y[m], fused[m])
+        r_gated = rmse(y[m], gated[m])
         r_last = rmse(y[m], last[m])
         conf_m = beam["prior_beam_conf"][m]
+        lat_conf_m = lat["prior_lattice_conf"][m]
+        # oracle well pick is diagnostic only (label leakage) — not a deploy prior
+        candidates = {
+            "beam_blend": r_blend,
+            "lattice_blend": r_lat_blend,
+            "fuse_blend": r_fuse,
+            "conf_gate": r_gated,
+        }
+        best_name = min(candidates, key=candidates.get)
+        best_r = candidates[best_name]
         rows.append(
             {
                 "well_id": wid,
                 "n_pred": len(m),
                 "rmse_beam": r_beam,
                 "rmse_beam_blend": r_blend,
+                "rmse_lattice": r_lat,
+                "rmse_lattice_blend": r_lat_blend,
+                "rmse_fuse_blend": r_fuse,
+                "rmse_conf_gate": r_gated,
                 "rmse_last_known": r_last,
+                "rmse_oracle_stalk": best_r,
+                "oracle_stalk": best_name,
                 "mean_conf": float(np.nanmean(conf_m)),
+                "mean_lat_conf": float(np.nanmean(lat_conf_m)),
+                "mean_fuse_conf": float(np.nanmean(fused_conf[m])),
+                "mean_gate_conf": float(np.nanmean(gated_conf[m])),
                 "frac_conf_ge_0_5": float(np.mean(conf_m >= 0.5)),
                 "beats_last_known": bool(r_blend < r_last),
+                "beats_last_known_lat": bool(r_lat_blend < r_last),
+                "beats_last_known_fuse": bool(r_fuse < r_last),
+                "beats_last_known_gate": bool(r_gated < r_last),
             }
         )
         if a.max_wells and len(rows) >= a.max_wells:
@@ -116,36 +169,107 @@ def main() -> int:
 
     R = pd.DataFrame(rows)
     # Rows already require finite last-known; keep a named cohort for clarity / future filters.
-    C = R.dropna(subset=["rmse_last_known", "rmse_beam_blend", "rmse_beam"]) if len(R) else R
+    need = [
+        "rmse_last_known",
+        "rmse_beam_blend",
+        "rmse_beam",
+        "rmse_lattice_blend",
+        "rmse_fuse_blend",
+        "rmse_conf_gate",
+    ]
+    C = R.dropna(subset=need) if len(R) else R
+
+    def _mean(col: str) -> float | None:
+        return float(C[col].mean()) if len(C) and col in C else None
+
+    # Deploy prior for this pilot: conf_gate (label-free). Beam remains seal baseline.
+    deploy_col = "rmse_conf_gate"
     summary = {
         "ok": len(C) > 0,
         "kernel_id": k.kernel_id(),
         "n_wells": len(C),
         "n_wells_scored_raw": len(R),
-        "comparable_cohort": "finite y + blend + last + beam on predict mask",
-        "mean_rmse_beam": float(C["rmse_beam"].mean()) if len(C) else None,
-        "mean_rmse_beam_blend": float(C["rmse_beam_blend"].mean()) if len(C) else None,
-        "mean_rmse_last_known": float(C["rmse_last_known"].mean()) if len(C) else None,
+        "comparable_cohort": "finite y + beam/lattice/fuse/gate + last on predict mask",
+        "mean_rmse_beam": _mean("rmse_beam"),
+        "mean_rmse_beam_blend": _mean("rmse_beam_blend"),
+        "mean_rmse_lattice": _mean("rmse_lattice"),
+        "mean_rmse_lattice_blend": _mean("rmse_lattice_blend"),
+        "mean_rmse_fuse_blend": _mean("rmse_fuse_blend"),
+        "mean_rmse_conf_gate": _mean("rmse_conf_gate"),
+        "mean_rmse_oracle_stalk": _mean("rmse_oracle_stalk"),
+        "mean_rmse_last_known": _mean("rmse_last_known"),
         "median_rmse_beam_blend": float(C["rmse_beam_blend"].median()) if len(C) else None,
+        "median_rmse_lattice_blend": float(C["rmse_lattice_blend"].median()) if len(C) else None,
+        "median_rmse_conf_gate": float(C["rmse_conf_gate"].median()) if len(C) else None,
         "beats_last_known_mean": (
             float(C["rmse_beam_blend"].mean()) < float(C["rmse_last_known"].mean())
             if len(C)
             else False
         ),
+        "beats_last_known_lat_mean": (
+            float(C["rmse_lattice_blend"].mean()) < float(C["rmse_last_known"].mean())
+            if len(C)
+            else False
+        ),
+        "beats_last_known_fuse_mean": (
+            float(C["rmse_fuse_blend"].mean()) < float(C["rmse_last_known"].mean())
+            if len(C)
+            else False
+        ),
+        "beats_last_known_gate_mean": (
+            float(C[deploy_col].mean()) < float(C["rmse_last_known"].mean()) if len(C) else False
+        ),
+        "beats_beam_blend_gate_mean": (
+            float(C[deploy_col].mean()) < float(C["rmse_beam_blend"].mean()) if len(C) else False
+        ),
         "frac_wells_beat_last_known": (
             float(C["beats_last_known"].mean()) if len(C) and "beats_last_known" in C else None
         ),
+        "frac_wells_beat_last_known_lat": (
+            float(C["beats_last_known_lat"].mean())
+            if len(C) and "beats_last_known_lat" in C
+            else None
+        ),
+        "frac_wells_beat_last_known_gate": (
+            float(C["beats_last_known_gate"].mean())
+            if len(C) and "beats_last_known_gate" in C
+            else None
+        ),
         "mean_conf": float(C["mean_conf"].mean()) if len(C) and "mean_conf" in C else None,
+        "mean_lat_conf": (
+            float(C["mean_lat_conf"].mean()) if len(C) and "mean_lat_conf" in C else None
+        ),
         "delta_blend_vs_last_known": (
             float(C["rmse_beam_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
         ),
+        "delta_lattice_blend_vs_last_known": (
+            float(C["rmse_lattice_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
+        ),
+        "delta_fuse_vs_last_known": (
+            float(C["rmse_fuse_blend"].mean() - C["rmse_last_known"].mean()) if len(C) else None
+        ),
+        "delta_conf_gate_vs_last_known": (
+            float(C[deploy_col].mean() - C["rmse_last_known"].mean()) if len(C) else None
+        ),
+        "delta_conf_gate_vs_beam_blend": (
+            float(C[deploy_col].mean() - C["rmse_beam_blend"].mean()) if len(C) else None
+        ),
+        "delta_lattice_vs_beam_blend": (
+            float(C["rmse_lattice_blend"].mean() - C["rmse_beam_blend"].mean()) if len(C) else None
+        ),
+        "delta_oracle_vs_beam_blend": (
+            float(C["rmse_oracle_stalk"].mean() - C["rmse_beam_blend"].mean()) if len(C) else None
+        ),
+        "oracle_note": "rmse_oracle_stalk is diagnostic only (per-well min over stalks using labels)",
         "prior_pilot_mean_blend": 11.923837695178506,
         "prior_pilot_mean_last_known": 10.788491868712727,
+        "beam_v2_mean_blend_seal": 10.75625511621551,
         "public_full_cohort_selected": 14.67,
         "crown_band": [6.0, 7.0],
         "hunt_ft": 5.0,
-        "stalk": "v2 freeze clamp_origin + GR-rel conf + NCC reseed + reversion blend",
-        "note": "Per-well predict-zone RMSE of pure beam prior (not full GroupKFold residual stack)",
+        "stalk": "v3 lattice Viterbi + conf-gate vs beam (label-free); freeze clamp_origin",
+        "deploy_prior": "conf_gate",
+        "note": "Per-well predict-zone RMSE of private priors (not full GroupKFold residual stack)",
         "law": "private offline scaffold; export predictions only; Gate3 still owns residual accept",
     }
     out = Path(a.out)
