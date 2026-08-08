@@ -165,12 +165,12 @@ GATE3 + ADAPTIVE
 | --- | --- | --- |
 | 0 | Hygiene / nulls / no tops | Wave A live |
 | 1 | Book GR@TVT | live |
-| 2 | Stalk inverse | PF/NCC live; lattice private |
+| 2 | Stalk inverse | PF/NCC live; lattice private (exp D) |
 | 3 | Pad transfer | multi-neighbor live |
 | 4 | Dip / flat | live |
 | 5 | Fuse priors | live |
-| 6 | Residual | Wave A 12w **10.741** |
-| 7 | Adaptive thr×life | live; **exp C: conf = pf × GR-agree** |
+| 6 | Residual | Wave A public **10.741**; **exp D private 10.635** |
+| 7 | Adaptive thr×life | live; exp C conf channels; not selected 12w |
 | 8 | Pad synth falsifier | live (`measure_manifold_gr_synth`) |
 | — | Real field slices | **773w** `artifacts/field_slices_full` |
 
@@ -181,7 +181,9 @@ GATE3 + ADAPTIVE
 | Seal | Result |
 | --- | ---: |
 | Wave A 12w residual OOF | **10.741** (vs set-19 11.045) |
-| Adaptive serve 12w | **False** (pf 11.10; exp C product 11.98; none ≤ residual 10.74) |
+| Exp D private lattice residual 12w | **10.635** (Gate3 ACCEPT; kernel private) |
+| Exp D pure lattice / conf-blend floors | 18.0 / 13.40 (lose stack & residual) |
+| Adaptive serve 12w | **False** (best adaptive ~11.06 still > residual) |
 | Best pure floor 12w | prior_best ~12.64 |
 | 773w residual (prior seal) | ~15.4 |
 | Crown / hunt | **6–7 / 5** |

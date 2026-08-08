@@ -718,6 +718,11 @@ FEATURE_COLS_DEFAULT = [
     "pf_confidence",
     "pf_tvt_std",
     "prior_disagreement",
+    # Exp D private lattice (only when columns present; public kernel omits)
+    "prior_lattice_tvt",
+    "prior_lattice_blend",
+    "lattice_conf",
+    "lattice_pull_weight",
     "gr_mismatch_stack",
     "gr_mismatch_last",
     "gr_mismatch_ncc",

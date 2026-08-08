@@ -31,6 +31,8 @@ NEIGHBOR_TRANSFER_OK_MIN = 0.55
 PRIOR_FALLBACKS = (
     "prior_stack",
     "prior_best",
+    "prior_lattice_blend",
+    "prior_lattice_tvt",
     "prior_last_tvt",
     "prior_ncc_tvt",
     "prior_pf_blend",
