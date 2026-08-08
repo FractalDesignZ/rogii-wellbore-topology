@@ -2,6 +2,10 @@
 
 **RESTRICT:** no Kaggle submit. Measure = GroupKFold OOF + Gate3 + seals.
 
+**Task construct (GR@TVT):** geology = typewell book \(\mathrm{GR}=G_{\mathrm{tw}}(\mathrm{TVT})\);
+laterals = paths to place on that book; residual = gated polish only. Full decompose/align:
+[`TASK_GR_TVT_CONSTRUCT.md`](TASK_GR_TVT_CONSTRUCT.md).
+
 ## Goal
 
 Push pure prior floor and residual toward best-in-class (~6–7 LB) without cloning

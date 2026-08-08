@@ -76,6 +76,7 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Multi-process assemble + live dashboard | **landed** (PR#5) |
 | Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
 | Multi-neighbor spatial + residual interactions + adaptive Gate3 | **landed** (PR#13) — synthetic seal confirmed |
+| Task construct (GR@TVT) | geology = typewell book; place laterals; gated residual — [`docs/TASK_GR_TVT_CONSTRUCT.md`](docs/TASK_GR_TVT_CONSTRUCT.md) |
 | Adaptive residual serve (name of the game) | station-conf mask · **OOF-tuned conf threshold** · `adaptive_serve` only if beats global residual |
 | Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_conf_threshold` · station/well fire counts · threshold sweep |
 | GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
