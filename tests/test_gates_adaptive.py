@@ -21,6 +21,7 @@ from rwt.gr_match import (  # noqa: E402
     combine_adaptive_confidence,
     gr_agreement_confidence,
 )
+from rwt.priors import select_residual_prior_column  # noqa: E402
 
 
 class TestAdaptiveGate(unittest.TestCase):
@@ -149,6 +150,34 @@ class TestAdaptiveGate(unittest.TestCase):
         self.assertTrue(pw.detail["adaptive_threshold_tuned"])
         self.assertLess(float(pw.detail["adaptive_oof_rmse"]), 1e-9)
         self.assertGreaterEqual(float(pw.detail["conf_threshold"]), 0.35)
+
+
+class TestResidualBaseAuto(unittest.TestCase):
+    def test_selects_lowest_pure_floor(self) -> None:
+        df = pd.DataFrame(
+            {
+                "TVT": [10.0, 12.0, 20.0, 22.0],
+                "prior_best": [11.0, 13.0, 21.0, 23.0],  # RMSE ~1
+                "prior_stack": [10.5, 12.5, 20.5, 22.5],  # RMSE ~0.5
+                "prior_pf_blend": [12.0, 14.0, 22.0, 24.0],  # RMSE ~2
+            }
+        )
+        col, floors = select_residual_prior_column(df)
+        self.assertEqual(col, "prior_stack")
+        self.assertAlmostEqual(floors["prior_stack"], 0.5, places=5)
+        self.assertLess(floors["prior_stack"], floors["prior_best"])
+
+    def test_tie_breaks_to_default_prior_best(self) -> None:
+        df = pd.DataFrame(
+            {
+                "TVT": [10.0, 12.0],
+                "prior_best": [10.0, 12.0],
+                "prior_stack": [10.0, 12.0],
+            }
+        )
+        col, floors = select_residual_prior_column(df)
+        self.assertEqual(col, "prior_best")
+        self.assertAlmostEqual(floors["prior_best"], 0.0, places=9)
 
 
 class TestGrAgreementConf(unittest.TestCase):

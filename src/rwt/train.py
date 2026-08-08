@@ -19,7 +19,12 @@ from rwt.gates import (
 )
 from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
 from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
-from rwt.priors import DEFAULT_PRIOR_COL, MAX_TVT_DEV, resolve_prior_column
+from rwt.priors import (
+    DEFAULT_PRIOR_COL,
+    MAX_TVT_DEV,
+    resolve_prior_column,
+    select_residual_prior_column,
+)
 from rwt.spatial import SpatialIndex, build_spatial_index
 
 # Residual MD smooth window (odd). 0/1 = off.
@@ -193,8 +198,9 @@ def train_lgbm_residual(
     """
     Residual learner on labeled *toe* (is_predict).
 
-    Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (prior_best).
-    Explicit prior_col is strict (must exist); omitted uses DEFAULT with fallbacks.
+    Target = TVT − prior. When ``prior_col`` is omitted, residual base is the
+    pure prior with lowest RMSE on labeled toe (auto-select) — not a fixed
+    prior_best. Explicit ``prior_col`` is strict (must exist).
 
     max_precision=True: deeper trees, more rounds, more leaves — for 24c/32GB kits
     hunting sub-5ft RMSE (still Gate3 gated).
@@ -203,8 +209,16 @@ def train_lgbm_residual(
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
     else:
         train_df = stations[stations["TVT"].notna()].copy()
+    residual_base_floors: dict[str, float] = {}
+    residual_base_auto = False
     if prior_col is None:
-        prior_col = resolve_prior_column(train_df, DEFAULT_PRIOR_COL, strict=False)
+        prior_col, residual_base_floors = select_residual_prior_column(train_df)
+        residual_base_auto = True
+        print(
+            f"[PRIOR BASE] auto={prior_col} "
+            f"pure_floors={{{', '.join(f'{k}:{v:.3f}' for k, v in sorted(residual_base_floors.items(), key=lambda kv: kv[1]))}}}",
+            flush=True,
+        )
     else:
         prior_col = resolve_prior_column(train_df, prior_col, strict=True)
     from rwt.features import compute_feature_medians, impute_feature_frame
@@ -671,6 +685,8 @@ def train_lgbm_residual(
         "kernel_private": k.is_private(),
         "prior_column": serve_prior_col if not use_residual else prior_col,
         "train_prior_column": prior_col,
+        "residual_base_auto": bool(residual_base_auto),
+        "residual_base_floors": residual_base_floors,
         "final_prior_type": final_prior_type,
         "use_residual": use_residual,
         "gates": [

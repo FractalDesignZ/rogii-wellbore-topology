@@ -182,7 +182,8 @@ GATE3 + ADAPTIVE
 | --- | ---: |
 | Wave A 12w residual OOF | **10.741** (vs set-19 11.045) |
 | Exp D private lattice residual 12w | **10.471** conf-cal (was 10.635; public Wave A 10.741) |
-| Exp D private lattice **40w** | residual loses pure **prior_stack 11.090** (best floor). Gate3 **REJECT** all residual bases → pure stack. (Bugfix: sparse-NaN floors were dropped; residual falsely OPEN vs pf_blend only.) |
+| Exp D private lattice **40w** | residual loses pure **prior_stack 11.090** (best floor). Gate3 **REJECT** → pure stack. |
+| Auto residual base | default = best pure floor; 12w → residual on stack **10.478** ACCEPT; 40w → pure stack **11.090** |
 | Exp D pure lattice / conf-blend floors | 18.0 / ~13.4 (still lose stack; 40w lattice floor 17.2) |
 | Adaptive serve 12w | **False** (best adaptive ~11.06 still > residual) |
 | Best pure floor 12w | prior_best ~12.64 |
