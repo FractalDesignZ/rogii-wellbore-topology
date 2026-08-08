@@ -44,9 +44,11 @@ Discrete **banded** Viterbi over typewell TVT states along MD:
 - **Emission:** window GR NCC vs typewell at candidate TVT
 - **Transition:** soft MD-slope penalty (public ±0.008 law) + last±18 clamp; **banded** neighbors (O(N·S·B), not full S²)
 - **Heel pin:** known TVT_input/TVT locked
-- **Injected columns:** `prior_lattice_tvt`, `lattice_conf`, optional adaptive soft pull of `prior_best` (conf-weighted ≤0.25)
+- **Injected columns:** `prior_lattice_tvt`, `lattice_conf`, `prior_lattice_blend` (conf-blend ↔ last), soft-pull of `prior_best` toward **blend** (conf-weighted ≤0.35). Never overwrites `prior_stack`.
 
-**Adaptive is the game:** pure lattice mean can lose to last_known; conf-blend and well-level adaptive pick are the MEASURE axes in `measure_private_lattice_pilot.py`. Residual training may use `--prior-col prior_lattice_tvt` only after Gate3 OOF beats public floors — never force-OPEN.
+**Adaptive is the game:** pure lattice mean can lose to last_known; conf-blend and soft-pull are the MEASURE axes. Residual may use `--prior-col prior_lattice_blend` or default `prior_best` (post-pull) only if Gate3 OOF beats public floors — never force-OPEN.
+
+**Exp D:** Gate3 floors include `prior_lattice` / `prior_lattice_blend` when private kernel is live.
 
 ## Law
 
