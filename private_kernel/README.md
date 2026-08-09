@@ -55,6 +55,8 @@ Discrete **banded** Viterbi over typewell TVT states along MD:
 
 **dA stalk (v2):** identity `TVT ≈ A−Z+c` ⇒ integrate `dA−dZ`.  
 `da_stalk.da_prior_for_well` → `prior_da_tvt`, heel/pad dA prior, **bounded** GR refine only.  
+`pad_da.PadDaIndex` — multi-well IDW of heel dA (wide radius); set via  
+`build_and_set_pad_index(train_dir)` before assemble (see `measure_da_12w.py`).  
 Soft-pull `prior_best` toward dA (preferred) or lattice blend; never overwrite `prior_stack`.  
 Gate3 floor key: `prior_da` → column `prior_da_tvt`.
 
