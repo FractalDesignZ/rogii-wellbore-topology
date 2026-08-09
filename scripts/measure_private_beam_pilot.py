@@ -491,9 +491,11 @@ def main() -> int:
         "soft_temp": float(conf_gate_params["soft_temp"]),
         "pure_lat_boost": float(conf_gate_params["pure_lat_boost"]),
         "lat_arm": str(a.lat_arm),
-        "n_wells": int(len(C)),
+        "n_wells": len(C),
         "max_wells_arg": int(a.max_wells) if a.max_wells else None,
     }
+    # Seal only when scored cohort AND requested cap both match sealed 40w knobs.
+    # (max_wells=0/None can still score 40 wells if data has ≥40 — do not seal those.)
     is_v15_seal = (
         abs(run_cfg["margin"] - sealed_v15["margin"]) < 1e-12
         and abs(run_cfg["lat_floor"] - sealed_v15["lat_floor"]) < 1e-12
@@ -501,6 +503,7 @@ def main() -> int:
         and abs(run_cfg["pure_lat_boost"] - sealed_v15["pure_lat_boost"]) < 1e-12
         and run_cfg["lat_arm"] == sealed_v15["lat_arm"]
         and run_cfg["n_wells"] == sealed_v15["n_wells"]
+        and run_cfg["max_wells_arg"] == sealed_v15["n_wells"]
     )
     cg_mean = float(C[deploy_col].mean()) if len(C) else None
     summary["run_config"] = run_cfg

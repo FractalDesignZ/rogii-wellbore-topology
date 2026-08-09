@@ -92,6 +92,14 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 23 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate margin −0.08 KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.569** (Δcg **−0.039** vs v13 10.608); pure_lat 10.544 hold; gap_cg→pure **0.026**; margin −0.08 lat_floor 0.08; plateau_B **reset** |
 | 24 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR seal-label guard + RUF046 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.569 | false | trial_v14 only if sealed knobs+40w; run_config/is_sealed_v14_config; drop int(len); plateau no-inc (CR) |
 | 25 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate margin −0.10 KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.544** (Δcg **−0.026** vs v14 10.569); ~pure_lat floor; dual w70/30 **REJECT** 10.469; seal v15; plateau_B **reset** |
+| 26 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR v15 seal max_wells_arg guard | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.544 / dual 10.465 | false | is_v15_seal requires max_wells_arg==40 (not only n_wells==40); drop int(len(C)); skip invent pure_lat 0.217 (cycle-22 honest); plateau no-inc (CR) |
+
+### Cycle-26 detail (CR v15 seal requires requested well cap)
+
+- **Major:** `is_sealed_v15_config` / `trial_v15_conf_gate_40w` only when sealed knobs match **and** `max_wells_arg == 40` (scored `n_wells==40` alone is insufficient: `--max-wells 0` could still score 40).
+- **Minor:** RUF046 — `n_wells: len(C)` (drop redundant `int(len(...))`).
+- **Skip:** CR ask to record pure-lattice movement as `0.217 ft` on Cycle-21 — not a measured pure-lat Δ on this cohort (cycle-22 already corrected; pure_lat hold **10.544**, Δpure **0.00**). Keep Δcg **−0.066** as v12→v13 conf_gate only.
+- Seals hold: selected 14.67 / conf_gate **10.544** / dual **10.465** / best floor 15.11. No re-MEASURE. beats_5ft=false.
 
 ### Cycle-25 detail (conf_gate margin −0.10 + dual weight REJECT)
 
