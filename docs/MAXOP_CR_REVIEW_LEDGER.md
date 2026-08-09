@@ -90,6 +90,13 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 21 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate lattice-led KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.608** (Δcg **−0.066** vs v12 10.674); pure_lat hold **10.544** (Δpure **0.00**); gap_cg→pure **0.064**; margin −0.05 lat_floor 0.08; plateau_B **reset** |
 | 22 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR heatmap pair mask + ledger clarity | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.608 | false | heatmap last/conf_gate RMSEs paired on m_heat; ledger pure_lat Δ 0.00 (not 0.217 invent); Δcg −0.066 keep labeled; plateau no-inc (CR) |
 | 23 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate margin −0.08 KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.569** (Δcg **−0.039** vs v13 10.608); pure_lat 10.544 hold; gap_cg→pure **0.026**; margin −0.08 lat_floor 0.08; plateau_B **reset** |
+| 24 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR seal-label guard + RUF046 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.569 | false | trial_v14 only if sealed knobs+40w; run_config/is_sealed_v14_config; drop int(len); plateau no-inc (CR) |
+
+### Cycle-24 detail (CR on cycle-23 measure metadata)
+
+- **Major:** `trial_v14_conf_gate_40w` / v14 stalk label only when sealed knobs match and n_wells==40; else `mean_rmse_conf_gate_this_run` + custom stalk; `run_config` always recorded.
+- **Minor:** RUF046 drop redundant `int(len(m_heat))`.
+- Seals hold: selected 14.67 / conf_gate 10.569 / dual 10.465.
 
 ### Cycle-23 detail (conf_gate deeper lattice-led)
 
