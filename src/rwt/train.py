@@ -450,9 +450,10 @@ def train_lgbm_residual(
         "prior_stack": "prior_stack",
         "prior_best": "prior_best",
         "prior_ncc": "prior_ncc_tvt",
-        # Exp D private lattice (present only when RWT_KERNEL=private)
+        # Private kernel floors (present only when RWT_KERNEL=private)
         "prior_lattice": "prior_lattice_tvt",
         "prior_lattice_blend": "prior_lattice_blend",
+        "prior_da": "prior_da_tvt",
     }
     baseline_rmse: dict[str, float] = {}
     for name, col in _FLOOR_COL.items():

@@ -51,8 +51,14 @@ Discrete **banded** Viterbi over typewell TVT states along MD:
 **Exp D:** Gate3 floors include `prior_lattice` / `prior_lattice_blend` when private kernel is live.
 
 **Conf calibration:** `lattice_conf` from path emission NCC (not collapsed Viterbi margins).  
-`lattice_conf_eff = conf × exp(−|lat−stack|/10)` so conf-blend / soft-pull refuse lattice when it fights public stack.  
-MEASURE 12w residual **10.471** (vs public Wave A 10.741).
+`lattice_conf_eff = conf × exp(−|lat−stack|/10)` so conf-blend / soft-pull refuse lattice when it fights public stack.
+
+**dA stalk (v2):** identity `TVT ≈ A−Z+c` ⇒ integrate `dA−dZ`.  
+`da_stalk.da_prior_for_well` → `prior_da_tvt`, heel/pad dA prior, **bounded** GR refine only.  
+`pad_da.PadDaIndex` — multi-well IDW of heel dA (wide radius); set via  
+`build_and_set_pad_index(train_dir)` before assemble (see `measure_da_12w.py`).  
+Soft-pull `prior_best` toward dA (preferred) or lattice blend; never overwrite `prior_stack`.  
+Gate3 floor key: `prior_da` → column `prior_da_tvt`.
 
 ## Law
 

@@ -31,6 +31,7 @@ NEIGHBOR_TRANSFER_OK_MIN = 0.55
 PRIOR_FALLBACKS = (
     "prior_stack",
     "prior_best",
+    "prior_da_tvt",
     "prior_lattice_blend",
     "prior_lattice_tvt",
     "prior_last_tvt",
@@ -83,6 +84,7 @@ def resolve_prior_column(
 RESIDUAL_BASE_CANDIDATES: tuple[str, ...] = (
     "prior_stack",
     "prior_best",
+    "prior_da_tvt",
     "prior_pf_blend",
     "prior_lattice_blend",
     "prior_last_tvt",
