@@ -93,6 +93,19 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 24 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR seal-label guard + RUF046 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.569 | false | trial_v14 only if sealed knobs+40w; run_config/is_sealed_v14_config; drop int(len); plateau no-inc (CR) |
 | 25 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate margin −0.10 KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.544** (Δcg **−0.026** vs v14 10.569); ~pure_lat floor; dual w70/30 **REJECT** 10.469; seal v15; plateau_B **reset** |
 | 26 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR v15 seal max_wells_arg guard | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.544 / dual 10.465 | false | is_v15_seal requires max_wells_arg==40 (not only n_wells==40); drop int(len(C)); skip invent pure_lat 0.217 (cycle-22 honest); plateau no-inc (CR) |
+| 27 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | 16w dual FALLBACK + conf_gate residual X REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w dual **FALLBACK pure 11.95**; 8w cg-X dual ACCEPT 11.07 worse | false | 16w dual res **12.611** loses stack 11.949; conf_gate residual-X **REJECT** (8w dual 11.07 vs seal dual 10.465); keep conf_gate export as floor/dual base only; pure pilot hold 10.544; plateau no-inc (lever reject) |
+
+### Cycle-27 detail (16w dual Gate3 FALLBACK + conf_gate residual-X REJECT)
+
+- **Lever A MEASURE:** 16w private dual residual (`prior_best` + `prior_lattice_tvt` 0.75/0.25) `artifacts/max_prec_16_dual_lat`.
+  - residual OOF **12.611** loses best floor prior_stack **11.949** → Gate3 **FALLBACK_PURE_PRIOR**; selected **11.949**.
+  - Same cohort pure as cycle-13 lattice-feat (honest reject; residue never forced).
+- **Lever B (synthesis then REJECT residual X):** private kernel exports `prior_conf_gate_tvt/conf` (v15 knobs); floors + dual weight + strip/redact wired.
+  - 8w dual with conf_gate residual X: **ACCEPT** OOF **11.068** vs stack 11.393 but **worse** than dual seal **10.465** → **REJECT conf_gate as default residual X**.
+  - Keep: kernel export, Gate3 floor name, `DUAL_RESIDUAL_WEIGHT_BY_BASE["prior_conf_gate_tvt"]=0.25`, PRIV strip `prior_conf_gate*`.
+  - Drop: conf_gate columns from `FEATURE_COLS_DEFAULT` / attach deltas.
+- Pilot conf_gate hold **10.544** / pure lat **10.544**; selected 773w **14.67** (no ≥0.3 promote). beats_5ft=false.
+- **Next lever:** dual partner `prior_conf_gate_tvt` as residual **base** on ≤8–16w (not residual X); or multi-seed wider only if base beats prior_best dual; pure lattice improve beyond 10.544.
 
 ### Cycle-26 detail (CR v15 seal requires requested well cap)
 

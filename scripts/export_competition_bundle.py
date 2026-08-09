@@ -60,6 +60,7 @@ def main() -> int:
         "prior_beam",
         "prior_lattice",
         "prior_heatmap",
+        "prior_conf_gate",
     )
     bad = [
         c
@@ -121,6 +122,7 @@ def main() -> int:
                         "prior_beam",
                         "prior_lattice",
                         "prior_heatmap",
+                        "prior_conf_gate",
                     )
                 )
             ]

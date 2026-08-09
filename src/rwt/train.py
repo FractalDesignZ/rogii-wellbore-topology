@@ -33,6 +33,7 @@ DUAL_RESIDUAL_WEIGHT_BY_BASE: dict[str, float] = {
     "prior_stack": 0.25,
     "prior_lattice_tvt": 0.25,
     "prior_lattice_blend": 0.25,
+    "prior_conf_gate_tvt": 0.25,
 }
 # Crown residual LGBM: deep profile is the measure-tuned default (set-16/17).
 CROWN_DEEP_RESIDUAL = True
@@ -45,6 +46,7 @@ PRIV_STATION_PREFIXES: tuple[str, ...] = (
     "prior_beam",
     "prior_lattice",
     "prior_heatmap",
+    "prior_conf_gate",
     "private_",
     "sheaf_",
 )
@@ -55,6 +57,7 @@ PRIV_FLOOR_NAMES: frozenset[str] = frozenset(
         "prior_beam_tvt",
         "prior_lattice_blend",
         "prior_lattice_tvt",
+        "prior_conf_gate_tvt",
     }
 )
 
@@ -568,6 +571,7 @@ def train_lgbm_residual(
         "prior_beam_tvt": "prior_beam_tvt",
         "prior_lattice_blend": "prior_lattice_blend",
         "prior_lattice_tvt": "prior_lattice_tvt",
+        "prior_conf_gate_tvt": "prior_conf_gate_tvt",
     }
     baseline_rmse: dict[str, float] = {}
     for name, col in _FLOOR_COL.items():

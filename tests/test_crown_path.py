@@ -399,6 +399,9 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(
             DUAL_RESIDUAL_WEIGHT_BY_BASE["prior_lattice_blend"], 0.25
         )
+        self.assertAlmostEqual(
+            DUAL_RESIDUAL_WEIGHT_BY_BASE["prior_conf_gate_tvt"], 0.25
+        )
         w_lat = dual_residual_weights_for_bases(
             ["prior_best", "prior_lattice_tvt"]
         )
@@ -427,6 +430,7 @@ class TestCrownPath(unittest.TestCase):
             "prior_beam_tvt": 10.7,
             "prior_lattice_tvt": 10.5,
             "prior_lattice_blend": 10.6,
+            "prior_conf_gate_tvt": 10.54,
             "prior_beam_blend": 10.8,
         }
         prev = os.environ.pop("RWT_INCLUDE_PRIVATE_METRICS", None)

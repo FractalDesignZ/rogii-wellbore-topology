@@ -59,6 +59,8 @@ class TestBlueprintEngines(unittest.TestCase):
         # private residual columns allowed (filtered out when absent from stations)
         self.assertIn("prior_beam_tvt", FEATURE_COLS_DEFAULT)
         self.assertIn("prior_beam_delta_stack", FEATURE_COLS_DEFAULT)
+        # conf_gate residual X not in default (cycle-27 REJECT micro)
+        self.assertNotIn("prior_conf_gate_tvt", FEATURE_COLS_DEFAULT)
 
     def test_attach_private_residual_deltas_noop_and_deltas(self) -> None:
         from rwt.features import attach_private_residual_deltas
