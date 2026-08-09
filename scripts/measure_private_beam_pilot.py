@@ -66,6 +66,24 @@ def main() -> int:
         default="pure",
         help="conf_gate lattice arm: pure multi-field lattice (v12+ deploy) or last-protected blend",
     )
+    ap.add_argument(
+        "--shape-weight",
+        type=float,
+        default=0.45,
+        help="multi-field lattice GR shape emission weight (v9 default 0.45)",
+    )
+    ap.add_argument(
+        "--geom-weight",
+        type=float,
+        default=0.35,
+        help="multi-field lattice e_ref stickiness weight (v9 default 0.35)",
+    )
+    ap.add_argument(
+        "--shape-sigma",
+        type=float,
+        default=8.0,
+        help="multi-field lattice dGR/dMD shape sigma (v9 default 8.0)",
+    )
     a = ap.parse_args()
 
     # Fail-closed imports: public clones have no private_kernel package body
@@ -122,6 +140,11 @@ def main() -> int:
     }
     lattice_n_nodes = 97  # denser 129 REJECT: pure lat 10.801 vs v6 10.686
     multi_field_lattice = True  # v9 manifold overlay emission
+    lattice_emission = {
+        "shape_weight": float(a.shape_weight),
+        "geom_weight": float(a.geom_weight),
+        "shape_sigma": float(a.shape_sigma),
+    }
     min_comparable_stations = 20
     for wid, df in iter_well_frames(root, "train"):
         n_wells_scanned += 1
@@ -139,6 +162,9 @@ def main() -> int:
             n_nodes=lattice_n_nodes,
             heel_affine=True,
             multi_field=multi_field_lattice,
+            shape_weight=lattice_emission["shape_weight"],
+            geom_weight=lattice_emission["geom_weight"],
+            shape_sigma=lattice_emission["shape_sigma"],
         )
         heat = heatmap_prior_for_well(df, tw, sp, heel_affine=True)
         pred = np.asarray(sp.predict_idx, dtype=int)
@@ -343,6 +369,7 @@ def main() -> int:
         "conf_gate_params": conf_gate_params,
         "lat_arm": a.lat_arm,
         "lattice_n_nodes": lattice_n_nodes,
+        "lattice_emission": lattice_emission,
         "mean_rmse_beam": _mean("rmse_beam"),
         "mean_rmse_beam_blend": _mean("rmse_beam_blend"),
         "mean_rmse_lattice": _mean("rmse_lattice"),
@@ -484,6 +511,9 @@ def main() -> int:
         "pure_lat_boost": 0.0,
         "lat_arm": "pure",
         "n_wells": 40,
+        "shape_weight": 0.45,
+        "geom_weight": 0.35,
+        "shape_sigma": 8.0,
     }
     run_cfg = {
         "margin": float(conf_gate_params["margin"]),
@@ -493,6 +523,9 @@ def main() -> int:
         "lat_arm": str(a.lat_arm),
         "n_wells": len(C),
         "max_wells_arg": int(a.max_wells) if a.max_wells else None,
+        "shape_weight": float(lattice_emission["shape_weight"]),
+        "geom_weight": float(lattice_emission["geom_weight"]),
+        "shape_sigma": float(lattice_emission["shape_sigma"]),
     }
     # Seal only when scored cohort AND requested cap both match sealed 40w knobs.
     # (max_wells=0/None can still score 40 wells if data has ≥40 — do not seal those.)
@@ -504,6 +537,9 @@ def main() -> int:
         and run_cfg["lat_arm"] == sealed_v15["lat_arm"]
         and run_cfg["n_wells"] == sealed_v15["n_wells"]
         and run_cfg["max_wells_arg"] == sealed_v15["n_wells"]
+        and abs(run_cfg["shape_weight"] - sealed_v15["shape_weight"]) < 1e-12
+        and abs(run_cfg["geom_weight"] - sealed_v15["geom_weight"]) < 1e-12
+        and abs(run_cfg["shape_sigma"] - sealed_v15["shape_sigma"]) < 1e-12
     )
     cg_mean = float(C[deploy_col].mean()) if len(C) else None
     summary["run_config"] = run_cfg

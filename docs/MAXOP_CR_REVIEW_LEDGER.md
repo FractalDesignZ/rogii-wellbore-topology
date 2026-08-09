@@ -95,6 +95,17 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 26 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR v15 seal max_wells_arg guard | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.544 / dual 10.465 | false | is_v15_seal requires max_wells_arg==40 (not only n_wells==40); drop int(len(C)); skip invent pure_lat 0.217 (cycle-22 honest); plateau no-inc (CR) |
 | 27 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | 16w dual FALLBACK + conf_gate residual X REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w dual **FALLBACK pure 11.95**; 8w cg-X dual ACCEPT 11.07 worse | false | 16w dual res **12.611** loses stack 11.949; conf_gate residual-X **REJECT** (8w dual 11.07 vs seal dual 10.465); keep conf_gate export as floor/dual base only; pure pilot hold 10.544; plateau no-inc (lever reject) |
 | 28 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | conf_gate residual base dual REJECT; lat_floor 0.05 REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | dual-cg **ACCEPT 11.187** worse; single-cg **10.834** | false | dual partner conf_gate **REJECT** vs lattice dual seal 10.465; single base cg ACCEPT 10.834 worse; lat_floor 0.05 conf_gate **10.546** (Δcg **+0.002** REJECT vs v15 10.544); keep dual lattice; plateau_B **2/3** |
+| 29 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | multi-field emission rebalance REJECT; plateau STOP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pure pilot | false | shape_w0.55/geom0.25/σ6 pure lat **10.607** / conf_gate **10.567** (vs v9/v15 **10.544** REJECT); measure CLI emission knobs; 3× flat seals no CR → **STOP B** |
+
+### Cycle-29 detail (multi-field emission rebalance REJECT + plateau STOP B)
+
+- **Lever:** multi-field lattice emission rebalance on 40w (`private_beam_pilot_v16_emit`): `shape_weight` 0.45→**0.55**, `geom_weight` 0.35→**0.25**, `shape_sigma` 8→**6**.
+  - pure multi-field lattice **10.607** vs v9 seal **10.544** (Δpure **+0.063 REJECT**)
+  - conf_gate **10.567** vs v15 seal **10.544** (Δcg **+0.023 REJECT**)
+  - Keep v9 emission defaults (0.45 / 0.35 / 8.0) and v15 conf_gate knobs.
+- **Code:** measure CLI `--shape-weight` / `--geom-weight` / `--shape-sigma`; `lattice_emission` in summary; v15 seal requires default emission knobs; private `lattice_prior_for_well` passes emission kwargs.
+- Seals hold: selected **14.67** / best floor **15.11** / conf_gate **10.544** / dual lattice residual **10.465**. beats_5ft=false. Residue never forced.
+- **STOP B:** cycles 27–29 consecutive with |Δselected|<0.05, conf_gate/pure seal hold (|Δseal|<0.02 KEEP), no open CR, no KEEP lever. Sub-5 still needs pure lattice breakout or Gate3 residual that scales past 16w FALLBACK.
 
 ### Cycle-28 detail (conf_gate as residual base REJECT + lat_floor micro REJECT)
 
