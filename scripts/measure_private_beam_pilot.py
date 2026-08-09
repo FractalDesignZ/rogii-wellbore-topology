@@ -546,7 +546,9 @@ def main() -> int:
     summary["is_sealed_v15_config"] = bool(is_v15_seal)
     summary["is_sealed_v14_config"] = False  # superseded; keep key for older readers
     summary["mean_rmse_conf_gate_this_run"] = cg_mean
-    summary["trial_v14_conf_gate_40w"] = summary.get("prior_conf_gate_seal_v14")
+    summary["trial_v14_conf_gate_40w"] = (
+        summary.get("prior_conf_gate_seal_v14") if is_v15_seal else None
+    )
     if is_v15_seal:
         summary["stalk"] = (
             "v15 conf_gate lattice-led margin -0.10 lat_floor 0.08 pure arm; "
