@@ -31,6 +31,9 @@ NEIGHBOR_TRANSFER_OK_MIN = 0.55
 PRIOR_FALLBACKS = (
     "prior_stack",
     "prior_best",
+    "prior_da_tvt",
+    "prior_lattice_blend",
+    "prior_lattice_tvt",
     "prior_last_tvt",
     "prior_ncc_tvt",
     "prior_pf_blend",
@@ -74,6 +77,64 @@ def resolve_prior_column(
         if c in df.columns:
             return c
     raise KeyError(f"No residual prior column in {list(df.columns)[:24]}")
+
+
+# Pure-floor candidates for auto residual base (Gate3 honesty: train Δ vs a
+# strong pure head, not a weak one that residual "wins" only by construction).
+RESIDUAL_BASE_CANDIDATES: tuple[str, ...] = (
+    "prior_stack",
+    "prior_best",
+    "prior_da_tvt",
+    "prior_pf_blend",
+    "prior_lattice_blend",
+    "prior_last_tvt",
+)
+
+
+def select_residual_prior_column(
+    df: pd.DataFrame,
+    *,
+    y_col: str = "TVT",
+    candidates: tuple[str, ...] | list[str] = RESIDUAL_BASE_CANDIDATES,
+    default: str = DEFAULT_PRIOR_COL,
+) -> tuple[str, dict[str, float]]:
+    """
+    Pick residual base = pure prior column with lowest RMSE on labeled rows.
+
+    40w seal: pure stack ~11.09 beats residual on weaker bases that only
+    cleared incomplete Gate3 floors. Auto-pick keeps residual trained against
+    the strongest pure head present. Ties break toward ``default`` then
+    candidate order.
+
+    Returns (column_name, pure_floor_rmses).
+    """
+    from rwt.baselines import rmse
+
+    if y_col not in df.columns:
+        col = resolve_prior_column(df, default, strict=False)
+        return col, {}
+    y = np.asarray(df[y_col].to_numpy(dtype=float), dtype=float)
+    floors: dict[str, float] = {}
+    for c in candidates:
+        if c not in df.columns:
+            continue
+        p = np.asarray(df[c].to_numpy(dtype=float), dtype=float)
+        r = rmse(y, p)
+        if np.isfinite(r):
+            floors[c] = float(r)
+    if not floors:
+        col = resolve_prior_column(df, default, strict=False)
+        return col, floors
+    best_r = min(floors.values())
+    # all columns within 1e-9 of best
+    tied = [c for c, r in floors.items() if abs(r - best_r) <= 1e-9]
+    if default in tied:
+        return default, floors
+    # stable order by candidates list
+    for c in candidates:
+        if c in tied:
+            return c, floors
+    return tied[0], floors
 
 
 def _heel_tvt_values(

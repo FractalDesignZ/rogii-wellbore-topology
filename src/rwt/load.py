@@ -25,6 +25,56 @@ ALIASES = {
     "is_predict": ["is_predict", "predict_mask", "mask", "in_prediction_zone"],
 }
 
+# LAS / petrophysics null sentinels (not real curve values). Decode → NaN before math.
+LAS_NULL_SENTINELS: tuple[float, ...] = (
+    -999.25,
+    -999.00,
+    -9999.0,
+    -9999.25,
+    -999.99,
+)
+# Curves that must never treat LAS nulls as numeric measurements.
+NULLABLE_CURVES: tuple[str, ...] = ("GR", "TVT", "TVT_input", "Z")
+# GR is non-negative API in this domain; values ≤ this floor are treated as null.
+GR_ABSURD_LE: float = -50.0
+
+
+def normalize_curve_nulls(
+    values: np.ndarray | pd.Series,
+    *,
+    sentinels: tuple[float, ...] | list[float] = LAS_NULL_SENTINELS,
+    absurd_le: float | None = None,
+) -> np.ndarray:
+    """
+    Map LAS-style null codes (and optional absurd floor) to NaN.
+
+    Oilfield convention: -999.25 means *missing*, not a gamma API. Math must
+    see NaN/mask; export may re-encode NaN → -999.25 at write time only.
+    """
+    arr = np.asarray(values, dtype=float).copy()
+    if arr.size == 0:
+        return arr
+    for s in sentinels:
+        arr[np.isfinite(arr) & (np.abs(arr - float(s)) < 1e-6)] = np.nan
+    if absurd_le is not None:
+        arr[np.isfinite(arr) & (arr <= float(absurd_le))] = np.nan
+    return arr
+
+
+def apply_curve_nulls_frame(
+    df: pd.DataFrame,
+    *,
+    columns: tuple[str, ...] | list[str] = NULLABLE_CURVES,
+) -> pd.DataFrame:
+    """In-place-safe: return copy with nullable curves cleaned of LAS sentinels."""
+    out = df.copy()
+    for col in columns:
+        if col not in out.columns:
+            continue
+        absurd = GR_ABSURD_LE if col == "GR" else None
+        out[col] = normalize_curve_nulls(out[col], absurd_le=absurd)
+    return out
+
 
 def _remap_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
@@ -80,6 +130,8 @@ def well_id_from_path(path: Path) -> str:
 def read_well_csv(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     df = _remap_columns(df)
+    # Decode LAS nulls before any stalk / residual math sees the curves.
+    df = apply_curve_nulls_frame(df)
     if "well_id" not in df.columns:
         df["well_id"] = well_id_from_path(path)
         return df
@@ -132,7 +184,8 @@ def iter_well_frames(root: Path, split: str = "train") -> Iterator[tuple[str, pd
 
 def load_typewell(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
-    return _remap_columns(df)
+    df = _remap_columns(df)
+    return apply_curve_nulls_frame(df)
 
 
 def typewell_path_for_well(root: Path, well_id: str, split: str = "train") -> Path | None:

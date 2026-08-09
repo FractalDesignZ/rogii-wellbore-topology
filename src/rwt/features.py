@@ -8,7 +8,9 @@ import pandas as pd
 
 from rwt.geometry import station_local_geometry, trajectory_in_dip_frame
 from rwt.gr_match import (
+    combine_adaptive_confidence,
     fit_heel_gr_affine,
+    gr_agreement_confidence,
     gr_mismatch_at_tvt,
     multi_scale_ncc,
     ncc_tvt_track,
@@ -168,12 +170,15 @@ def finalize_after_spatial(
     known_full = heel_known_tvt_series(df, split)
 
     n_st = len(stations)
-    if (
+    has_tw_gr = (
         typewell is not None
         and "GR" in typewell.columns
         and "TVT" in typewell.columns
         and "GR" in stations.columns
-    ):
+    )
+    tw_gr_arr = tw_tvt_arr = lat_gr = None
+    mm_kw: dict[str, Any] = {}
+    if has_tw_gr:
         tw_gr_arr = typewell["GR"].to_numpy(dtype=float)
         tw_tvt_arr = typewell["TVT"].to_numpy(dtype=float)
         lat_gr = stations["GR"].to_numpy(dtype=float)
@@ -263,6 +268,21 @@ def finalize_after_spatial(
     delta = np.asarray(best, dtype=float) - stack_arr
     stations["prior_delta_best_stack"] = np.where(np.isfinite(delta), delta, 0.0)
 
+    # Experiment C: GR-agreement conf at residual base (prior_best) → adaptive mask.
+    # Product with PF conf: residual fires only where stalk and book both earn trust.
+    if has_tw_gr and tw_gr_arr is not None and lat_gr is not None:
+        mm_best = gr_mismatch_at_tvt(
+            lat_gr, tw_gr_arr, tw_tvt_arr, np.asarray(best, dtype=float), **mm_kw
+        )
+        stations["gr_mismatch_best"] = mm_best
+        abs_best = np.where(np.isfinite(mm_best), np.abs(mm_best), np.nan)
+        stations["gr_mismatch_abs_best"] = abs_best
+        stations["gr_agreement_conf"] = gr_agreement_confidence(abs_best)
+    else:
+        stations["gr_mismatch_best"] = 0.0
+        stations["gr_mismatch_abs_best"] = 0.0
+        stations["gr_agreement_conf"] = 0.0
+
     # Interaction / structure features (from main all-suggestions; non-leaky)
     n_st = len(stations)
     pf_conf = (
@@ -270,6 +290,10 @@ def finalize_after_spatial(
         if "pf_confidence" in stations.columns
         else np.zeros(n_st)
     )
+    gr_agree = stations["gr_agreement_conf"].to_numpy(dtype=float)
+    _ac = combine_adaptive_confidence(pf_conf, gr_agree, mode="product")
+    # Conf channel only (adaptive fire); not residual X — keeps Wave A residual floor.
+    stations["adaptive_conf"] = pf_conf if _ac is None else _ac
     rel_md_arr = (
         stations["relative_md"].to_numpy(dtype=float)
         if "relative_md" in stations.columns
@@ -523,14 +547,28 @@ def build_station_frame(
         else None
     )
     if "GR" in df.columns:
-        gr = df["GR"].to_numpy(dtype=float)
+        from rwt.load import normalize_curve_nulls, GR_ABSURD_LE
+
+        gr = normalize_curve_nulls(
+            df["GR"].to_numpy(dtype=float), absurd_le=GR_ABSURD_LE
+        )
     else:
         gr = np.full(n, np.nan, dtype=float)
     if tw_gr is not None:
-        tw_gr = np.asarray(tw_gr, dtype=float)
+        from rwt.load import normalize_curve_nulls, GR_ABSURD_LE
+
+        tw_gr = normalize_curve_nulls(
+            np.asarray(tw_gr, dtype=float), absurd_le=GR_ABSURD_LE
+        )
+
+    # Wave A: gap abstraction + short-gap fill for rolls only (raw GR stays NaN)
+    from rwt.curves import gr_gap_features
+
+    gr_gaps = gr_gap_features(gr, short_gap=5, window=21)
+    gr_for_rolls = gr_gaps["gr_filled_short"]
 
     # M3: multi-scale GR rolling stats (sensor-noise filter; trees handle NaN via fill)
-    gr_s = pd.Series(gr, dtype=float)
+    gr_s = pd.Series(gr_for_rolls, dtype=float)
     gr_rolls: dict[str, np.ndarray] = {}
     for w in (10, 20, 40):
         gr_rolls[f"GR_mean_{w}"] = (
@@ -593,6 +631,10 @@ def build_station_frame(
             "Y": float(df.loc[i, "Y"]),
             "Z": float(df.loc[i, "Z"]),
             "GR": gi if np.isfinite(gi) else np.nan,
+            "gr_is_null": float(gr_gaps["gr_is_null"][i]),
+            "gr_gap_run": float(gr_gaps["gr_gap_run"][i]),
+            "gr_valid_frac_win": float(gr_gaps["gr_valid_frac_win"][i]),
+            "gr_was_imputed": float(gr_gaps["gr_was_imputed"][i]),
             "is_predict": bool(is_predict_mask[i]),
             "is_known": bool(is_known_mask[i]),
             **{f"well_{k}": v for k, v in well_geom.items() if np.isscalar(v)},
@@ -679,6 +721,10 @@ FEATURE_COLS_DEFAULT = [
     "relative_md",
     "relative_z",
     "GR",
+    "gr_is_null",
+    "gr_gap_run",
+    "gr_valid_frac_win",
+    "gr_was_imputed",
     "GR_mean_10",
     "GR_std_10",
     "GR_mean_20",
@@ -716,6 +762,20 @@ FEATURE_COLS_DEFAULT = [
     "pf_confidence",
     "pf_tvt_std",
     "prior_disagreement",
+    # Private kernel (only when columns present; public kernel omits)
+    "prior_lattice_tvt",
+    "prior_lattice_blend",
+    "lattice_conf",
+    "lattice_conf_eff",
+    "lattice_agree",
+    "lattice_pull_weight",
+    "prior_da_tvt",
+    "da_rate",
+    "da_conf",
+    "da_conf_eff",
+    "da_agree",
+    "da_pull_weight",
+    "private_pull_weight",
     "gr_mismatch_stack",
     "gr_mismatch_last",
     "gr_mismatch_ncc",

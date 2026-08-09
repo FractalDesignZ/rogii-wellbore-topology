@@ -37,6 +37,9 @@ RESTRICT: no Kaggle submit from measure drivers.
 | **18** (crown) | #11 | deep **4-seed bag** → **10.825**; n_refit p90 when deep floor≥400; reject drop-base-from-X 10.944 and LGBM lr/leaves/l2 A/B. |
 | **19** (merge) | #11 | merge all-suggestions into crown single-seal path; research architecture map in CROWN_PATH. |
 | **19b** (main) | landed | Full 12w reassemble: residual **11.045** / adaptive **11.040** (2 fire); pure stack **12.148** (↑ vs 12.33); selected prefers adaptive when better; `feat/all-suggestions-integration` content fully on main. |
+| **20** (parity) | landed | Shared `adaptive_residual_mask` / `apply_adaptive_residual`; train adaptive OOF ≡ serve station-conf (was well_fire mismatch). Dual heads get adaptive. |
+| **21** (adaptive thr) | landed | **OOF-tuned `adaptive_conf_threshold`** sweep (0.15…0.75); serialize winner on blob; diagnostic `adaptive_well_oof_rmse`; private banded Viterbi + lattice conf/well adaptive pilot metrics. Adaptive is the game. |
+| **22** (Wave A) | this | LAS null→NaN; GR gap features; dual adaptive **thr × min_lifetime** OOF joint sweep; short-gap fill for rolls only; serve blob `adaptive_min_lifetime`. |
 
 ## CodeRabbit
 

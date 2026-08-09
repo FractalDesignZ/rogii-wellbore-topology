@@ -6,6 +6,10 @@
 stalks **index** stations onto TVT; geometry/neighbor/conf are a **multi-dim overlay**.
 See [MANIFOLD_OVERLAY.md](MANIFOLD_OVERLAY.md) (integrate → fully dimensionalize → proceed).
 
+**Task construct (GR@TVT):** geology = typewell book \(\mathrm{GR}=G_{\mathrm{tw}}(\mathrm{TVT})\);
+laterals = paths to place on that book; residual = gated polish only. Full decompose/align:
+[`TASK_GR_TVT_CONSTRUCT.md`](TASK_GR_TVT_CONSTRUCT.md).
+
 ## Goal
 
 Push pure prior floor and residual toward best-in-class (~6–7 LB) without cloning
@@ -149,10 +153,19 @@ sets 14–18); do not re-land it. Product stack on `main`:
 | Spatial multi-neighbor | `neighbor_tvt_wmean`, `neighbor_weight_sum`, `neighbor_count_close` |
 | Residual interactions | `pf_conf_x_rel_md`, `curv_x_pf_std`, `ncc_peak`, `ncc_lag_consistency`, `nb_offset_x_ok` |
 | Adaptive Gate3 | `gate_residual_acceptance_per_well` + serve conf gate (global Gate3 hard law) |
+| **Adaptive residual serve** | Station-conf mask (`adaptive_residual_mask`); **OOF-tuned `adaptive_conf_threshold`** sweep; `adaptive_serve` only when adaptive OOF beats global residual |
 | Adaptive PF | process noise from prior particle std; dynamic GR shape weight |
 | Crown residual | single deep `prior_best`, 4-seed, dual off, n_refit floor 400+p90 |
 | Single seal | `finalize_after_spatial` → interactions → kernel → watermark once |
 | GPU / neural | Optional `neural_residual` (CUDA TCN); main train CPU under RESTRICT |
-| Private kernel | Fail-closed stub; beam/DTW/lattice offline |
+| Private kernel | Fail-closed stub; banded Viterbi lattice + conf-adaptive pull offline |
+
+### Adaptive contract (name of the game)
+
+1. Global Gate3 must ACCEPT residual (hard law).
+2. Train computes station-conf adaptive OOF; **sweeps conf thresholds** on OOF and serializes the winner.
+3. `adaptive_serve=True` only if adaptive OOF **beats** global residual OOF.
+4. Serve applies the **same** mask + threshold (`predict_stations` ↔ `adaptive_residual_mask`).
+5. Diagnostic well_fire / well-level adaptive OOF are **measure-only** (need y_true) unless explicitly serialized.
 
 Measure: `scripts/measure_adaptive_delta.py` or `python -m rwt.train …`

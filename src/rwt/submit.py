@@ -115,7 +115,12 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
         return prior_arr + res
 
     # Dual residual: mean over residual_heads (set-15); legacy uses models alone
-    from rwt.gates import adaptive_residual_mask, apply_adaptive_residual
+    from rwt.gates import (
+        DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+        DEFAULT_ADAPTIVE_MIN_LIFETIME,
+        adaptive_residual_mask,
+        apply_adaptive_residual,
+    )
 
     heads = model_blob.get("residual_heads") or []
     use_residual = bool(model_blob.get("use_residual", True))
@@ -164,20 +169,34 @@ def predict_stations(model_blob: dict, stations: pd.DataFrame) -> np.ndarray:
 
     # Adaptive serve: shared mask contract with train adaptive_oof (station-conf
     # by default; optional well_fire map if serialized on the blob).
+    # Adaptive serve: station-conf mask ≡ train adaptive_oof (OOF-tuned threshold
+    # when present on blob). Optional well_fire map if serialized (diagnostic path).
     adaptive = bool(model_blob.get("adaptive_serve", False))
     if adaptive and use_residual:
-        conf_thresh = float(model_blob.get("adaptive_conf_threshold", 0.35))
-        conf = (
-            stations["pf_confidence"].to_numpy(dtype=float)
-            if "pf_confidence" in stations.columns
-            else None
+        conf_thresh = float(
+            model_blob.get(
+                "adaptive_conf_threshold", DEFAULT_ADAPTIVE_CONF_THRESHOLD
+            )
         )
+        min_life = int(
+            model_blob.get(
+                "adaptive_min_lifetime", DEFAULT_ADAPTIVE_MIN_LIFETIME
+            )
+        )
+        # Conf channel ≡ train OOF pick (serialized adaptive_conf_channel).
+        ch = str(model_blob.get("adaptive_conf_channel") or "")
+        conf = None
+        for key in (ch, "adaptive_conf", "pf_confidence", "gr_agreement_conf"):
+            if key and key in stations.columns:
+                conf = stations[key].to_numpy(dtype=float)
+                break
         wf_raw = model_blob.get("well_fire")
         well_fire = wf_raw if isinstance(wf_raw, dict) and wf_raw else None
         fire = adaptive_residual_mask(
             len(out),
             pf_confidence=conf if well_fire is None else None,
             conf_threshold=conf_thresh,
+            min_lifetime=min_life if well_fire is None else 0,
             well_ids=wids if well_fire is not None else None,
             well_fire=well_fire,
         )

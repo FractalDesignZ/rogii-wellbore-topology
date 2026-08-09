@@ -287,6 +287,74 @@ def gr_mismatch_at_tvt(
     return lat - hyp
 
 
+# GR API scale for |lat − book| → agreement conf. ~1 e-fold at this API gap.
+DEFAULT_GR_AGREE_SCALE = 20.0
+
+
+def gr_agreement_confidence(
+    abs_mismatch: np.ndarray,
+    *,
+    scale: float = DEFAULT_GR_AGREE_SCALE,
+) -> np.ndarray:
+    """
+    Map |GR_lat − G_tw(t̂)| → confidence in [0, 1].
+
+    Low absolute mismatch → high conf (book corroborates the hypothesized TVT).
+    Non-finite mismatch (null GR / missing book) → 0 (refuse adaptive residual fire).
+    """
+    mm = np.asarray(abs_mismatch, dtype=float)
+    s = max(float(scale), 1e-6)
+    out = np.zeros(mm.shape[0], dtype=float)
+    ok = np.isfinite(mm)
+    if ok.any():
+        out[ok] = np.exp(-np.abs(mm[ok]) / s)
+    return out
+
+
+def combine_adaptive_confidence(
+    pf_confidence: np.ndarray | None,
+    gr_agreement: np.ndarray | None,
+    *,
+    mode: str = "product",
+) -> np.ndarray | None:
+    """
+    Build the station conf vector for adaptive residual fire (train≡serve).
+
+    Modes:
+      - ``product``: pf × gr_agree (both must earn fire; default experiment C)
+      - ``min``: elementwise min
+      - ``geomean``: sqrt(pf × gr)
+      - ``gr_only`` / ``pf_only``: single channel
+    Missing channel falls back to the other; both missing → None.
+    """
+    pf = None if pf_confidence is None else np.asarray(pf_confidence, dtype=float)
+    ga = None if gr_agreement is None else np.asarray(gr_agreement, dtype=float)
+    m = str(mode).lower().strip()
+    if pf is None and ga is None:
+        return None
+    if m in ("gr_only", "gr", "gr_agree", "gr_agreement"):
+        return ga if ga is not None else pf
+    if m in ("pf_only", "pf", "pf_confidence"):
+        return pf if pf is not None else ga
+    if pf is None:
+        return ga
+    if ga is None:
+        return pf
+    if pf.shape != ga.shape:
+        raise ValueError(
+            f"pf_confidence shape {pf.shape} != gr_agreement shape {ga.shape}"
+        )
+    # Non-finite channel demotes that station (no silent 1.0 fill).
+    pf_f = np.where(np.isfinite(pf), np.clip(pf, 0.0, 1.0), 0.0)
+    ga_f = np.where(np.isfinite(ga), np.clip(ga, 0.0, 1.0), 0.0)
+    if m == "min":
+        return np.minimum(pf_f, ga_f)
+    if m in ("geomean", "geo", "geometric"):
+        return np.sqrt(np.clip(pf_f * ga_f, 0.0, 1.0))
+    # product (default)
+    return pf_f * ga_f
+
+
 def ncc_tvt_track(
     lateral_gr: np.ndarray,
     typewell_gr: np.ndarray,

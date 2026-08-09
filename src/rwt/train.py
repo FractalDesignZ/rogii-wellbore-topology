@@ -13,9 +13,18 @@ from sklearn.model_selection import GroupKFold
 
 from rwt.baselines import rmse, smooth_residual_along_well
 from rwt.features import build_station_frame, feature_matrix
+from rwt.gates import (
+    DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+    DEFAULT_ADAPTIVE_MIN_LIFETIME,
+)
 from rwt.load import iter_well_frames, load_typewell, synthetic_well, typewell_path_for_well
 from rwt.middle_out import MiddleOutSplit, resolve_middle_out, split_by_mask
-from rwt.priors import DEFAULT_PRIOR_COL, MAX_TVT_DEV, resolve_prior_column
+from rwt.priors import (
+    DEFAULT_PRIOR_COL,
+    MAX_TVT_DEV,
+    resolve_prior_column,
+    select_residual_prior_column,
+)
 from rwt.spatial import SpatialIndex, build_spatial_index
 
 # Residual MD smooth window (odd). 0/1 = off.
@@ -309,8 +318,9 @@ def train_lgbm_residual(
     """
     Residual learner on labeled *toe* (is_predict).
 
-    Target = TVT − prior. Default residual base is DEFAULT_PRIOR_COL (prior_best).
-    Explicit prior_col is strict (must exist); omitted uses DEFAULT with fallbacks.
+    Target = TVT − prior. When ``prior_col`` is omitted, residual base is the
+    pure prior with lowest RMSE on labeled toe (auto-select) — not a fixed
+    prior_best. Explicit ``prior_col`` is strict (must exist).
 
     max_precision=True: deeper trees, more rounds, more leaves — for 24c/32GB kits
     hunting sub-5ft RMSE (still Gate3 gated).
@@ -322,8 +332,16 @@ def train_lgbm_residual(
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
     else:
         train_df = stations[stations["TVT"].notna()].copy()
+    residual_base_floors: dict[str, float] = {}
+    residual_base_auto = False
     if prior_col is None:
-        prior_col = resolve_prior_column(train_df, DEFAULT_PRIOR_COL, strict=False)
+        prior_col, residual_base_floors = select_residual_prior_column(train_df)
+        residual_base_auto = True
+        print(
+            f"[PRIOR BASE] auto={prior_col} "
+            f"pure_floors={{{', '.join(f'{k}:{v:.3f}' for k, v in sorted(residual_base_floors.items(), key=lambda kv: kv[1]))}}}",
+            flush=True,
+        )
     else:
         prior_col = resolve_prior_column(train_df, prior_col, strict=True)
     from rwt.features import compute_feature_medians, impute_feature_frame
@@ -566,21 +584,29 @@ def train_lgbm_residual(
         "prior_stack": "prior_stack",
         "prior_best": "prior_best",
         "prior_ncc": "prior_ncc_tvt",
-        # private kernel pure floor (present only when RWT_KERNEL=private)
+        # Private kernel floors (present only when RWT_KERNEL=private)
         "prior_beam_blend": "prior_beam_blend",
         "prior_beam_tvt": "prior_beam_tvt",
+        "prior_lattice": "prior_lattice_tvt",
         "prior_lattice_blend": "prior_lattice_blend",
         "prior_lattice_tvt": "prior_lattice_tvt",
         "prior_conf_gate_tvt": "prior_conf_gate_tvt",
+        "prior_da": "prior_da_tvt",
     }
     baseline_rmse: dict[str, float] = {}
     for name, col in _FLOOR_COL.items():
         if col not in train_df.columns:
             continue
         b = train_df[col].to_numpy(dtype=float)[row_m]
-        if not np.isfinite(b[shared]).all():
+        # Require *some* finite floor values — do NOT drop a floor for sparse NaNs
+        # (prior_stack was excluded at finite frac ~0.99998, letting residual
+        # falsely OPEN vs weaker floors while pure stack was better).
+        b_s = b[shared]
+        if not np.isfinite(b_s).any():
             continue
-        baseline_rmse[name] = rmse(y_s, b[shared])
+        r_floor = rmse(y_s, b_s)  # rmse already pairs on joint finite mask
+        if np.isfinite(r_floor):
+            baseline_rmse[name] = float(r_floor)
     beats = {
         name: bool(oof_r < br) for name, br in baseline_rmse.items() if np.isfinite(br)
     }
@@ -610,11 +636,46 @@ def train_lgbm_residual(
     gate1 = gate_ip_fence()
     use_residual = bool(gate3.passed)
 
+    # Experiment C: OOF-pick conf channel among pf / GR-agree / product.
+    # Winner is serialized so serve reads the same station column (train≡serve).
+    from rwt.gates import select_adaptive_conf_threshold as _sel_adaptive_ch
+
+    channel_cands: list[tuple[str, np.ndarray]] = []
+    for ch_name in ("pf_confidence", "gr_agreement_conf", "adaptive_conf"):
+        if ch_name not in train_df.columns:
+            continue
+        ch_full = train_df[ch_name].to_numpy(dtype=float)[row_m]
+        if np.isfinite(ch_full[shared]).any():
+            channel_cands.append((ch_name, ch_full[shared]))
     pf_conf_s = None
-    if "pf_confidence" in train_df.columns:
-        pf_full = train_df["pf_confidence"].to_numpy(dtype=float)[row_m]
-        if np.isfinite(pf_full[shared]).any():
-            pf_conf_s = pf_full[shared]
+    adaptive_conf_channel = "none"
+    channel_sweep: list[dict[str, Any]] = []
+    if channel_cands:
+        best_ch = channel_cands[0][0]
+        best_vec = channel_cands[0][1]
+        best_a = float("inf")
+        for ch_name, ch_vec in channel_cands:
+            sel = _sel_adaptive_ch(y_s, oof_s, prior_m, ch_vec)
+            a = sel.get("adaptive_oof_rmse")
+            a_f = float(a) if a is not None and np.isfinite(float(a)) else float("inf")
+            channel_sweep.append(
+                {
+                    "channel": ch_name,
+                    "adaptive_oof_rmse": a_f if np.isfinite(a_f) else None,
+                    "threshold": sel.get("threshold"),
+                    "min_lifetime": sel.get("min_lifetime"),
+                    "n_station_fire": sel.get("n_station_fire"),
+                }
+            )
+            # Prefer lower adaptive OOF; ties → pf_confidence (historical Wave A).
+            better = a_f < best_a - 1e-12
+            tie_pf = abs(a_f - best_a) <= 1e-12 and ch_name == "pf_confidence"
+            if better or tie_pf or (not np.isfinite(best_a) and np.isfinite(a_f)):
+                best_a = a_f
+                best_ch = ch_name
+                best_vec = ch_vec
+        pf_conf_s = best_vec
+        adaptive_conf_channel = best_ch
     groups_s = groups[row_m][shared]
     gate3_pw = gate_residual_acceptance_per_well(
         groups_s,
@@ -624,6 +685,9 @@ def train_lgbm_residual(
         global_gate=gate3,
         pf_confidence=pf_conf_s,
     )
+    if channel_sweep:
+        gate3_pw.detail["adaptive_channel_sweep"] = channel_sweep
+        gate3_pw.detail["adaptive_conf_channel"] = adaptive_conf_channel
     serve_prior_col = prior_col
     residual_heads: list[dict[str, Any]] = []
     final_models: list[Any] = []
@@ -664,10 +728,16 @@ def train_lgbm_residual(
             final_prior_type = f"{prior_col}_plus_lgbm_residual"
         final_oof = oof_r
         adaptive_selected = False
-        # Prefer adaptive OOF when station-conf mask beats global residual (still
-        # Gate3-accepted: residual head allowed only after global pass).
+        # Prefer adaptive OOF when station-conf mask (OOF-tuned threshold) beats
+        # global residual. Still Gate3-accepted only after global pass.
         # adaptive_oof uses the SAME adaptive_residual_mask rule as predict_stations.
         a_oof = gate3_pw.detail.get("adaptive_oof_rmse")
+        adaptive_conf_threshold = float(
+            gate3_pw.detail.get("conf_threshold", DEFAULT_ADAPTIVE_CONF_THRESHOLD)
+        )
+        adaptive_min_lifetime = int(
+            gate3_pw.detail.get("min_lifetime", DEFAULT_ADAPTIVE_MIN_LIFETIME)
+        )
         if (
             a_oof is not None
             and np.isfinite(float(a_oof))
@@ -680,14 +750,29 @@ def train_lgbm_residual(
                 f"[ADAPTIVE] selected OOF {final_oof:.3f} "
                 f"(global residual {oof_r:.3f}; "
                 f"mask={gate3_pw.detail.get('adaptive_mask_mode')} "
+                f"channel={adaptive_conf_channel} "
+                f"conf_thr={adaptive_conf_threshold:.2f} "
+                f"min_life={adaptive_min_lifetime} "
+                f"tuned={gate3_pw.detail.get('adaptive_threshold_tuned')} "
                 f"station_fire={gate3_pw.detail.get('n_station_fire')} "
                 f"station_fb={gate3_pw.detail.get('n_station_fallback')} "
                 f"well_fire_diag={gate3_pw.detail.get('n_fire')}/"
-                f"{gate3_pw.detail.get('n_fallback')})",
+                f"{gate3_pw.detail.get('n_fallback')} "
+                f"well_oof_diag={gate3_pw.detail.get('adaptive_well_oof_rmse')})",
+                flush=True,
+            )
+        else:
+            print(
+                f"[ADAPTIVE] not selected "
+                f"(adaptive_oof={a_oof} residual={oof_r:.3f} "
+                f"channel={adaptive_conf_channel} "
+                f"thr={adaptive_conf_threshold:.2f} L={adaptive_min_lifetime})",
                 flush=True,
             )
     else:
         adaptive_selected = False
+        adaptive_conf_threshold = float(DEFAULT_ADAPTIVE_CONF_THRESHOLD)
+        adaptive_min_lifetime = int(DEFAULT_ADAPTIVE_MIN_LIFETIME)
         n_refit = None
         cand: dict[str, float] = {prior_col: float(gate3.detail["oof_rmse_prior"])}
         for n, s in floor_rmses.items():
@@ -741,6 +826,8 @@ def train_lgbm_residual(
         "kernel_private": k.is_private(),
         "prior_column": serve_prior_col if not use_residual else prior_col,
         "train_prior_column": prior_col,
+        "residual_base_auto": bool(residual_base_auto),
+        "residual_base_floors": residual_base_floors,
         "final_prior_type": final_prior_type,
         "use_residual": use_residual,
         "gates": [
@@ -758,17 +845,26 @@ def train_lgbm_residual(
             gate3_pw.to_dict(),
         ],
         "adaptive_oof_rmse": gate3_pw.detail.get("adaptive_oof_rmse"),
+        "adaptive_well_oof_rmse": gate3_pw.detail.get("adaptive_well_oof_rmse"),
         "adaptive_n_fire": gate3_pw.detail.get("n_fire"),
         "adaptive_n_fallback": gate3_pw.detail.get("n_fallback"),
         "adaptive_n_station_fire": gate3_pw.detail.get("n_station_fire"),
         "adaptive_n_station_fallback": gate3_pw.detail.get("n_station_fallback"),
         "adaptive_mask_mode": gate3_pw.detail.get("adaptive_mask_mode"),
         "adaptive_serve": bool(adaptive_selected),
-        "adaptive_conf_threshold": 0.35,
+        "adaptive_conf_threshold": float(adaptive_conf_threshold),
+        "adaptive_min_lifetime": int(adaptive_min_lifetime),
+        "adaptive_conf_channel": adaptive_conf_channel,
+        "adaptive_channel_sweep": channel_sweep,
+        "adaptive_threshold_tuned": bool(
+            gate3_pw.detail.get("adaptive_threshold_tuned", False)
+        ),
+        "adaptive_threshold_sweep": gate3_pw.detail.get("adaptive_threshold_sweep") or [],
         "cpu": cpu_feature_report(),
         "law": (
             "GroupKFold by well; residual gated by prior OOF; "
-            "particle-filter typewell track; SO(3)/SE(3)/spatial features; "
+            "adaptive conf = pf×GR-agree (exp C) thr×lifetime; "
+            "LAS nulls→NaN; particle-filter typewell track; SO(3)/SE(3)/spatial; "
             "open-core public kernel fail-closed"
         ),
         "license": "AGPL-3.0-or-later",
@@ -788,7 +884,9 @@ def train_lgbm_residual(
         "residual_max_dev": residual_max_dev,
         "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
         "adaptive_serve": bool(adaptive_selected),
-        "adaptive_conf_threshold": 0.35,
+        "adaptive_conf_threshold": float(adaptive_conf_threshold),
+        "adaptive_min_lifetime": int(adaptive_min_lifetime),
+        "adaptive_conf_channel": adaptive_conf_channel,
     }
 
 
@@ -879,7 +977,19 @@ def main(argv: list[str] | None = None) -> int:
                     # only when adaptive path beat global residual OOF.
                     "adaptive_serve": bool(result.get("adaptive_serve", False)),
                     "adaptive_conf_threshold": float(
-                        result.get("adaptive_conf_threshold", 0.35)
+                        result.get(
+                            "adaptive_conf_threshold",
+                            DEFAULT_ADAPTIVE_CONF_THRESHOLD,
+                        )
+                    ),
+                    "adaptive_min_lifetime": int(
+                        result.get(
+                            "adaptive_min_lifetime",
+                            DEFAULT_ADAPTIVE_MIN_LIFETIME,
+                        )
+                    ),
+                    "adaptive_conf_channel": str(
+                        result.get("adaptive_conf_channel") or "pf_confidence"
                     ),
                 },
                 out / "model.joblib",

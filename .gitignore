@@ -5,6 +5,10 @@ data/processed/
 *.csv
 !data/README.md
 
+# Local contest dump / vendor training (never commit)
+rogii-wellbore-geology-prediction-original/
+MWD Training/
+
 # PROPRIETARY KERNEL — never publish source; keep README only
 private_kernel/*
 !private_kernel/README.md
@@ -13,6 +17,14 @@ secrets/
 .env
 .env.*
 !.env.example
+
+# Private research / method facilitation (local only — never GitHub)
+private_research/
+docs/TerranOP*
+docs/TERRANOP*
+docs/*_PRIVATE*
+docs/*_private*
+wellbore-geology-prediction/
 
 
 # python
