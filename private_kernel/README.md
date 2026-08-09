@@ -7,23 +7,74 @@ Keep a local (or private-repo) copy of advanced implementations here.
 
 ```text
 private_kernel/
-  __init__.py              # get_kernel() → PrivateLatticeKernel
-  kernel_impl.py           # GeometryKernel: inject prior_lattice_tvt at seal
-  lattice_solver.py        # Viterbi TVT lattice (emission + transition DP)
-  beam_match.py            # beam_prior_for_well / beam_blend_last (pilot API)
-  holonomy_advanced.py     # optional richer transport
-  sheaf_features.py        # optional sheaf extras
-  residual_map.py          # optional proprietary residual maps
+  __init__.py          # MUST expose get_kernel() → kernel with truthy is_private()
+  kernel_impl.py       # PrivateKernel: beam + lattice station columns
+  beam_match.py        # beam stalk v2 knobs + v6 heel GR affine / adaptive sigma
+  lattice_match.py     # band-lattice Viterbi + conf_gate (measure pins sealed knobs)
+  lattice_solver.py    # optional: Viterbi TVT lattice (emission + transition DP)
+  holonomy_advanced.py # optional richer transport
+  sheaf_features.py    # path Laplacian / energy features
+  residual_map.py      # optional proprietary residual transforms
 ```
+
+### Loader contract (`src/rwt/kernel_api.resolve_kernel`)
+
+When `RWT_KERNEL=private`, the public resolver does:
+
+1. `import private_kernel`
+2. `k = private_kernel.get_kernel()`  — **required entry point** (not just KernelImpl class)
+3. require truthy `k.is_private()` (`if not k.is_private():` → fail-closed to `PublicKernel`)
+
+If import fails or the contract is violated, the public path continues with `PublicKernel` (fail-closed). Implement `get_kernel()` in `__init__.py`.
+
+## Pilot seals (40w comparable cohort)
+
+| Prior | mean RMSE (ft) | Note |
+| --- | ---: | --- |
+| last_known | 10.788 | floor |
+| beam_blend v2 | 10.756 | pre-affine seal; reverse_pass/dense reseed **rejected** (→11.08) |
+| conf_gate hard v3 | 10.749 | lattice only when conf > beam + 0.08 |
+| conf_gate soft v4.1 | 10.747 | soft weight + agree fuse; micro-beat only |
+| beam_blend v6 | **10.729** | heel affine + adaptive gr_sigma |
+| pure lattice v6 | **10.686** | best raw stalk post-affine (not deploy alone) |
+| **conf_gate v6 (deploy)** | **10.705** | −0.083 vs last; −0.042 vs soft v4.1 |
+| pure lattice multi-field v9 | **10.544** | KEEP floor (not sole deploy) |
+| conf_gate v11 pure-lat boost (blend arm) | 10.699 | prior deploy |
+| conf_gate v12 pure lat arm (margin 0.03) | 10.674 | prior deploy |
+| conf_gate v13 lattice-led (margin −0.05) | 10.608 | prior deploy |
+| conf_gate v14 lattice-led (margin −0.08) | 10.569 | prior deploy |
+| **conf_gate v15 lattice-led** | **10.544** | **deploy** (−0.026 vs v14; margin −0.10; ~pure floor) |
+| heatmap blend v10 | 15.98 | REJECT |
+| oracle stalk | ~10.59 | label leak; diag only |
+
+Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):  
+`lat_arm=pure`, `margin=-0.10`, `lat_floor=0.08`, `agree_ft=2.0`, `soft_temp=0.04`,
+`pure_lat_boost=0.0`, `n_nodes=97`, `multi_field=True`. Soft beam fallback when
+`lat_conf < lat_floor` (not pure-sole deploy).  
+Rejected on 40w: denser `n_nodes=129`; reverse_pass/dense reseed; GR emission gate;
+GR heatmap field index (blend ~16 ft); pure_lat_boost alone on blend arm (max −0.01);
+dual residual weight 0.70/0.30 on 8w (worse than 0.75/0.25).
+
+Public residual path **only after successful private resolution** (`kernel_private is
+True` / `resolve_kernel().is_private()` truthy). Then `augment_station_frame` emits
+`prior_beam_tvt/conf/blend`; `rwt.features` adds deltas and residual X includes them
+when those columns exist. If private load/contract fails, resolver **fail-closes to
+`PublicKernel`** and those columns are **omitted** (env `RWT_KERNEL=private` alone
+is not sufficient). Artifacts under `artifacts/**` are gitignored; competition export
+must strip `prior_beam_*` as well as `private_*`/`sheaf_*`.
+16w pilot: residual lost pure stack (FALLBACK); 8w smoke ACCEPT was cohort-specific.
+
+Target hunt: conf_gate ≤ 9.0 then Gate3 residual / full GKF promote if pure moves ≥0.3 ft.
 
 ## Contract
 
 Implement `rwt.kernel_api.GeometryKernel` (see `src/rwt/kernel_api.py`):
 
+- `get_kernel() -> GeometryKernel`  # package entry; resolver calls this
 - `trajectory_features(md, x, y, z) -> dict`
 - `augment_station_frame(stations, lateral, typewell) -> DataFrame`
 - `kernel_id() -> str`
-- `is_private() -> True`
+- `is_private() -> bool`  # must be truthy or resolver fails closed
 
 Load with:
 

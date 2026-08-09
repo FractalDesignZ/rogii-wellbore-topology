@@ -379,7 +379,10 @@ class TestCrownPath(unittest.TestCase):
 
     def test_dual_residual_weights_by_base_name(self) -> None:
         """Weights follow base *names*, not list position (CR dual residual)."""
-        from rwt.train import dual_residual_weights_for_bases
+        from rwt.train import (
+            DUAL_RESIDUAL_WEIGHT_BY_BASE,
+            dual_residual_weights_for_bases,
+        )
 
         w1 = dual_residual_weights_for_bases(["prior_best", "prior_stack"])
         self.assertAlmostEqual(w1[0], 0.75)
@@ -389,6 +392,145 @@ class TestCrownPath(unittest.TestCase):
         self.assertAlmostEqual(w2[0], 0.25)
         self.assertAlmostEqual(w2[1], 0.75)
         self.assertEqual(dual_residual_weights_for_bases(["prior_best"]), [1.0])
+        # lattice partners: order-independent named weights (cycle-15 dual)
+        self.assertAlmostEqual(
+            DUAL_RESIDUAL_WEIGHT_BY_BASE["prior_lattice_tvt"], 0.25
+        )
+        self.assertAlmostEqual(
+            DUAL_RESIDUAL_WEIGHT_BY_BASE["prior_lattice_blend"], 0.25
+        )
+        self.assertAlmostEqual(
+            DUAL_RESIDUAL_WEIGHT_BY_BASE["prior_conf_gate_tvt"], 0.25
+        )
+        w_lat = dual_residual_weights_for_bases(
+            ["prior_best", "prior_lattice_tvt"]
+        )
+        self.assertAlmostEqual(w_lat[0], 0.75)
+        self.assertAlmostEqual(w_lat[1], 0.25)
+        w_lat_rev = dual_residual_weights_for_bases(
+            ["prior_lattice_tvt", "prior_best"]
+        )
+        self.assertAlmostEqual(w_lat_rev[0], 0.25)
+        self.assertAlmostEqual(w_lat_rev[1], 0.75)
+        w_blend = dual_residual_weights_for_bases(
+            ["prior_lattice_blend", "prior_best"]
+        )
+        self.assertAlmostEqual(w_blend[0], 0.25)
+        self.assertAlmostEqual(w_blend[1], 0.75)
+
+    def test_public_baseline_rmse_redacts_private_floors(self) -> None:
+        """Private beam/lattice floors stay out of serialized baseline_rmse."""
+        import os
+
+        from rwt.train import PRIV_FLOOR_NAMES, public_baseline_rmse
+
+        full = {
+            "prior_stack": 15.1,
+            "last_known": 15.9,
+            "prior_beam_tvt": 10.7,
+            "prior_lattice_tvt": 10.5,
+            "prior_lattice_blend": 10.6,
+            "prior_conf_gate_tvt": 10.54,
+            "prior_beam_blend": 10.8,
+        }
+        prev = os.environ.pop("RWT_INCLUDE_PRIVATE_METRICS", None)
+        try:
+            pub = public_baseline_rmse(full)
+            self.assertIn("prior_stack", pub)
+            self.assertIn("last_known", pub)
+            for n in PRIV_FLOOR_NAMES:
+                self.assertNotIn(n, pub)
+            os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = "1"
+            auth = public_baseline_rmse(full)
+            self.assertEqual(set(auth), set(full))
+        finally:
+            if prev is None:
+                os.environ.pop("RWT_INCLUDE_PRIVATE_METRICS", None)
+            else:
+                os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = prev
+
+    def test_public_gate3_dict_redacts_private_floors(self) -> None:
+        """Nested Gate3 report detail must not leak private floor names by default."""
+        import os
+
+        from rwt.train import PRIV_FLOOR_NAMES, public_gate3_dict
+
+        raw = {
+            "name": "RESIDUAL_ACCEPTANCE",
+            "passed": True,
+            "oof_rmse_residual": 10.5,
+            "oof_rmse_best_floor": 10.4,
+            "best_floor_name": "prior_lattice_tvt",
+            "floor_rmses": {
+                "prior_stack": 11.4,
+                "last_known": 12.0,
+                "prior_lattice_tvt": 10.4,
+                "prior_beam_tvt": 10.7,
+            },
+            "decision": "ACCEPT_RESIDUAL",
+        }
+        prev = os.environ.pop("RWT_INCLUDE_PRIVATE_METRICS", None)
+        try:
+            pub = public_gate3_dict(raw)
+            self.assertEqual(pub["decision"], "ACCEPT_RESIDUAL")
+            self.assertTrue(pub["passed"])
+            for n in PRIV_FLOOR_NAMES:
+                self.assertNotIn(n, pub.get("floor_rmses") or {})
+            self.assertEqual(pub["best_floor_name"], "prior_stack")
+            self.assertAlmostEqual(float(pub["oof_rmse_best_floor"]), 11.4)
+            self.assertTrue(pub.get("private_best_floor_redacted"))
+            # only-private floors: redact name AND numeric best-floor metric
+            priv_only = {
+                "name": "RESIDUAL_ACCEPTANCE",
+                "passed": True,
+                "oof_rmse_residual": 10.5,
+                "oof_rmse_best_floor": 10.4,
+                "best_floor_name": "prior_lattice_tvt",
+                "floor_rmses": {
+                    "prior_lattice_tvt": 10.4,
+                    "prior_beam_tvt": 10.7,
+                },
+                "decision": "ACCEPT_RESIDUAL",
+            }
+            pub_only = public_gate3_dict(priv_only)
+            self.assertEqual(pub_only["best_floor_name"], "private_redacted")
+            self.assertIsNone(pub_only.get("oof_rmse_best_floor"))
+            self.assertEqual(pub_only.get("floor_rmses") or {}, {})
+            self.assertTrue(pub_only.get("private_best_floor_redacted"))
+            os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = "1"
+            auth = public_gate3_dict(raw)
+            self.assertEqual(auth["best_floor_name"], "prior_lattice_tvt")
+            self.assertIn("prior_lattice_tvt", auth["floor_rmses"])
+        finally:
+            if prev is None:
+                os.environ.pop("RWT_INCLUDE_PRIVATE_METRICS", None)
+            else:
+                os.environ["RWT_INCLUDE_PRIVATE_METRICS"] = prev
+
+    def test_dual_partner_equals_prior_col_raises(self) -> None:
+        """Explicit dual_partner == prior_col is a hard config error (CR)."""
+        from rwt.train import train_lgbm_residual
+
+        n = 60
+        # Minimal frame: enough rows/groups for early dual_partner check.
+        stations = pd.DataFrame(
+            {
+                "well_id": [f"W{i % 3}" for i in range(n)],
+                "TVT": np.linspace(100.0, 160.0, n),
+                "is_predict": np.ones(n, dtype=bool),
+                "prior_best": np.linspace(100.0, 160.0, n) + 0.5,
+                "prior_stack": np.linspace(100.0, 160.0, n) + 1.0,
+                "relative_md": np.linspace(0.0, 1000.0, n),
+            }
+        )
+        with self.assertRaises(ValueError) as ctx:
+            train_lgbm_residual(
+                stations,
+                prior_col="prior_best",
+                dual_partner="prior_best",
+            )
+        self.assertIn("dual_partner", str(ctx.exception).lower())
+        self.assertIn("prior_best", str(ctx.exception))
 
     def test_crown_defaults_single_deep_prior_best(self) -> None:
         """Set-17/18: dual off, deep residual on, prior_best base, deep n_refit floor."""

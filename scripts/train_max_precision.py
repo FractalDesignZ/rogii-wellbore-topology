@@ -24,7 +24,9 @@ os.environ.setdefault("RWT_NUM_THREADS", "20")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "20")
 
 ROOT = Path(__file__).resolve().parents[1]
+# src for rwt; repo root so private_kernel is importable under RWT_KERNEL=private
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 import numpy as np  # noqa: E402
 
@@ -62,17 +64,42 @@ def main() -> int:
         default=None,
         help="residual base prior column (default: resolve DEFAULT_PRIOR_COL / fallbacks)",
     )
+    ap.add_argument(
+        "--kernel",
+        default=None,
+        choices=["public", "private"],
+        help="force RWT_KERNEL=public|private (default: leave env / public)",
+    )
+    ap.add_argument(
+        "--write-private-stations",
+        action="store_true",
+        help="opt-in: also write stations_private_full.csv (local-only; never publish)",
+    )
+    ap.add_argument(
+        "--dual-partner",
+        default=None,
+        help="optional dual residual base column (e.g. prior_lattice_tvt) for ensemble",
+    )
     a = ap.parse_args()
+    if a.kernel:
+        os.environ["RWT_KERNEL"] = a.kernel
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
+    from rwt.kernel_api import resolve_kernel  # after path + RWT_KERNEL
+
+    _k = resolve_kernel()
     print(
         json.dumps(
             {
                 "phase": "MEASURE",
                 "law": "restrict→measure→audit→OPEN|STOP",
                 "target_ft": TARGET_FT,
+                "kernel_id": _k.kernel_id(),
+                "kernel_private": _k.is_private(),
+                "kernel_note": getattr(_k, "_load_note", None),
+                "RWT_KERNEL": os.environ.get("RWT_KERNEL"),
                 "threads": {
                     "OMP": os.environ.get("OMP_NUM_THREADS"),
                     "OPENBLAS": os.environ.get("OPENBLAS_NUM_THREADS"),
@@ -102,7 +129,13 @@ def main() -> int:
         f"gate2_passed={gate2.get('n_passed')} t={time.perf_counter()-t0:.1f}s",
         flush=True,
     )
-    stations.to_csv(out / "stations.csv", index=False)
+    # Guard proprietary columns on disk: residual train uses full in-memory frame.
+    from rwt.train import write_stations_csv
+
+    strip_meta = write_stations_csv(
+        stations, out, write_private_full=bool(a.write_private_stations)
+    )
+    stripped = list(strip_meta.get("stripped_columns") or [])
 
     # LightGBM: deeper + more leaves for max accuracy on this CPU
     result = train_lgbm_residual(
@@ -112,6 +145,7 @@ def main() -> int:
         prior_col=a.prior_col,
         gate2_meta=gate2,
         max_precision=not a.no_max_precision,
+        dual_partner=a.dual_partner,
     )
     rep = result["report"]
     selected = float(rep.get("oof_rmse_selected") or rep.get("oof_rmse") or 1e9)
@@ -146,6 +180,13 @@ def main() -> int:
         "delta_vs_5ft": selected - TARGET_FT,
         "n_stations": int(rep.get("n_stations") or 0),
         "n_wells": int(rep.get("n_wells") or 0),
+        "kernel_id": _k.kernel_id(),
+        "kernel_private": bool(_k.is_private()),
+        "kernel_note": getattr(_k, "_load_note", None),
+        "RWT_KERNEL": os.environ.get("RWT_KERNEL"),
+        "report_kernel_id": rep.get("kernel_id"),
+        "report_kernel_private": rep.get("kernel_private"),
+        "stations_csv_stripped_columns": stripped,
         "gate2": gate2,
         "gates": rep.get("gates"),
         "baseline_rmse": floors,

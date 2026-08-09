@@ -62,3 +62,365 @@ integration via full `train_lgbm_residual` path (constants unit-tested).
 ## Proceed
 
 Public path sealed. Crown gap → private_kernel beam/DTW (gitignored), not more public LGBM alone.
+
+## Loop (sub-5' TVT RMSE scheduled fire)
+
+Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) and delta vs prior.
+
+| Cycle | Date (UTC) | Branch / PR | Lever | selected_oof_ft | best_floor_ft | beam_blend_ft | last_known_ft | Δ selected | Gate3 | beats_5ft | Note |
+|------:|------------|-------------|-------|----------------:|--------------:|--------------:|--------------:|-----------:|-------|-----------|------|
+| 0 | seal | main | baseline seals | **14.67** (773w) | **15.11** stack | 11.924 | 10.788 | — | ACCEPT residual | false | beam lost to last_known |
+| 1 | 2026-08-07 | `feat/private-beam-conf-clamp` / #14 | private beam stalk v2 | 14.67 (unchanged; no full GKF) | 15.11 (public) | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | **beam blend beats last_known** (−0.032); pure beam 10.775; clamp_origin freeze + GR-rel conf + NCC reseed offline |
+| 2 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: comparable last-known cohort | 14.67 | 15.11 | 10.756 (prior pilot) | 10.788 | 0.00 selected | n/a | false | measure script: finite last∩y∩blend∩beam mask; win-rate/delta same cohort |
+| 3 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: drop redundant int(len) | 14.67 | 15.11 | 10.756 | 10.788 | 0.00 selected | n/a | false | Ruff RUF046; 3× abs(Δselected)<0.05 + CR cleared → **coherence plateau STOP** |
+| 4 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | re-arm: lattice Viterbi + conf-gate; CR md pipes | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (−0.007 vs beam, −0.040 vs last); pure lattice 10.804 reject; no GKF (gap≪0.3); plateau continues |
+| 5 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR fix: lattice mask + ledger honesty | 14.67 | 15.11 | **10.756** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.749** (Δcg ~0); pure lattice **10.903** (honest shared mask); CR cleared; no GKF; continue (CR fixed this cycle) |
+| 6 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | heel GR affine + soft conf_gate; reverse REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | conf_gate **10.705** (Δcg **−0.044**); reverse_pass →11.056 REJECT; pure lat 10.686; no GKF; plateau reset (Δcg≥0.02) |
+| 7 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + denser/beam-led REJECT; 64w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | FALLBACK 64w pure 12.40 | false | denser129 pure lat **10.801 REJECT**; v8 conf_gate **10.710 REJECT**; keep v6 **10.705**; CR header/loader/params; plateau no-inc (CR fixed) |
+| 8 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + emit_gate REJECT; all_stack REGRESS | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | all_stack 15.20 ACCEPT; promotion rejected | false | emit_gate **10.738 REJECT** vs conf_gate **10.706**; keep deploy 10.705; CR B007+min_stations; plateau no-inc (CR) |
+| 9 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR + private beam residual feats; 16w G3 FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 | false | beam residual X wired; 8w ACCEPT 10.58 cohort; 16w res 12.02 loses stack; CR emit_conf+Gate3 wording; plateau no-inc (CR) |
+| 10 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private output guard + cert kernel | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 hold | false | strip prior_beam from stations.csv; export strip; cert kernel_*; nan delta tests; plateau no-inc (CR) |
+| 11 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | multi-field lattice floor + pure-lat conf_gate; heatmap REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot | false | pure lat multi-field **10.544**; conf_gate **10.699** (delta_cg -0.007 KEEP); heatmap blend **15.98 REJECT**; plateau_B=1 |
+| 12 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR heatmap cohort + lattice residual feats | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w ACCEPT 10.50 smoke | false | conf_gate **10.699** hold; heatmap out of deploy mask; write_stations_csv helper; 8w lattice residual ACCEPT 10.50; plateau no-inc (CR) |
+| 13 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private export + 16w lattice residual FALLBACK | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w FALLBACK pure 11.95 | false | conf_gate **10.699** hold; write_private_full default off; pred schema guard; 16w res 12.97 loses stack; 8w smoke not promoted; plateau no-inc (CR) |
+| 14 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR casefold export + lattice residual base REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w lattice-base ACCEPT 10.88 worse | false | casefold priv strip; lattice_tvt base 10.88 / blend 10.87 ACCEPT but lose to prior_best-base 10.50; keep features not base; conf_gate 10.699; plateau no-inc (CR) |
+| 15 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | dual residual best+lattice KEEP micro | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual ACCEPT 10.476 | false | dual --prior-col prior_best --dual-partner prior_lattice_tvt OOF **10.476** (vs single 10.502, Δ−0.026); conf_gate 10.699; not promote 8w; plateau no-inc if CR quiet |
+| 16 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR dual partner + private floor redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.476 (no retrain) | false | reject dual_partner==prior_col; lattice weight tests; public_baseline_rmse redacts beam/lattice floors (RWT_INCLUDE_PRIVATE_METRICS opt-in); 88 tests OK; plateau no-inc (CR) |
+| 17 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | lattice residual X parity + dual re-MEASURE | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 8w dual 3f **ACCEPT 10.465** | false | `prior_lattice_delta_best` + `prior_lat_beam_delta`; dual OOF **10.465** (Δ **−0.011** vs c15 10.476); conf_gate hold; not promote (≪0.3); 5f on 8w early-stops@1 footgun; plateau_B=1 |
+| 18 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR Gate3 floor redact + docs/RUF003 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 (no retrain) | false | public_gate3_dict redacts floor_rmses/best_floor_*; ASCII minus in features comment; 8w dual table split from 40w pilot; tests; plateau no-inc (CR) |
+| 19 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate pure lat arm KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.674** (Δcg **−0.024** vs v11 10.699); lat_arm=pure margin=0.03; pure_lat_boost alone max −0.01 REJECT; pure lat floor 10.544; no GKF; plateau_B **reset** |
+| 20 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR private-only Gate3 numeric redact | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold dual 10.465 / conf_gate 10.674 | false | public_gate3_dict nulls oof_rmse_best_floor when only private floors remain; regression test; plateau no-inc (CR) |
+| 21 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate lattice-led KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.608** (Δcg **−0.066** vs v12 10.674); pure_lat hold **10.544** (Δpure **0.00**); gap_cg→pure **0.064**; margin −0.05 lat_floor 0.08; plateau_B **reset** |
+| 22 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR heatmap pair mask + ledger clarity | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.608 | false | heatmap last/conf_gate RMSEs paired on m_heat; ledger pure_lat Δ 0.00 (not 0.217 invent); Δcg −0.066 keep labeled; plateau no-inc (CR) |
+| 23 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate margin −0.08 KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.569** (Δcg **−0.039** vs v13 10.608); pure_lat 10.544 hold; gap_cg→pure **0.026**; margin −0.08 lat_floor 0.08; plateau_B **reset** |
+| 24 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR seal-label guard + RUF046 | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.569 | false | trial_v14 only if sealed knobs+40w; run_config/is_sealed_v14_config; drop int(len); plateau no-inc (CR) |
+| 25 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate margin −0.10 KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.544** (Δcg **−0.026** vs v14 10.569); ~pure_lat floor; dual w70/30 **REJECT** 10.469; seal v15; plateau_B **reset** |
+| 26 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR v15 seal max_wells_arg guard | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.544 / dual 10.465 | false | is_v15_seal requires max_wells_arg==40 (not only n_wells==40); drop int(len(C)); skip invent pure_lat 0.217 (cycle-22 honest); plateau no-inc (CR) |
+| 27 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | 16w dual FALLBACK + conf_gate residual X REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w dual **FALLBACK pure 11.95**; 8w cg-X dual ACCEPT 11.07 worse | false | 16w dual res **12.611** loses stack 11.949; conf_gate residual-X **REJECT** (8w dual 11.07 vs seal dual 10.465); keep conf_gate export as floor/dual base only; pure pilot hold 10.544; plateau no-inc (lever reject) |
+| 28 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | conf_gate residual base dual REJECT; lat_floor 0.05 REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | dual-cg **ACCEPT 11.187** worse; single-cg **10.834** | false | dual partner conf_gate **REJECT** vs lattice dual seal 10.465; single base cg ACCEPT 10.834 worse; lat_floor 0.05 conf_gate **10.546** (Δcg **+0.002** REJECT vs v15 10.544); keep dual lattice; plateau_B **2/3** |
+| 29 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | multi-field emission rebalance REJECT; plateau STOP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pure pilot | false | shape_w0.55/geom0.25/σ6 pure lat **10.607** / conf_gate **10.567** (vs v9/v15 **10.544** REJECT); measure CLI emission knobs; 3× flat seals no CR → **STOP B** |
+
+### Cycle-29 detail (multi-field emission rebalance REJECT + plateau STOP B)
+
+- **Lever:** multi-field lattice emission rebalance on 40w (`private_beam_pilot_v16_emit`): `shape_weight` 0.45→**0.55**, `geom_weight` 0.35→**0.25**, `shape_sigma` 8→**6**.
+  - pure multi-field lattice **10.607** vs v9 seal **10.544** (Δpure **+0.063 REJECT**)
+  - conf_gate **10.567** vs v15 seal **10.544** (Δcg **+0.023 REJECT**)
+  - Keep v9 emission defaults (0.45 / 0.35 / 8.0) and v15 conf_gate knobs.
+- **Code:** measure CLI `--shape-weight` / `--geom-weight` / `--shape-sigma`; `lattice_emission` in summary; v15 seal requires default emission knobs; private `lattice_prior_for_well` passes emission kwargs.
+- Seals hold: selected **14.67** / best floor **15.11** / conf_gate **10.544** / dual lattice residual **10.465**. beats_5ft=false. Residue never forced.
+- **STOP B:** cycles 27–29 consecutive with |Δselected|<0.05, conf_gate/pure seal hold (|Δseal|<0.02 KEEP), no open CR, no KEEP lever. Sub-5 still needs pure lattice breakout or Gate3 residual that scales past 16w FALLBACK.
+
+### Cycle-28 detail (conf_gate as residual base REJECT + lat_floor micro REJECT)
+
+- **Lever A:** dual residual `prior_best` + `prior_conf_gate_tvt` (0.75/0.25) 8w private `max_prec_8_dual_cgbase`.
+  - Gate3 **ACCEPT** OOF **11.187** ≤ stack **11.393**, but **worse** than lattice dual seal **10.465** → **REJECT as dual partner default**.
+- **Lever B:** single residual base `prior_conf_gate_tvt` 8w `max_prec_8_cgbase`.
+  - Gate3 **ACCEPT** OOF **10.834** ≤ stack 11.393; better than lattice_tvt base 10.88 but still loses lattice dual 10.465 → **REJECT as default base**.
+- **Lever C (pure pilot A/B):** conf_gate `lat_floor` 0.08 → **0.05** (margin −0.10 pure arm hold) 40w `private_beam_pilot_v16_lf05`.
+  - conf_gate **10.546** vs v15 seal **10.544** (Δcg **+0.002** REJECT). Keep lat_floor **0.08**.
+- Seals hold: selected 14.67 / conf_gate **10.544** / dual lattice **10.465** / best floor 15.11. beats_5ft=false. Residue never forced.
+- **Next lever:** pure multi-field lattice improve (emission weights / shape_sigma) beyond 10.544; adaptive residual mask on lattice conf; do not default conf_gate residual base.
+
+### Cycle-27 detail (16w dual Gate3 FALLBACK + conf_gate residual-X REJECT)
+
+- **Lever A MEASURE:** 16w private dual residual (`prior_best` + `prior_lattice_tvt` 0.75/0.25) `artifacts/max_prec_16_dual_lat`.
+  - residual OOF **12.611** loses best floor prior_stack **11.949** → Gate3 **FALLBACK_PURE_PRIOR**; selected **11.949**.
+  - Same cohort pure as cycle-13 lattice-feat (honest reject; residue never forced).
+- **Lever B (synthesis then REJECT residual X):** private kernel exports `prior_conf_gate_tvt/conf` (v15 knobs); floors + dual weight + strip/redact wired.
+  - 8w dual with conf_gate residual X: **ACCEPT** OOF **11.068** vs stack 11.393 but **worse** than dual seal **10.465** → **REJECT conf_gate as default residual X**.
+  - Keep: kernel export, Gate3 floor name, `DUAL_RESIDUAL_WEIGHT_BY_BASE["prior_conf_gate_tvt"]=0.25`, PRIV strip `prior_conf_gate*`.
+  - Drop: conf_gate columns from `FEATURE_COLS_DEFAULT` / attach deltas.
+- Pilot conf_gate hold **10.544** / pure lat **10.544**; selected 773w **14.67** (no ≥0.3 promote). beats_5ft=false.
+- **Next lever:** dual partner `prior_conf_gate_tvt` as residual **base** on ≤8–16w (not residual X); or multi-seed wider only if base beats prior_best dual; pure lattice improve beyond 10.544.
+
+### Cycle-26 detail (CR v15 seal requires requested well cap)
+
+- **Major:** `is_sealed_v15_config` / `trial_v15_conf_gate_40w` only when sealed knobs match **and** `max_wells_arg == 40` (scored `n_wells==40` alone is insufficient: `--max-wells 0` could still score 40).
+- **Minor:** RUF046 — `n_wells: len(C)` (drop redundant `int(len(...))`).
+- **Skip:** CR ask to record pure-lattice movement as `0.217 ft` on Cycle-21 — not a measured pure-lat Δ on this cohort (cycle-22 already corrected; pure_lat hold **10.544**, Δpure **0.00**). Keep Δcg **−0.066** as v12→v13 conf_gate only.
+- Seals hold: selected 14.67 / conf_gate **10.544** / dual **10.465** / best floor 15.11. No re-MEASURE. beats_5ft=false.
+
+### Cycle-25 detail (conf_gate margin −0.10 + dual weight REJECT)
+
+- **Lever A:** conf_gate margin −0.08 → **−0.10** (lat_floor 0.08 hold). Soft beam fallback when lat_conf < floor.
+- **MEASURE 40w:** conf_gate **10.544** / pure lat **10.544** / last 10.788. Δcg **−0.026** vs v14 (≥0.02 KEEP).
+- **Lever B REJECT:** dual residual weights 0.70/0.30 → OOF **10.469** (worse than 0.75/0.25 **10.465**).
+- selected_oof 14.67 (no full GKF; pure gap ≪0.3). beats_5ft=false. Next: residual/Gate3 on conf_gate stalk or pure lattice improve.
+
+### Cycle-24 detail (CR on cycle-23 measure metadata)
+
+- **Major:** `trial_v14_conf_gate_40w` / v14 stalk label only when sealed knobs match and n_wells==40; else `mean_rmse_conf_gate_this_run` + custom stalk; `run_config` always recorded.
+- **Minor:** RUF046 drop redundant `int(len(m_heat))`.
+- Seals hold: selected 14.67 / conf_gate 10.569 / dual 10.465.
+
+### Cycle-23 detail (conf_gate deeper lattice-led)
+
+- **Lever:** conf_gate `margin` −0.05 → **−0.08** (lat_floor 0.08 / soft_temp 0.04 / pure arm hold).
+- **MEASURE 40w:** conf_gate **10.569** / pure lat **10.544** / beam_blend 10.729 / last 10.788.
+- **Δ conf_gate v13→v14:** **−0.039** ft (≥0.02 KEEP). gap cg→pure **0.026** ft.
+- selected_oof 14.67 (no full GKF; pure gap ≪0.3). beats_5ft=false. dual residual 10.465 hold.
+
+### Cycle-22 detail (CR on cycle-21)
+
+- **Minor (measure):** heatmap vs last/conf_gate use station-paired `rmse_last_known_heat` / `rmse_conf_gate_heat` on `m_heat` (not deploy mask `m`).
+- **Ledger clarity:** pure multi-field lattice **hold 10.544** (Δpure **0.00** ft); conf_gate v12→v13 Δcg **−0.066** ft; remaining gap conf_gate→pure **0.064** ft. CR suggested "0.217 pure-lattice movement" — not a measured pure-lat delta on this cohort (skip invent).
+- Seals hold: selected 14.67 / conf_gate 10.608 / dual 10.465.
+
+### Cycle-21 detail (conf_gate lattice-led)
+
+- **Lever:** lattice-led conf_gate — `margin=-0.05`, `lat_floor=0.08`, `soft_temp=0.04`, pure multi-field lat arm.
+- **MEASURE 40w:** conf_gate **10.608** / pure lat **10.544** (Δpure **0.00** hold) / beam_blend 10.729 / last 10.788.
+- **Δ conf_gate v12→v13:** **−0.066** ft (≥0.02 KEEP). Remaining gap conf_gate→pure: **0.064** ft. conf_gate vs last: **−0.180** ft.
+- A/B rejected as sole deploy: margin −0.10 lat_floor 0 → ~pure (10.54); keep soft gate.
+- selected_oof 14.67 (no full GKF; pure gap ≪0.3). beats_5ft=false. dual residual 10.465 hold.
+
+### Cycle-20 detail (CR on cycle-19 Gate3 redact edge)
+
+- **Major:** when `floor_rmses` is private-only, redact `oof_rmse_best_floor` (set `None`) not only the name.
+- Selected OOF / conf_gate seals unchanged (CR-only cycle). conf_gate deploy remains **10.674**.
+
+### Cycle-19 detail (conf_gate pure multi-field lattice arm)
+
+- **Lever:** conf_gate lattice arm = raw multi-field pure lattice (not last-protected lat_blend); beam arm still blend; soft conf switch + margin **0.03**.
+- **MEASURE 40w:** conf_gate **10.674** / pure lat 10.544 / beam_blend 10.729 / last 10.788. Δ vs v11 conf_gate **−0.024** (≥0.02 KEEP deploy).
+- Rejected: pure_lat_boost 0.7/1.0 on blend arm only (−0.005/−0.010).
+- selected_oof 14.67 (no full GKF; pure gap ≪0.3). beats_5ft=false. dual residual 10.465 hold.
+
+### Cycle-18 detail (CR on cycle-17)
+
+- **Major:** nested Gate3 report detail redacts private floors (`public_gate3_dict`) unless `RWT_INCLUDE_PRIVATE_METRICS=1`; in-process Gate3 still uses full floors.
+- **Minor:** RUF003 Unicode minus → ASCII `-` in `features.py` stalk-disagreement comment.
+- **Minor:** CROWN_PATH 8w dual residual rows moved out of 40w pure-prior pilot table.
+- Selected OOF / conf_gate seals unchanged (CR-only cycle).
+
+### Cycle-17 detail (lattice residual feature parity)
+
+- **Lever:** residual X — `prior_lattice_delta_best` (parity w/ beam) + `prior_lat_beam_delta` (label-free stalk disagreement).
+- **MEASURE:** reuse 8w `stations_private_full` dual `prior_best`+`prior_lattice_tvt`, **3-fold** (c15 parity; 5-fold on 8w → early-stop@1 / OOF~11.1 invalid).
+- Dual OOF **10.465** ACCEPT vs stack floor 11.393 (Δ **−0.011** vs c15 dual 10.476). conf_gate pilot **10.699** hold.
+- selected_oof 14.67 unchanged (no full GKF). beats_5ft=false. Micro KEEP residual feats; no 773w promote.
+
+### Cycle-16 detail (CR on cycle-15 dual residual)
+
+- **Major:** `baseline_rmse` / `beats_baselines` no longer serialize private floors (`prior_beam_*`, `prior_lattice_*`) by default; Gate3 still scores full in-process floors. Opt-in: `RWT_INCLUDE_PRIVATE_METRICS=1`.
+- **Minor:** explicit `dual_partner == prior_col` → `ValueError` (no silent single-head).
+- **Trivial:** order-independent weight assertions for `prior_lattice_tvt` / `prior_lattice_blend`.
+- Selected OOF / conf_gate seals unchanged (no GKF this cycle).
+
+### Cycle-1 detail (private pilot, 40 wells)
+
+- **Prior pilot seal:** blend 11.924 / last_known 10.788 / `beats_last_known_mean=false`
+- **v2 MEASURE:** blend **10.756** / pure beam **10.775** / last_known 10.788 / `beats_last_known_mean=true` / frac wells beat 0.475 / mean_conf 0.464
+- **Δ blend vs prior pilot:** −1.168 ft (clamp_origin was the main pure-beam fix; relative-GR conf enables blend)
+- **Not yet:** GroupKFold residual stack with beam prior as floor; hunt 5 ft still NEED_IMPROVE
+- **Next lever:** beam residual feature into Gate3-honest residual head **or** lattice/DTW denser stalk; full 773w only if pure floor moves ≥0.3 ft on same cohort (pilot pure-beam gap vs last_known is 0.013; beam_blend gap is 0.032 — both below threshold)
+
+### Cycle-2 detail (CR on PR #14)
+
+- CodeRabbit **Major**: non-finite `last[m]` made `r_last=NaN` but `beats_last_known=False` → win-rate counted losses; aggregates mixed cohorts.
+- Fix: require finite `last` (and beam) on predict mask before scoring; aggregates use shared comparable cohort only.
+- Selected OOF unchanged (no GKF this cycle). Next: lattice/DTW stalk or Gate3 beam residual feature.
+
+### Cycle-3 detail (CR polish + plateau)
+
+- CodeRabbit Trivial: remove redundant `int(len(C))` / `int(len(R))` (RUF046).
+- Major from cycle-1 review already resolved in cycle-2 (line outdated).
+- Selected OOF still 14.67 (no full GKF; pilot pure gap to last_known 0.03 < 0.3 promote).
+- **STOP — coherence plateau:** three consecutive cycles with `abs(Δ selected_oof) < 0.05` (all 0.00) and open CR fixes cleared. Sub-5 not sealed; resume only on new lever / user re-arm.
+
+### Stop criteria check
+
+- beats_5ft: **false** (selected OOF still ~14.67; pilot conf_gate **10.699**; 8w dual residual smoke **10.476**)
+- Plateau B: cycle-15 lever improved 8w residual |Δ|≥0.02 vs single-base smoke → **plateau reset 0/3**; **continue**
+- No open CR this cycle (casefold already landed cycle-14)
+
+### Cycle-4 detail (re-arm lattice denser stalk)
+
+- **Lever:** private band-lattice Viterbi (`lattice_match.py`, gitignored) + label-free conf-gate vs beam blend.
+- **40w MEASURE (shared comparable cohort):**
+
+| Prior | mean RMSE (ft) | vs last_known | vs beam_blend |
+| --- | ---: | ---: | ---: |
+| last_known | 10.788 | — | — |
+| beam_blend (v2 seal) | **10.756** | −0.032 | — |
+| lattice_blend | 10.804 | +0.015 | +0.047 **reject pure** |
+| fuse conf-weight | 10.796 | +0.008 | +0.040 reject |
+| **conf_gate (deploy)** | **10.749** | **−0.040** | **−0.007** |
+| oracle stalk (diag only) | 10.608 | −0.180 | −0.149 (label leak; not deploy) |
+
+- Selected OOF unchanged 14.67 (no full GKF; pure/selected move ≪ 0.3 ft promote threshold).
+- CR: escape/remove raw `abs(Δselected)` pipes in loop table (cycle-3 cell broke markdown columns).
+- conf_gate micro-beat not enough to promote; CR follow-ups deferred to cycle-5.
+
+### Cycle-5 detail (CR integrity + mask)
+
+- **Lever:** CodeRabbit cycle-4 review (≤4 fixes):
+  1. `measure_private_beam_pilot.py`: include raw `prior_lattice_tvt` in shared comparable mask (Major).
+  2. Ledger: keep `beam_blend_ft=10.756` in column; conf_gate in Note.
+  3. Ledger: pure-beam gap vs last_known = 0.013 (blend gap 0.032) wording.
+  4. Ledger: mark Markdown-pipe / prior CR as Cleared.
+- **40w MEASURE (post-mask, artifacts/private_beam_pilot_v3):**
+
+| Prior | mean RMSE (ft) | vs last_known | vs beam_blend |
+| --- | ---: | ---: | ---: |
+| last_known | 10.788 | — | — |
+| beam_blend | **10.756** | −0.032 | — |
+| pure lattice (honest) | **10.903** | +0.114 | +0.146 reject |
+| lattice_blend | 10.804 | +0.015 | +0.047 reject |
+| fuse | 10.796 | +0.008 | +0.040 reject |
+| **conf_gate (deploy)** | **10.749** | **−0.040** | **−0.007** |
+| oracle stalk (diag) | 10.608 | −0.180 | −0.149 |
+
+- Δ conf_gate vs cycle-4 seal: ~0.000 (still 10.749); Δ selected_oof: 0.00
+- No full GKF (pure/selected move ≪ 0.3 ft). **continue** (CR fixed; do not plateau-stop).
+- **Next lever:** conf_gate/beam process (reseed/band/weights) toward ≤9.0 **or** Gate3 residual with beam conf_gate prior (private measure).
+
+### Cycle-6 detail (heel GR affine KEEP + reverse REJECT)
+
+- **Lever A (rejected):** beam `reverse_pass=True`, reversion 0.04, ncc_reseed_every=120 → **conf_gate 11.056 / beam 11.076**. Restored v2 stalk knobs.
+- **Lever B (kept):** heel GR affine (`fit_heel_gr_affine`) + adaptive gr_sigma on beam/lattice; soft conf_gate (logistic + agree@2ft).
+- **40w MEASURE (artifacts/private_beam_pilot_v6):**
+
+| Prior | mean RMSE (ft) | vs last_known | vs prior seal |
+| --- | ---: | ---: | ---: |
+| last_known | 10.788 | — | — |
+| beam_blend v2 seal | 10.756 | −0.032 | — |
+| **beam_blend v6 affine** | **10.729** | **−0.060** | −0.027 vs v2 |
+| pure beam v6 | 10.730 | −0.058 | — |
+| pure lattice v6 | **10.686** | −0.102 | beats pure beam |
+| lattice_blend v6 | 10.760 | −0.028 | — |
+| fuse v6 | 10.769 | −0.020 | — |
+| conf_gate v3 hard seal | 10.749 | −0.040 | — |
+| **conf_gate v6 (deploy)** | **10.705** | **−0.083** | **Δcg −0.044** |
+| reverse_pass trial (rej.) | 11.056 | +0.267 | — |
+| oracle stalk (diag) | 10.594 | −0.195 | label leak |
+
+- Δ conf_gate vs cycle-5: **−0.044** (≥0.02 → plateau reset); Δ selected_oof: 0.00; no open CR
+- No full GKF (pure move 0.027–0.044 ≪ 0.3 promote). **continue**
+- Note: pure lattice (10.686) best raw stalk; conf_gate still preferred deploy (label-free floor protect via blends).
+- **Next lever:** denser lattice on affine GR / lattice-led conf_gate weights / Gate3 residual from conf_gate prior; do not re-enable reverse_pass without per-well guard.
+
+### Cycle-7 detail (CR integrity + denser/beam-led REJECT + 64w Gate3)
+
+- **CR (≤4 from cycle-6 review):**
+  1. `docs/CROWN_PATH.md`: table header `blend RMSE` → `mean RMSE (ft)`.
+  2. `private_kernel/README.md`: document `get_kernel()` + `is_private()==True` loader contract.
+  3. `measure_private_beam_pilot.py`: `n_wells_scanned` + `n_wells_eligible` (not mislabeled raw).
+  4. Explicit `conf_gate_params` / `lattice_n_nodes` in measure summary for seal reproducibility.
+- **Lever A (REJECT):** denser lattice `n_nodes=129` → pure lattice **10.801** (vs v6 **10.686**).
+- **Lever B (REJECT):** beam-led conf_gate margin0.10/lat_floor0.20 → conf_gate **10.710** (vs seal **10.705**). Artifacts: `private_beam_pilot_v8_40w`.
+- **Deploy hold:** conf_gate **10.705** / beam_blend **10.729** / last_known 10.788 (v6 seal).
+- **Public 64w GroupKFold** (`artifacts/max_prec_64_now`): residual OOF **12.547** vs best floor prior_stack **12.398** → Gate3 **FALLBACK_PURE_PRIOR**; selected **12.398**; beats_5ft false. Honest residual reject.
+- Δ selected_oof (773w seal): 0.00; Δ deploy conf_gate: 0.00; no 773w promote (gap ≪ 0.3). Concurrent full-stack train may still be running offline — not promoted from this pilot gap.
+- **Next lever:** Gate3 residual features from private conf_gate prior (export columns only) / multi-scale GR NCC stalk; avoid denser lattice without per-well adaptive nodes.
+
+### Cycle-8 detail (CR + GR emission REJECT + all_stack audit)
+
+- **CR (≤4 from cycle-7 review):**
+  1. Drop unused `enumerate` index in measure loop (Ruff B007).
+  2. Record `min_comparable_stations=20` in summary + cohort string.
+- **Lever (REJECT):** `gr_emission_gate` — station-wise pick beam_blend vs lat_blend by typewell GR emission (heel-affine TW GR). 40w (`artifacts/private_beam_pilot_v9_emit`):
+
+| Prior | mean RMSE (ft) | vs conf_gate |
+| --- | ---: | ---: |
+| last_known | 10.788 | — |
+| beam_blend v6 | 10.729 | — |
+| conf_gate deploy | **10.706** | — |
+| **emit_gate trial** | **10.738** | **+0.032 REJECT** |
+| pure lattice | 10.686 | — |
+| oracle (diag) | 10.592 | — |
+
+- **Deploy hold:** conf_gate ~**10.705–10.706** (v6 seal).
+- **Public full 773w `max_prec_all_stack`** (prior_col=prior_stack residual base): selected residual **15.200** vs floor stack **15.760** (Gate3 ACCEPT) but **worse than sealed max_prec_all 14.67** → **do not promote**; seal remains 14.67 / best floor 15.11.
+- Δ selected_oof (promoted seal): 0.00; Δ deploy conf_gate: ~0; no 773w promote from pilot.
+- **Next lever:** private conf_gate / beam columns as residual **features** (not residual base alone) on ≤64w; or soft-neighbor / multi-scale NCC stalk denser only when conf drops.
+
+### Cycle-9 detail (CR + private beam residual features)
+
+- **CR (≤4 from cycle-8 review):**
+  1. Ledger cycle-8 Gate3 cell: `ACCEPT; promotion rejected` (not conflated with promotion).
+  2. measure: drop unused `emit_conf` (Ruff RUF059).
+  3. private_kernel README: `is_private()` contract is **truthy** (matches `if not k.is_private()`).
+- **Lever:** residual **features** from private beam (`prior_beam_tvt/conf/blend` + deltas vs stack/last/best) in `FEATURE_COLS_DEFAULT`; floors include beam pure; `train_max_precision --kernel private` + repo root on `sys.path`.
+- **MEASURE:**
+  - 8w private (smoke): residual **ACCEPT** OOF **10.576** vs floor stack **11.393** (beam feats present).
+  - 16w private (`artifacts/max_prec_16_beam_feat`): residual OOF **12.018** loses best floor prior_stack **11.949** → Gate3 **FALLBACK_PURE_PRIOR**; selected **11.949**; beam pure floor ~12.86–12.97 (worse than stack).
+- Deploy pilot conf_gate hold **10.705**; 773w seal **14.67** unchanged (no ≥0.3 promote).
+- **Next lever:** conf_gate export as residual feature/floor; adaptive residual mask on beam conf; or ≤64w only when residual beats pure on multi-seed. Do not force residue.
+
+### Cycle-10 detail (CR private output guard + cert provenance)
+
+- **CR (≤4 from cycle-9 review):**
+  1. README: private beam residual columns only when kernel_private resolution succeeds; fail-closed PublicKernel omits them.
+  2. **Major:** do not publish private stalks via --out/stations.csv — write stripped stations.csv + optional local-only stations_private_full.csv; export bundle also strips prior_beam*.
+  3. measure_vs_5ft.json cert includes kernel_id, kernel_private, kernel_note, RWT_KERNEL.
+  4. Unit test non-finite operands → NaN deltas in attach_private_residual_deltas.
+- **MEASURE hold:** 16w private residual still FALLBACK pure stack **11.95** (res ~12.02); 8w smoke ACCEPT not promoted; pilot conf_gate **10.705**; 773w seal **14.67**.
+- A/B residual base default on 16w reaffirmed FALLBACK (residue never forced).
+- **Next lever:** multi-seed ≤32–64w private only if residual beats pure; conf_gate column as residual feature/floor; adaptive mask on prior_beam_conf.
+
+### Cycle-11 detail (multi-field lattice + pure-lat conf_gate; heatmap REJECT)
+
+- **Lever A (KEEP floor):** multi-field lattice emission (GR level + shape + e_ref) → pure lattice **10.544** vs v6 pure **10.686** (Δ **−0.142**). Artifacts: private_beam_pilot_v9_mf.
+- **Lever B (KEEP deploy micro):** conf_gate with pure_lattice + pure_lat_boost=0.45, margin 0.06, lat_floor 0.15 → conf_gate **10.6985** vs seal 10.7054 (Δcg **−0.007**). Artifacts: private_beam_pilot_v11_purelat.
+- **Lever C (REJECT):** GR heatmap field index → pure **17.9** / blend **16.0** (far worse than last_known). Do not deploy.
+- **40w comparable cohort (v11):**
+
+| Prior | mean RMSE (ft) | vs last_known |
+| --- | ---: | ---: |
+| last_known | 10.788 | — |
+| beam_blend v6 | 10.729 | −0.060 |
+| pure multi-field lattice | **10.544** | **−0.244** |
+| lattice_blend | 10.750 | −0.038 |
+| conf_gate v6 seal | 10.705 | −0.083 |
+| **conf_gate v11 pure-lat** | **10.699** | **−0.090** |
+| heatmap blend | 15.978 | +5.19 reject |
+| oracle (diag) | 10.464 | label leak |
+
+- Selected OOF 14.67 unchanged (pure/deploy move ≪ 0.3 promote). Residue never forced.
+- **Next lever:** export multi-field lattice + conf as residual features/floors on ≤32–64w private; conf_gate further lattice-led only if conf calibrated; kill heatmap until template match beats last_known.
+
+### Cycle-12 detail (CR + multi-field lattice residual features)
+
+- **CR (≤4 from cycle-11 review):**
+  1. Ledger: delete truncated duplicate Cycle-11 table row.
+  2. **Major:** deploy cohort mask no longer requires finite heatmap (diag-only); separate heatmap support mask for heat RMSEs.
+  3. Shared write_stations_csv / public_station_columns in src/rwt/train.py used by train CLIs.
+  4. Export strip extends to prior_lattice* / prior_heatmap*.
+- **Lever:** private kernel exports multi-field prior_lattice_tvt/conf/blend + deltas in residual X and floors.
+- **MEASURE:**
+  - 40w pilot remeasure (private_beam_pilot_v12_cohort): conf_gate **10.699** hold; pure multi-field lattice **10.544**; heatmap still REJECT (~16 blend) on separate mask.
+  - 8w private residual smoke (max_prec_8_lattice_feat): residual **ACCEPT** OOF **10.502** vs floor stack **11.393** (beam-only smoke was 10.576) — cohort-only; not promoted.
+- Selected 773w seal **14.67** unchanged. Residue never forced.
+- **Next lever:** ≤16–32w multi-seed private lattice residual if 8w holds; adaptive mask on lattice conf; do not promote smoke.
+
+### Cycle-13 detail (CR private export + 16w lattice residual)
+
+- **CR (≤4 from cycle-12 review):**
+  1. measure: delta_heatmap_vs_conf_gate uses heatmap cohort H for both terms.
+  2. **Major:** write_private_full defaults **False**; train_max_precision requires --write-private-stations opt-in.
+  3. export_competition_bundle: validate --pred schema; reject proprietary column prefixes before write.
+  4. train CLI write_stations_csv(..., write_private_full=False).
+- **Lever MEASURE:** 16w private multi-field lattice residual features (max_prec_16_lattice_feat): residual OOF **12.968** loses best floor prior_stack **11.949** → Gate3 **FALLBACK_PURE_PRIOR**; selected **11.949**. 8w smoke ACCEPT 10.50 not promoted (cohort-only).
+- Pilot conf_gate hold **10.699**; pure multi-field lattice **10.544**; 773w seal **14.67**. Residue never forced.
+- **Next lever:** pure multi-field lattice as residual **base** (not only feature) on ≤16w if Gate3 honest; or conf-adaptive residual mask; avoid full 773w promote.
+
+### Cycle-14 detail (CR casefold + lattice residual base)
+
+- **CR:** export/features proprietary-prefix checks use `str.casefold()` so mixed-case headers (e.g. `Prior_Beam_TVT`) are rejected; same for `public_station_columns`.
+- **Lever:** residual **base** = multi-field lattice (not only residual X features).
+  - 8w `prior_lattice_tvt` base: residual **ACCEPT** OOF **10.882** vs stack floor **11.393** but **worse** than prior_best-base smoke **10.502** → **REJECT as default base**.
+  - 8w `prior_lattice_blend` base: residual **ACCEPT** OOF **~10.865** (log) — still worse than prior_best base.
+  - 16w lattice-as-feature remains FALLBACK pure 11.95 (cycle-13).
+- Keep lattice as residual **features/floors**; residual base stays `prior_best` / public defaults.
+- Pilot conf_gate **10.699**; pure multi-field lattice floor **10.544**; 773w seal **14.67**. Residue never forced.
+- **Next lever:** conf-adaptive residual mask on lattice conf; or soft-ensemble residual heads (best + lattice) only if OOF improves on ≥16w multi-seed.
+
+### Cycle-15 detail (dual residual prior_best + lattice)
+
+- **Lever:** CLI `--dual-partner prior_lattice_tvt` with primary `prior_best` (weights 0.75/0.25). API: `train_lgbm_residual(..., dual_partner=...)`.
+- **MEASURE 8w private** (`artifacts/max_prec_8_dual_lat`): residual **ACCEPT** OOF **10.476** vs floor stack **11.393** (Δ **−0.026** vs single prior_best lattice-feat smoke **10.502**). Gate3 honest ACCEPT.
+- Not promoted: 8w cohort only; 16w lattice-feature residual still FALLBACK pure 11.95 (cycle-13).
+- Pilot conf_gate **10.699**; pure multi-field lattice **10.544**; 773w seal **14.67**. Residue never forced.
+- **Next lever:** dual residual on 16w multi-seed; if ACCEPT and improves ≥0.3 vs pure, consider wider pilot. Adaptive lattice-conf mask secondary.
+

@@ -358,6 +358,49 @@ def finalize_after_spatial(
     return stations
 
 
+def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
+    """
+    Label-free residual X helpers when private kernel attached prior_beam_* /
+    prior_lattice_*.
+
+    Public path has no private columns → no-op. Deltas are finite only when
+    both arms are finite (no poison mid/extrap).
+    """
+    out = stations
+    extras: dict[str, np.ndarray] = {}
+
+    def _delta(src_col: str, ref_col: str, out_col: str) -> None:
+        if src_col not in out.columns or ref_col not in out.columns:
+            return
+        a = out[src_col].to_numpy(dtype=float)
+        b = out[ref_col].to_numpy(dtype=float)
+        d = a - b
+        d[~np.isfinite(a) | ~np.isfinite(b)] = np.nan
+        extras[out_col] = d
+
+    if "prior_beam_tvt" in out.columns:
+        _delta("prior_beam_tvt", "prior_stack", "prior_beam_delta_stack")
+        _delta("prior_beam_tvt", "prior_last_tvt", "prior_beam_delta_last")
+        _delta("prior_beam_tvt", "prior_best", "prior_beam_delta_best")
+    if "prior_lattice_tvt" in out.columns:
+        _delta("prior_lattice_tvt", "prior_stack", "prior_lattice_delta_stack")
+        _delta("prior_lattice_tvt", "prior_last_tvt", "prior_lattice_delta_last")
+        # Parity with beam: lattice vs residual base (prior_best)
+        _delta("prior_lattice_tvt", "prior_best", "prior_lattice_delta_best")
+    # Stalk disagreement (label-free): lattice - beam when both private arms finite
+    if "prior_lattice_tvt" in out.columns and "prior_beam_tvt" in out.columns:
+        _delta("prior_lattice_tvt", "prior_beam_tvt", "prior_lat_beam_delta")
+    # Note: prior_conf_gate_* is exported by private kernel for dual/base floors.
+    # Cycle-27: residual-X deltas regressed 8w dual (11.07 vs 10.47) — not in FEATURE_COLS.
+    # Cycle-28: dual partner / single base conf_gate ACCEPT but lose to lattice dual seal
+    # 10.465 (dual-cg 11.19 / single-cg 10.83) — keep lattice dual as residual default.
+    if extras:
+        out = out.copy()
+        for k, v in extras.items():
+            out[k] = v
+    return out
+
+
 def seal_station_frame(
     stations: pd.DataFrame,
     lateral: pd.DataFrame,
@@ -371,6 +414,7 @@ def seal_station_frame(
     stations = finalize_after_spatial(stations, df, split, typewell)
     kernel = resolve_kernel()
     stations = kernel.augment_station_frame(stations, df, typewell)
+    stations = attach_private_residual_deltas(stations)
     stations = embed_column(stations)
     return stations
 
@@ -758,6 +802,20 @@ FEATURE_COLS_DEFAULT = [
     "curv_x_pf_std",
     "ncc_lag_consistency",
     "nb_offset_x_ok",
+    # private kernel residual features (present only when RWT_KERNEL=private)
+    "prior_beam_tvt",
+    "prior_beam_conf",
+    "prior_beam_blend",
+    "prior_beam_delta_stack",
+    "prior_beam_delta_last",
+    "prior_beam_delta_best",
+    "prior_lattice_tvt",
+    "prior_lattice_conf",
+    "prior_lattice_blend",
+    "prior_lattice_delta_stack",
+    "prior_lattice_delta_last",
+    "prior_lattice_delta_best",
+    "prior_lat_beam_delta",
 ]
 
 

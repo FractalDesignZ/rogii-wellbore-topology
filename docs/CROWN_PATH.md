@@ -2,6 +2,10 @@
 
 **RESTRICT:** no Kaggle submit. Measure = GroupKFold OOF + Gate3 + seals.
 
+**Manifold construct:** typewell = interpolated formation grid; lateral = test manifold;
+stalks **index** stations onto TVT; geometry/neighbor/conf are a **multi-dim overlay**.
+See [MANIFOLD_OVERLAY.md](MANIFOLD_OVERLAY.md) (integrate → fully dimensionalize → proceed).
+
 **Task construct (GR@TVT):** geology = typewell book \(\mathrm{GR}=G_{\mathrm{tw}}(\mathrm{TVT})\);
 laterals = paths to place on that book; residual = gated polish only. Full decompose/align:
 [`TASK_GR_TVT_CONSTRUCT.md`](TASK_GR_TVT_CONSTRUCT.md).
@@ -27,8 +31,42 @@ competitors: typewell stalk fidelity + clamp law + residual only if it beats flo
 ## What still is RESIDUE
 
 - Full 773w residual ~14.5 vs LB ~6–7 / hunt 5 ft.
-- Private beam / DTW / sheaf stalk offline.
+- Private beam / DTW / sheaf stalk offline (gitignored).
 - Public PF is discrete particle — not full lattice Viterbi.
+
+### Private beam pilot (local only, 40w)
+
+| Version | mean RMSE (ft) | last_known | beats last_known |
+| --- | ---: | ---: | --- |
+| v1 (sliding clamp) | 11.924 | 10.788 | no |
+| v2 (freeze origin + GR-rel conf + NCC reseed) | 10.756 | 10.788 | yes (−0.032) |
+| lattice_blend (pre-affine) | 10.804 | 10.788 | no (reject) |
+| v3 conf_gate | 10.749 | 10.788 | yes (−0.040 vs last) |
+| v4.1 soft conf_gate | 10.747 | 10.788 | yes (−0.041) |
+| **v6 conf_gate** (heel affine + adaptive σ) | **10.705** | 10.788 | **yes (−0.083 vs last; −0.051 vs v2 blend)** |
+| pure lattice v6 (diag) | 10.686 | 10.788 | yes (−0.102) — not deploy alone |
+| pure multi-field lattice v9 | **10.544** | 10.788 | yes (−0.244) — floor; not sole deploy |
+| v11 conf_gate (pure-lat boost on multi-field blend arm) | 10.699 | 10.788 | yes (−0.090) prior deploy |
+| v12 conf_gate (pure multi-field lat arm, margin 0.03) | 10.674 | 10.788 | yes (−0.114) prior deploy |
+| v13 conf_gate (lattice-led margin −0.05, lat_floor 0.08) | 10.608 | 10.788 | yes (−0.180) prior deploy |
+| v14 conf_gate (lattice-led margin −0.08, lat_floor 0.08) | 10.569 | 10.788 | yes (−0.219) prior deploy |
+| **v15 conf_gate** (lattice-led margin −0.10, lat_floor 0.08) | **10.544** | 10.788 | **yes (−0.245)** deploy KEEP (~pure) |
+| heatmap blend v10 | 15.98 | 10.788 | no (reject) |
+
+Law: private source never pushed; export predictions only. Gate3 still owns residual accept on public path.
+Oracle per-well stalk min (~10.46) is diagnostic only — not a deploy prior.
+Reverse_pass / dense NCC reseed / heatmap field index rejected.
+
+### Dual residual smoke (local only, 8w, 3-fold)
+
+Not comparable to the 40w pure-prior pilot table above (different cohort + residual head).
+
+| Version | OOF selected (ft) | best pure floor | Gate3 |
+| --- | ---: | ---: | --- |
+| dual residual best+lattice c15 | **10.476** | stack 11.393 | ACCEPT micro (not promote) |
+| dual + lattice delta_best / lat-beam X c17 | **10.465** | stack 11.393 | ACCEPT micro (−0.011); residual X KEEP |
+
+**Fold note:** 8-well dual needs `n_splits≤3` (5-fold → 1-well val folds early-stop@1).
 
 ## Measure (12w crown set-19 — all-suggestions reassemble)
 

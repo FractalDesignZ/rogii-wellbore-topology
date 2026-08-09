@@ -40,12 +40,131 @@ DUAL_RESIDUAL_ENSEMBLE = False
 DUAL_RESIDUAL_WEIGHT_BY_BASE: dict[str, float] = {
     "prior_best": 0.75,
     "prior_stack": 0.25,
+    "prior_lattice_tvt": 0.25,
+    "prior_lattice_blend": 0.25,
+    "prior_conf_gate_tvt": 0.25,
 }
 # Crown residual LGBM: deep profile is the measure-tuned default (set-16/17).
 CROWN_DEEP_RESIDUAL = True
 # Serve refit floor under deep (fold best_iters often early-stop << 2000).
 N_REFIT_FLOOR_DEEP = 400
 N_REFIT_FLOOR_SHALLOW = 200
+
+# Private / proprietary station columns never published in stations.csv
+PRIV_STATION_PREFIXES: tuple[str, ...] = (
+    "prior_beam",
+    "prior_lattice",
+    "prior_heatmap",
+    "prior_conf_gate",
+    "private_",
+    "sheaf_",
+)
+# Private pure-floor names (Gate3 still scores them; report JSON redacts by default)
+PRIV_FLOOR_NAMES: frozenset[str] = frozenset(
+    {
+        "prior_beam_blend",
+        "prior_beam_tvt",
+        "prior_lattice_blend",
+        "prior_lattice_tvt",
+        "prior_conf_gate_tvt",
+    }
+)
+
+
+def _include_private_metrics() -> bool:
+    flag = os.environ.get("RWT_INCLUDE_PRIVATE_METRICS", "").strip().lower()
+    return flag in ("1", "true", "yes", "on")
+
+
+def public_baseline_rmse(baseline_rmse: dict[str, float]) -> dict[str, float]:
+    """
+    Drop private-kernel floor metrics from serialized reports by default.
+
+    Gate3 still evaluates private floors in-process. Set
+    RWT_INCLUDE_PRIVATE_METRICS=1 to keep them in baseline_rmse / beats maps.
+    """
+    if not baseline_rmse:
+        return {}
+    if _include_private_metrics():
+        return dict(baseline_rmse)
+    return {k: float(v) for k, v in baseline_rmse.items() if k not in PRIV_FLOOR_NAMES}
+
+
+def public_gate3_dict(gate3_detail: dict[str, Any]) -> dict[str, Any]:
+    """
+    Redact private pure-floor names/values from Gate3 report serialization.
+
+    In-process Gate3 already decided with full floors. Public JSON keeps decision
+    fields but filters floor_rmses / best_floor_* unless authorized.
+    Accepts either GateResult.to_dict() output or a raw detail mapping.
+    """
+    d = dict(gate3_detail)
+    if _include_private_metrics():
+        return d
+    floors = d.get("floor_rmses")
+    if isinstance(floors, dict):
+        pub = {
+            str(k): float(v)
+            for k, v in floors.items()
+            if str(k) not in PRIV_FLOOR_NAMES and np.isfinite(float(v))
+        }
+        d["floor_rmses"] = pub
+        priv_best = str(d.get("best_floor_name") or "") in PRIV_FLOOR_NAMES
+        if pub:
+            best_name = min(pub, key=pub.get)
+            d["best_floor_name"] = best_name
+            d["oof_rmse_best_floor"] = float(pub[best_name])
+            if priv_best:
+                d["private_best_floor_redacted"] = True
+        elif priv_best:
+            d["best_floor_name"] = "private_redacted"
+            d["oof_rmse_best_floor"] = None  # numeric value is still a private metric
+            d["private_best_floor_redacted"] = True
+    return d
+
+
+def public_station_columns(stations: pd.DataFrame) -> list[str]:
+    """Columns safe to write to public stations.csv (no private stalks)."""
+    return [
+        c
+        for c in stations.columns
+        if not any(str(c).casefold().startswith(p) for p in PRIV_STATION_PREFIXES)
+    ]
+
+
+def write_stations_csv(
+    stations: pd.DataFrame,
+    out_dir: Path,
+    *,
+    write_private_full: bool = False,
+) -> dict[str, Any]:
+    """
+    Write stations.csv without proprietary columns.
+
+    Residual train should use the full in-memory frame. Optional
+    stations_private_full.csv is opt-in only (artifacts/** gitignored) —
+    never default-on under caller-controlled --out.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    public_cols = public_station_columns(stations)
+    stripped = [c for c in stations.columns if c not in public_cols]
+    stations[public_cols].to_csv(out_dir / "stations.csv", index=False)
+    manifest: dict[str, Any] = {
+        "public_csv": "stations.csv",
+        "stripped_columns": stripped,
+        "n_public_cols": len(public_cols),
+        "n_stripped": len(stripped),
+        "write_private_full": bool(write_private_full),
+        "note": "stripped columns are private stalks; do not publish or bundle",
+    }
+    if stripped and write_private_full:
+        stations.to_csv(out_dir / "stations_private_full.csv", index=False)
+        manifest["private_full_csv"] = "stations_private_full.csv"
+    (out_dir / "stations_strip_manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
+    return manifest
 
 
 def dual_residual_weights_for_bases(
@@ -194,6 +313,7 @@ def train_lgbm_residual(
     prior_col: str | None = None,
     gate2_meta: dict[str, Any] | None = None,
     max_precision: bool = False,
+    dual_partner: str | None = None,
 ) -> dict[str, Any]:
     """
     Residual learner on labeled *toe* (is_predict).
@@ -204,6 +324,9 @@ def train_lgbm_residual(
 
     max_precision=True: deeper trees, more rounds, more leaves — for 24c/32GB kits
     hunting sub-5ft RMSE (still Gate3 gated).
+
+    dual_partner: optional second residual base (e.g. prior_lattice_tvt) for
+    weighted dual-head ensemble; also enabled by DUAL_RESIDUAL_ENSEMBLE (best↔stack).
     """
     if "is_predict" in stations.columns:
         train_df = stations[stations["is_predict"] & stations["TVT"].notna()].copy()
@@ -223,13 +346,24 @@ def train_lgbm_residual(
         prior_col = resolve_prior_column(train_df, prior_col, strict=True)
     from rwt.features import compute_feature_medians, impute_feature_frame
 
-    # Residual bases: primary + optional dual ensemble partner (best+stack)
+    # Residual bases: primary + optional dual ensemble partner
     residual_bases: list[str] = [prior_col]
-    if DUAL_RESIDUAL_ENSEMBLE:
-        for partner in ("prior_best", "prior_stack"):
-            if partner != prior_col and partner in train_df.columns:
-                residual_bases.append(partner)
-                break  # one partner only: best↔stack pair
+    partner = dual_partner
+    # Explicit dual_partner == prior_col is a config error (silent single-head is wrong).
+    if partner is not None and partner == prior_col:
+        raise ValueError(
+            f"dual_partner={partner!r} equals prior_col; refuse duplicate residual base"
+        )
+    if partner is None and DUAL_RESIDUAL_ENSEMBLE:
+        for cand in ("prior_best", "prior_stack"):
+            if cand != prior_col and cand in train_df.columns:
+                partner = cand
+                break
+    if partner is not None:
+        if partner not in train_df.columns:
+            raise ValueError(f"dual residual partner column missing: {partner}")
+        if partner != prior_col:
+            residual_bases.append(partner)
     residual_bases = list(dict.fromkeys(residual_bases))
 
     # require finite TVT and *all* residual bases (PF may NaN without typewell)
@@ -451,8 +585,12 @@ def train_lgbm_residual(
         "prior_best": "prior_best",
         "prior_ncc": "prior_ncc_tvt",
         # Private kernel floors (present only when RWT_KERNEL=private)
+        "prior_beam_blend": "prior_beam_blend",
+        "prior_beam_tvt": "prior_beam_tvt",
         "prior_lattice": "prior_lattice_tvt",
         "prior_lattice_blend": "prior_lattice_blend",
+        "prior_lattice_tvt": "prior_lattice_tvt",
+        "prior_conf_gate_tvt": "prior_conf_gate_tvt",
         "prior_da": "prior_da_tvt",
     }
     baseline_rmse: dict[str, float] = {}
@@ -680,8 +818,10 @@ def train_lgbm_residual(
         "residual_max_dev": float(residual_max_dev),
         "residual_smooth_window": int(RESIDUAL_SMOOTH_WINDOW) if use_residual else 0,
         "feature_medians": {k: float(v) for k, v in feature_medians.items()},
-        "baseline_rmse": baseline_rmse,
-        "beats_baselines": beats,
+        # Public report: redact private-kernel floor metrics unless authorized.
+        # Gate3 already used the full in-process floor_rmses map above.
+        "baseline_rmse": (pub_base := public_baseline_rmse(baseline_rmse)),
+        "beats_baselines": {n: b for n, b in beats.items() if n in pub_base},
         "kernel_id": k.kernel_id(),
         "kernel_private": k.is_private(),
         "prior_column": serve_prior_col if not use_residual else prior_col,
@@ -700,7 +840,8 @@ def train_lgbm_residual(
                 "evaluated": False,
                 "note": "not evaluated (caller assembled stations externally)",
             },
-            gate3.to_dict(),
+            # Redact private floor maps from serialized Gate3 (decision already made).
+            public_gate3_dict(gate3.to_dict()),
             gate3_pw.to_dict(),
         ],
         "adaptive_oof_rmse": gate3_pw.detail.get("adaptive_oof_rmse"),
@@ -791,7 +932,7 @@ def main(argv: list[str] | None = None) -> int:
             workers=int(cfg["workers"]),
             progress=progress,
         )
-        stations.to_csv(out / "stations.csv", index=False)
+        write_stations_csv(stations, out, write_private_full=False)
         progress.set_phase(
             "train",
             total=args.folds,

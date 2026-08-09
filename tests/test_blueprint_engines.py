@@ -56,6 +56,55 @@ class TestBlueprintEngines(unittest.TestCase):
         self.assertIn("relative_md", FEATURE_COLS_DEFAULT)
         self.assertIn("prior_local_dip", FEATURE_COLS_DEFAULT)
         self.assertIn("prior_last_tvt", FEATURE_COLS_DEFAULT)
+        # private residual columns allowed (filtered out when absent from stations)
+        self.assertIn("prior_beam_tvt", FEATURE_COLS_DEFAULT)
+        self.assertIn("prior_beam_delta_stack", FEATURE_COLS_DEFAULT)
+        # conf_gate residual X not in default (cycle-27 REJECT micro)
+        self.assertNotIn("prior_conf_gate_tvt", FEATURE_COLS_DEFAULT)
+
+    def test_attach_private_residual_deltas_noop_and_deltas(self) -> None:
+        from rwt.features import attach_private_residual_deltas
+
+        pub = pd.DataFrame({"prior_stack": [1.0, 2.0], "prior_last_tvt": [1.0, 2.0]})
+        out = attach_private_residual_deltas(pub)
+        self.assertNotIn("prior_beam_delta_stack", out.columns)
+
+        priv = pd.DataFrame(
+            {
+                "prior_beam_tvt": [3.0, 5.0],
+                "prior_lattice_tvt": [4.0, 6.0],
+                "prior_stack": [1.0, 2.0],
+                "prior_last_tvt": [0.0, 1.0],
+                "prior_best": [2.0, 4.0],
+            }
+        )
+        out2 = attach_private_residual_deltas(priv)
+        self.assertAlmostEqual(float(out2["prior_beam_delta_stack"].iloc[0]), 2.0)
+        self.assertAlmostEqual(float(out2["prior_beam_delta_last"].iloc[1]), 4.0)
+        self.assertAlmostEqual(float(out2["prior_beam_delta_best"].iloc[0]), 1.0)
+        # lattice parity + stalk disagreement (cycle-17)
+        self.assertAlmostEqual(float(out2["prior_lattice_delta_best"].iloc[0]), 2.0)
+        self.assertAlmostEqual(float(out2["prior_lattice_delta_stack"].iloc[0]), 3.0)
+        self.assertAlmostEqual(float(out2["prior_lat_beam_delta"].iloc[0]), 1.0)
+        self.assertAlmostEqual(float(out2["prior_lat_beam_delta"].iloc[1]), 1.0)
+
+        poison = pd.DataFrame(
+            {
+                "prior_beam_tvt": [3.0, np.nan, 7.0],
+                "prior_lattice_tvt": [4.0, 5.0, np.nan],
+                "prior_stack": [np.inf, 2.0, 3.0],
+                "prior_last_tvt": [0.0, 1.0, np.inf],
+                "prior_best": [2.0, np.inf, 4.0],
+            }
+        )
+        out3 = attach_private_residual_deltas(poison)
+        self.assertTrue(np.isnan(out3["prior_beam_delta_stack"].iloc[0]))
+        self.assertTrue(np.isnan(out3["prior_beam_delta_stack"].iloc[1]))
+        self.assertTrue(np.isnan(out3["prior_beam_delta_last"].iloc[2]))
+        self.assertTrue(np.isnan(out3["prior_beam_delta_best"].iloc[1]))
+        self.assertTrue(np.isnan(out3["prior_lattice_delta_best"].iloc[1]))
+        self.assertTrue(np.isnan(out3["prior_lat_beam_delta"].iloc[1]))
+        self.assertTrue(np.isnan(out3["prior_lat_beam_delta"].iloc[2]))
 
     def test_feature_matrix_rejects_form_leak(self) -> None:
         for leaked in FORM_SURFACE_LEAK_COLS:

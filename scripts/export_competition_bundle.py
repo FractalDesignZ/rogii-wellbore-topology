@@ -50,14 +50,48 @@ def main() -> int:
         print(f"FAIL missing predictions: {pred_path}", file=sys.stderr)
         return 2
 
+    import pandas as pd
+
+    # Validate prediction schema before any copy (reject private-prefixed cols).
+    pred_df = pd.read_csv(pred_path)
+    priv_prefix = (
+        "private_",
+        "sheaf_",
+        "prior_beam",
+        "prior_lattice",
+        "prior_heatmap",
+        "prior_conf_gate",
+    )
+    bad = [
+        c
+        for c in pred_df.columns
+        if any(str(c).casefold().startswith(p) for p in priv_prefix)
+    ]
+    if bad:
+        print(f"FAIL proprietary columns in --pred: {bad}", file=sys.stderr)
+        return 2
+    cols = {str(c).casefold() for c in pred_df.columns}
+    ok_schema = (
+        {"well_id", "md", "tvt"}.issubset(cols)
+        or {"id", "tvt"}.issubset(cols)
+        or {"well_id", "tvt"}.issubset(cols)
+    )
+    if not ok_schema:
+        print(
+            "FAIL --pred must be well_id,MD,TVT or Id,TVT (plus optional well_id,TVT); "
+            f"got columns={list(pred_df.columns)}",
+            file=sys.stderr,
+        )
+        return 2
+
     out = Path(args.out)
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    # copy predictions only
+    # write validated predictions only (no proprietary columns)
     dest_pred = out / "submission.csv"
-    shutil.copy2(pred_path, dest_pred)
+    pred_df.to_csv(dest_pred, index=False)
 
     manifest: dict = {
         "bundle": "rwt_competition_isolation",
@@ -69,16 +103,29 @@ def main() -> int:
         ],
         "note": args.note,
         "kernel_mode_env": "export uses precomputed preds — no private source",
+        "pred_columns": list(pred_df.columns),
     }
 
     if args.features:
-        import pandas as pd
-
         fpath = Path(args.features)
         if fpath.is_file():
             df = pd.read_csv(fpath)
-            # strip anything that looks proprietary
-            drop = [c for c in df.columns if c.startswith("private_") or c.startswith("sheaf_")]
+            # strip anything that looks proprietary (incl. private beam residual cols)
+            drop = [
+                c
+                for c in df.columns
+                if any(
+                    str(c).casefold().startswith(p)
+                    for p in (
+                        "private_",
+                        "sheaf_",
+                        "prior_beam",
+                        "prior_lattice",
+                        "prior_heatmap",
+                        "prior_conf_gate",
+                    )
+                )
+            ]
             df = df.drop(columns=drop, errors="ignore")
             # keep watermark if present
             pub = out / "features_public.csv"
