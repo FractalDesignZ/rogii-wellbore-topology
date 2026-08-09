@@ -366,9 +366,10 @@ def attach_private_residual_deltas(stations: pd.DataFrame) -> pd.DataFrame:
     # Stalk disagreement (label-free): lattice - beam when both private arms finite
     if "prior_lattice_tvt" in out.columns and "prior_beam_tvt" in out.columns:
         _delta("prior_lattice_tvt", "prior_beam_tvt", "prior_lat_beam_delta")
-    # Note: prior_conf_gate_* is exported by private kernel for dual/base floors;
-    # residual-X deltas were tried cycle-27 and regressed 8w dual (11.07 vs 10.47).
-    # Keep out of default residual X until a Gate3-green re-acceptance.
+    # Note: prior_conf_gate_* is exported by private kernel for dual/base floors.
+    # Cycle-27: residual-X deltas regressed 8w dual (11.07 vs 10.47) — not in FEATURE_COLS.
+    # Cycle-28: dual partner / single base conf_gate ACCEPT but lose to lattice dual seal
+    # 10.465 (dual-cg 11.19 / single-cg 10.83) — keep lattice dual as residual default.
     if extras:
         out = out.copy()
         for k, v in extras.items():

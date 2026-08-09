@@ -94,6 +94,18 @@ Track consecutive cycles for plateau stop (`abs(Δ selected_oof) < 0.05` ×3) an
 | 25 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | conf_gate margin −0.10 KEEP | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | n/a pilot pure | false | conf_gate **10.544** (Δcg **−0.026** vs v14 10.569); ~pure_lat floor; dual w70/30 **REJECT** 10.469; seal v15; plateau_B **reset** |
 | 26 | 2026-08-08 | `feat/private-beam-conf-clamp` / #14 | CR v15 seal max_wells_arg guard | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | hold conf_gate 10.544 / dual 10.465 | false | is_v15_seal requires max_wells_arg==40 (not only n_wells==40); drop int(len(C)); skip invent pure_lat 0.217 (cycle-22 honest); plateau no-inc (CR) |
 | 27 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | 16w dual FALLBACK + conf_gate residual X REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | 16w dual **FALLBACK pure 11.95**; 8w cg-X dual ACCEPT 11.07 worse | false | 16w dual res **12.611** loses stack 11.949; conf_gate residual-X **REJECT** (8w dual 11.07 vs seal dual 10.465); keep conf_gate export as floor/dual base only; pure pilot hold 10.544; plateau no-inc (lever reject) |
+| 28 | 2026-08-09 | `feat/private-beam-conf-clamp` / #14 | conf_gate residual base dual REJECT; lat_floor 0.05 REJECT | 14.67 | 15.11 | **10.729** | 10.788 | 0.00 selected | dual-cg **ACCEPT 11.187** worse; single-cg **10.834** | false | dual partner conf_gate **REJECT** vs lattice dual seal 10.465; single base cg ACCEPT 10.834 worse; lat_floor 0.05 conf_gate **10.546** (Δcg **+0.002** REJECT vs v15 10.544); keep dual lattice; plateau_B **2/3** |
+
+### Cycle-28 detail (conf_gate as residual base REJECT + lat_floor micro REJECT)
+
+- **Lever A:** dual residual `prior_best` + `prior_conf_gate_tvt` (0.75/0.25) 8w private `max_prec_8_dual_cgbase`.
+  - Gate3 **ACCEPT** OOF **11.187** ≤ stack **11.393**, but **worse** than lattice dual seal **10.465** → **REJECT as dual partner default**.
+- **Lever B:** single residual base `prior_conf_gate_tvt` 8w `max_prec_8_cgbase`.
+  - Gate3 **ACCEPT** OOF **10.834** ≤ stack 11.393; better than lattice_tvt base 10.88 but still loses lattice dual 10.465 → **REJECT as default base**.
+- **Lever C (pure pilot A/B):** conf_gate `lat_floor` 0.08 → **0.05** (margin −0.10 pure arm hold) 40w `private_beam_pilot_v16_lf05`.
+  - conf_gate **10.546** vs v15 seal **10.544** (Δcg **+0.002** REJECT). Keep lat_floor **0.08**.
+- Seals hold: selected 14.67 / conf_gate **10.544** / dual lattice **10.465** / best floor 15.11. beats_5ft=false. Residue never forced.
+- **Next lever:** pure multi-field lattice improve (emission weights / shape_sigma) beyond 10.544; adaptive residual mask on lattice conf; do not default conf_gate residual base.
 
 ### Cycle-27 detail (16w dual Gate3 FALLBACK + conf_gate residual-X REJECT)
 
