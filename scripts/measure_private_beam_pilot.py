@@ -45,8 +45,8 @@ def main() -> int:
     ap.add_argument(
         "--margin",
         type=float,
-        default=-0.08,
-        help="conf_gate lattice-vs-beam margin (v14 -0.08; v13 -0.05; v12 pure-arm 0.03)",
+        default=-0.10,
+        help="conf_gate lattice-vs-beam margin (v15 -0.10; v14 -0.08; v13 -0.05)",
     )
     ap.add_argument(
         "--lat-floor",
@@ -476,9 +476,9 @@ def main() -> int:
         "note": "Per-well predict-zone RMSE of private priors (not full GroupKFold residual stack)",
         "law": "private offline scaffold; export predictions only; Gate3 still owns residual accept",
     }
-    # Sealed v14 knobs (defaults). Only label / fill trial_v14 when config matches.
-    sealed_v14 = {
-        "margin": -0.08,
+    # Sealed deploy knobs (defaults = v15). Only label sealed trial when config matches.
+    sealed_v15 = {
+        "margin": -0.10,
         "lat_floor": 0.08,
         "soft_temp": 0.04,
         "pure_lat_boost": 0.0,
@@ -494,31 +494,33 @@ def main() -> int:
         "n_wells": int(len(C)),
         "max_wells_arg": int(a.max_wells) if a.max_wells else None,
     }
-    is_v14_seal = (
-        abs(run_cfg["margin"] - sealed_v14["margin"]) < 1e-12
-        and abs(run_cfg["lat_floor"] - sealed_v14["lat_floor"]) < 1e-12
-        and abs(run_cfg["soft_temp"] - sealed_v14["soft_temp"]) < 1e-12
-        and abs(run_cfg["pure_lat_boost"] - sealed_v14["pure_lat_boost"]) < 1e-12
-        and run_cfg["lat_arm"] == sealed_v14["lat_arm"]
-        and run_cfg["n_wells"] == sealed_v14["n_wells"]
+    is_v15_seal = (
+        abs(run_cfg["margin"] - sealed_v15["margin"]) < 1e-12
+        and abs(run_cfg["lat_floor"] - sealed_v15["lat_floor"]) < 1e-12
+        and abs(run_cfg["soft_temp"] - sealed_v15["soft_temp"]) < 1e-12
+        and abs(run_cfg["pure_lat_boost"] - sealed_v15["pure_lat_boost"]) < 1e-12
+        and run_cfg["lat_arm"] == sealed_v15["lat_arm"]
+        and run_cfg["n_wells"] == sealed_v15["n_wells"]
     )
     cg_mean = float(C[deploy_col].mean()) if len(C) else None
     summary["run_config"] = run_cfg
-    summary["is_sealed_v14_config"] = bool(is_v14_seal)
+    summary["is_sealed_v15_config"] = bool(is_v15_seal)
+    summary["is_sealed_v14_config"] = False  # superseded; keep key for older readers
     summary["mean_rmse_conf_gate_this_run"] = cg_mean
-    if is_v14_seal:
+    summary["trial_v14_conf_gate_40w"] = summary.get("prior_conf_gate_seal_v14")
+    if is_v15_seal:
         summary["stalk"] = (
-            "v14 conf_gate lattice-led margin -0.08 lat_floor 0.08 pure arm; "
-            "v13 m-0.05; heatmap REJECT"
+            "v15 conf_gate lattice-led margin -0.10 lat_floor 0.08 pure arm; "
+            "soft beam fallback when lat_conf < lat_floor; heatmap REJECT"
         )
-        summary["trial_v14_conf_gate_40w"] = cg_mean
+        summary["trial_v15_conf_gate_40w"] = cg_mean
     else:
         summary["stalk"] = (
-            f"custom conf_gate run (not sealed v14): lat_arm={a.lat_arm} "
+            f"custom conf_gate run (not sealed v15): lat_arm={a.lat_arm} "
             f"margin={conf_gate_params['margin']} lat_floor={conf_gate_params['lat_floor']} "
             f"n_wells={len(C)}"
         )
-        summary["trial_v14_conf_gate_40w"] = None
+        summary["trial_v15_conf_gate_40w"] = None
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     C.to_csv(out / "per_well_beam.csv", index=False)

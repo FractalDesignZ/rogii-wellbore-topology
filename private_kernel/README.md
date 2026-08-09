@@ -39,15 +39,18 @@ If import fails or the contract is violated, the public path continues with `Pub
 | conf_gate v11 pure-lat boost (blend arm) | 10.699 | prior deploy |
 | conf_gate v12 pure lat arm (margin 0.03) | 10.674 | prior deploy |
 | conf_gate v13 lattice-led (margin −0.05) | 10.608 | prior deploy |
-| **conf_gate v14 lattice-led** | **10.569** | **deploy** (−0.039 vs v13; margin −0.08, lat_floor 0.08) |
+| conf_gate v14 lattice-led (margin −0.08) | 10.569 | prior deploy |
+| **conf_gate v15 lattice-led** | **10.544** | **deploy** (−0.026 vs v14; margin −0.10; ~pure floor) |
 | heatmap blend v10 | 15.98 | REJECT |
 | oracle stalk | ~10.59 | label leak; diag only |
 
 Sealed measure knobs (explicit in `scripts/measure_private_beam_pilot.py`):  
-`lat_arm=pure`, `margin=-0.08`, `lat_floor=0.08`, `agree_ft=2.0`, `soft_temp=0.04`,
-`pure_lat_boost=0.0`, `n_nodes=97`, `multi_field=True`.  
+`lat_arm=pure`, `margin=-0.10`, `lat_floor=0.08`, `agree_ft=2.0`, `soft_temp=0.04`,
+`pure_lat_boost=0.0`, `n_nodes=97`, `multi_field=True`. Soft beam fallback when
+`lat_conf < lat_floor` (not pure-sole deploy).  
 Rejected on 40w: denser `n_nodes=129`; reverse_pass/dense reseed; GR emission gate;
-GR heatmap field index (blend ~16 ft); pure_lat_boost alone on blend arm (max −0.01).
+GR heatmap field index (blend ~16 ft); pure_lat_boost alone on blend arm (max −0.01);
+dual residual weight 0.70/0.30 on 8w (worse than 0.75/0.25).
 
 Public residual path **only after successful private resolution** (`kernel_private is
 True` / `resolve_kernel().is_private()` truthy). Then `augment_station_frame` emits
