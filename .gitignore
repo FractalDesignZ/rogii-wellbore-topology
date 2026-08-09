@@ -18,6 +18,14 @@ secrets/
 .env.*
 !.env.example
 
+# Private research / method facilitation (local only — never GitHub)
+private_research/
+docs/TerranOP*
+docs/TERRANOP*
+docs/*_PRIVATE*
+docs/*_private*
+wellbore-geology-prediction/
+
 
 # python
 __pycache__/
