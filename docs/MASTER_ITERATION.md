@@ -73,6 +73,17 @@ The graph prototype infers independent transports between GR-cost profiles and c
 
 The standard feature cache took 31.36 seconds and its three model fits about 46.47 seconds on the local CPU. The label-blind graph/Julia lift took 22.06 seconds; the six matched model fits took 101.03 seconds in total. These are scoped measurements, not an end-to-end GPU benchmark. Source, input, prediction and execution identities remain in local retained attempts. The 154 confirmation wells remain unmeasured. These development comparisons justify further work, not field-performance admission or an official leaderboard rank.
 
+An offline sequence comparator then used the same immutable BASE92 inputs, labels, folds, represented-row weights and station mapping. Its fixed dilated convolution recipe has a 253-block receptive field, 128 context blocks on each side of a 128-block supervised core, training-fold IQR scaling and exactly 20 epochs. Context never crosses wells. This is observation order, not a physical-time model. The last epoch is the only saved model; no validation loss or checkpoint selection is used.
+
+| Sequence comparison | Development RMSE (ft) | Finding versus graph arm |
+| --- | ---: | --- |
+| Sequence model alone | 15.428782 | Worse |
+| Fixed 50% sequence / 50% graph prediction | 14.157296 | All three folds improve; 373 wells improve and 246 worsen |
+
+The blend weights and comparator prediction hashes were frozen before any sequence fit or score. The blend reduces SSE by 43,691,088.97 versus the graph arm across all 3,034,427 rows; it is not a tuned weight search. The three GPU fold processes took 152.84 seconds in total on the local RTX 5070, excluding preflight tests and CPU audit. A separate CPU audit took 5.88 seconds, replaying exact station coverage, block-center labels, row weights, well-grouped folds, saved prediction/model/preprocessing hashes and terminal traces. There were no fallback predictions. Its first attempt stopped before scoring because the auditor compared a manifest content digest with the declared file SHA; that failed attempt remains retained, with the corrected check in a fresh attempt.
+
+This result supports complementary errors between the two tracks. It does not isolate a Julia gain or validate independent field performance; confirmation remains reserved.
+
 The first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. Fresh attempts retain the old runs unchanged and use stronger station-key/fold audits. The two selectors formerly scored 10.997149 ft with an incomplete path library; repaired path availability changes both to 11.030914 ft. This is an ingestion/library effect, not a native gain.
 
 ## Image-to-table relationships

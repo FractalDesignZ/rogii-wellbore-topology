@@ -4,7 +4,7 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Validation status:** historical OOF scores below and in linked documents require remeasurement. Spatial donors previously preferred full training `TVT` before the well-group split. The corrected default uses observed `TVT_input` only and supports unseen target geometry. Historical scores do not validate the corrected pipeline or the new Network Engine diagnostics; no predictive gain is claimed for this integration.
 
-**Current development evidence:** a new standard 92-feature baseline scores **14.812938 ft**, versus last-known **15.993630 ft**, on all 3,034,427 toe rows of 619 development wells. A matched independent cost-profile graph prototype scores **14.656995 ft**; adding the current Julia descriptors worsens it to **14.679919 ft**. These are grouped-OOF research results, with 154 confirmation wells still reserved. See the [master iteration](docs/MASTER_ITERATION.md) for scope and controls.
+**Current development evidence:** a new standard 92-feature baseline scores **14.812938 ft**, versus last-known **15.993630 ft**, on all 3,034,427 toe rows of 619 development wells. A matched independent cost-profile graph prototype scores **14.656995 ft**; adding the current Julia descriptors worsens it to **14.679919 ft**. A preregistered 50/50 blend of the graph and a separate sequence model reaches **14.157296 ft**. These are grouped-OOF research results, with 154 confirmation wells still reserved. See the [master iteration](docs/MASTER_ITERATION.md) for scope and controls.
 
 | Abstraction mode | Role |
 |------------------|------|
@@ -62,6 +62,13 @@ The public neighbor graph now reads observed `TVT_input` only by default. Full d
 ### Master iteration and image relationships
 
 The next iteration uses two linked tracks: rapid model/alignment candidates and relational operator/image candidates, compared on the same fixed development cohort. The controller retains static AST/import evidence, a dependency graph, bounded subprocess receipts, exact selected OOF predictions, and a separate metric audit. Confirmation wells remain outside candidate selection. See [`docs/MASTER_ITERATION.md`](docs/MASTER_ITERATION.md).
+
+The standard BASE92 route is available as an [experimental fit/predict interface](docs/EXPERIMENTAL_BLOCK_MODEL.md). It requires an explicit development/confirmation manifest, stores training medians and a versioned LightGBM text bundle, and retains exact grouped-OOF evidence. It preserves the visible heel and uses no residual output clamp.
+
+```bash
+python -m rwt.block_model fit --data-root data/raw/example --manifest cohort.json --out artifacts/block_experiment
+python -m rwt.block_model predict --model artifacts/block_experiment/model --lateral target.csv --typewell reference.csv --well-id TARGET --out artifacts/target_predictions.csv
+```
 
 Supplied well figures are retained as paired views. The image ingress can extract a declared path-color region and register projected XYZ to pixel coordinates using explicit control points. Full-TVT and formation-top panels are training/evaluator data; supplied PNGs are training-only. Neither a fixed viewing angle nor an image label's unit is silently assumed.
 
