@@ -86,6 +86,10 @@ The blend weights and comparator prediction hashes were frozen before any sequen
 
 This result supports complementary errors between the two tracks. It does not isolate a Julia gain or validate independent field performance; confirmation remains reserved.
 
+An ordinary multiscale context control scores **14.674427 ft**, compared with the pointwise BASE92 model's **14.812938 ft** and the graph arm's **14.656995 ft**. It adds finite GR-cost means and descriptors, local geometry slopes and support at fixed within-well block widths 9, 33 and 129, producing 254 features with BASE92 preserved bit-for-bit. The learner, folds, labels, represented-row weights and complete 3,034,427-station scoring scope are unchanged. Saved model predictions and training-median prefixes replay exactly, with no fallback. It improves 317 wells versus BASE92 and worsens 302. Feature construction took 6.16 seconds; all six bounded test/build/fit/audit nodes totaled 113.39 seconds. Peak measured training RSS was 1.61 GB.
+
+This similar ordinary-context gain makes a context-conditioned operator comparison necessary. The next frozen hybrid appends the same graph descriptors to the context model; the ordered-Julia experiment separately compares reset, carried-state and shuffled-order recurrence descriptors on the fixed context base. Neither test chooses its base or settings from its later score. The initial context controller failed on an import path before label parsing or fitting; a corrected fresh attempt retained identical feature bytes and preserved the failure.
+
 The first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. Fresh attempts retain the old runs unchanged and use stronger station-key/fold audits. The two selectors formerly scored 10.997149 ft with an incomplete path library; repaired path availability changes both to 11.030914 ft. This is an ingestion/library effect, not a native gain.
 
 ## Image-to-table relationships
