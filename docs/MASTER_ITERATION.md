@@ -46,8 +46,9 @@ The fixed filename-only assignment contains 619 development and 154 confirmation
 | --- | --- | --- |
 | Corrected public residual baseline | All 54,833 pilot grouped-OOF rows | Residual 13.892904 ft loses; Gate3 selects last-known 11.616770 ft |
 | Raw last-known comparator | All 54,833 pilot toe rows | 11.616770 ft |
-| GR-only whole-path selector | Same 54,833 pilot rows | 10.997149 ft |
-| Native-augmented whole-path selector | Same library and 54,833 rows | 10.997149 ft; identical choices, zero incremental native gain |
+| GR-only whole-path selector | Same 54,833 pilot rows, corrected coordinate policy | 11.030914 ft |
+| Native-augmented whole-path selector | Same library and 54,833 rows | 11.030914 ft; identical choices, zero incremental native gain |
+| Reviewed plain Forward–Backward candidate | All 54,833 pilot rows, corrected coordinate policy | 60.817223 ft; rejected |
 | Oracle projection into heel ±18 ft | 3,034,427 development toe rows | 7.4585 ft lower bound for tracks constrained to that band |
 | Oracle projection into heel ±36 ft | Same development rows | 3.8306 ft lower bound; not an attained prediction |
 
@@ -55,7 +56,7 @@ The earlier baseline excluded one pilot row with a nonfinite residual base. Its 
 
 The first native selector remains unpromoted. Its contract, predictions, metric report and execution receipts stay local; the result directs the next operator experiment rather than being described as a successful predictive integration.
 
-These first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. The old runs remain unchanged, and the corrected pipeline receives a fresh attempt with stronger station-key/fold audit checks.
+The first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. Fresh attempts retain the old runs unchanged and use stronger station-key/fold audits. The two selectors formerly scored 10.997149 ft with an incomplete path library; repaired path availability changes both to 11.030914 ft. This is an ingestion/library effect, not a native gain.
 
 ## Image-to-table relationships
 
