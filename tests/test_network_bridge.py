@@ -62,13 +62,15 @@ class TestNetworkBoundary(unittest.TestCase):
         self.assertNotIn("windows", bundle.mode)
         self.assertFalse(bundle.mode["levels"]["dynamics"])
 
-    def test_finite_las_nulls_are_not_observations(self) -> None:
+    def test_gr_null_codes_do_not_mask_finite_coordinate_values(self) -> None:
         frame = lateral()
         frame.loc[3:5, "GR"] = [-999.25, -999.0, -100.0]
         frame.loc[8, "Z"] = -9999.0
         bundle = build_network_input(frame, well_id="W", depth_unit="m")
         self.assertFalse(bundle.data["well"]["GR__present"][3:6].any())
-        self.assertFalse(bundle.data["well"]["Z__present"][8])
+        self.assertTrue(bundle.data["well"]["Z__present"][8])
+        self.assertEqual(bundle.data["well"]["Z"][8], -9999.0)
+        self.assertEqual(bundle.manifest["preprocessing"]["columns"]["Z"]["null_policy"], "nonfinite_only")
         self.assertTrue(np.isnan(bundle.data["well"]["GR"][3:6]).all())
 
     def test_declared_units_convert_and_missing_channels_stay_absent(self) -> None:

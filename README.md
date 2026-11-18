@@ -57,6 +57,19 @@ The synthetic fixture is practice-only and measured in metres. Each run creates 
 
 The public neighbor graph now reads observed `TVT_input` only by default. Full donor labels require explicit opt-in and fold-local donor visibility before GroupKFold use. Integration details, current native export limitations, and the validation path to dynamic prior gating: [`docs/NETWORK_ENGINE_INTEGRATION.md`](docs/NETWORK_ENGINE_INTEGRATION.md).
 
+### Master iteration and image relationships
+
+The next iteration uses two linked tracks: rapid model/alignment candidates and relational operator/image candidates, compared on the same fixed development cohort. The controller retains static AST/import evidence, a dependency graph, bounded subprocess receipts, exact selected OOF predictions, and a separate metric audit. Confirmation wells remain outside candidate selection. See [`docs/MASTER_ITERATION.md`](docs/MASTER_ITERATION.md).
+
+Supplied well figures are retained as paired views. The image ingress can extract a declared path-color region and register projected XYZ to pixel coordinates using explicit control points. Full-TVT and formation-top panels are training/evaluator data; supplied PNGs are training-only. Neither a fixed viewing angle nor an image label's unit is silently assumed.
+
+```bash
+pip install -e ".[images]"
+python scripts/inspect_registered_views.py --image path/to/well.png --lateral path/to/well.csv --depth-unit ft --azimuth-deg -74.5 --path-roi 350 1650 2500 2535 --out artifacts/image_attempt_001
+```
+
+The ROI above is an example requiring verification for the supplied image. Without explicit control points the result is unregistered pixel candidates, not recovered geometry or a TVT prediction.
+
 ## Quick start
 
 ```bash

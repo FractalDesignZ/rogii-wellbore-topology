@@ -61,7 +61,9 @@ def build_network_input(
     ordinal, explicitly not measured seconds. The analysis index is MD; native
     carried sample-order records remain nonphysical metadata.
     TVT, TVT_true, TVT_input, formation tops, and model/private columns are never
-    read. Z and GR may be absent, but MD must be finite on every row.
+    read. GR uses the declared curve-null convention; finite coordinates are
+    preserved, even at LAS-looking values. Z and GR may be absent, but MD must
+    be finite on every row.
     """
     if depth_unit not in DEPTH_SCALES:
         raise ValueError("depth_unit must be explicitly declared as 'ft' or 'm'")
@@ -75,14 +77,22 @@ def build_network_input(
     if not np.isfinite(md).all():
         raise ValueError("MD must be finite; do not fill or silently drop backbone rows")
     factor = DEPTH_SCALES[depth_unit]
-    preprocessing = {"las_null_sentinels": list(LAS_NULL_SENTINELS), "gr_absurd_le": GR_ABSURD_LE, "gap_fill": False}
+    preprocessing = {
+        "schema": "rwt.per-column-nulls.v2",
+        "columns": {
+            "MD": {"null_policy": "nonfinite_only", "finite_sentinels": []},
+            "Z": {"null_policy": "nonfinite_only", "finite_sentinels": []},
+            "GR": {"null_policy": "curve_sentinels_and_nonfinite", "finite_sentinels": list(LAS_NULL_SENTINELS), "absurd_le": GR_ABSURD_LE},
+        },
+        "gap_fill": False,
+    }
     values: dict[str, np.ndarray] = {"t": np.arange(len(lateral), dtype=np.float64)}
     channels: list[dict[str, Any]] = []
     support: dict[str, Any] = {}
     for name in SOURCE_CHANNELS:
         raw = lateral[name].to_numpy(dtype=float, copy=True) if name in lateral else np.full(len(lateral), np.nan)
-        if name in ("GR", "Z"):
-            raw = normalize_curve_nulls(raw, absurd_le=GR_ABSURD_LE if name == "GR" else None)
+        if name == "GR":
+            raw = normalize_curve_nulls(raw, absurd_le=GR_ABSURD_LE)
         present = np.isfinite(raw)
         raw[~present] = np.nan
         if name in ("MD", "Z"):

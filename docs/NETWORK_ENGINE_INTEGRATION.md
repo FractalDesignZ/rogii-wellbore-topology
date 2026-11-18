@@ -6,7 +6,9 @@ The initial integration provides a reproducible measurement boundary between thi
 
 `rwt.network_bridge.build_network_input` accepts one lateral with at least four stations. `MD` must be finite on every row. The source depth unit must be declared as `ft` or `m`; MD and Z are converted to metres. GR retains its source instrument unit.
 
-The exported channels are exactly `MD`, `Z`, and `GR`, with a presence mask for each channel. Existing RWT curve-null handling normalizes LAS null sentinels in Z and GR before masks are built. Missing Z or GR produces a masked channel. Missing support remains missing rather than being interpolated. Acquisition order, repeated MD values, and reversals are preserved; the bridge does not sort or resample.
+The exported channels are exactly `MD`, `Z`, and `GR`, with a presence mask for each channel. GR uses the declared RWT signal-null convention. Finite MD/Z coordinates remain measurements: a depth such as `-9999.25` is valid unless its source explicitly declares that value null. Coordinate nonfinite values remain missing. A separate source-declared coordinate-null policy can be applied upstream. The bridge binds its per-column preprocessing policy into the input identity.
+
+Missing Z or GR produces a masked channel. Missing support remains missing rather than being interpolated. Acquisition order, repeated MD values, and reversals are preserved; the bridge does not sort or resample.
 
 MD is the analysis axis. The native container also carries a sample ordinal named `t` to preserve station order. That ordinal is not measured time or seconds. Names inherited from the native relation schema do not establish a temporal or causal interpretation of the wellbore data.
 

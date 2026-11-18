@@ -7,7 +7,7 @@ mirror competition (toe TVT withheld; offline TVT_true only).
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -189,55 +189,86 @@ def neighbor_idw_tvt(
     *,
     max_dist: float = 800.0,
     k: int = 4,
+    label_policy: Literal["observed_only", "full_tvt"] = "observed_only",
 ) -> np.ndarray:
     """
-    Pad placement prior: IDW of donor wells' TVT_true at nearest XY sample.
+    Pad placement prior: IDW of explicitly visible donor labels at nearest XY.
 
-    Donors should be train wells (labeled). Offline truth on donors only —
-    never uses target TVT_true for the estimate.
+    ``observed_only`` reads TVT_input only, without a fallback to full labels.
+    ``full_tvt`` reads TVT only and requires every non-self donor to be marked
+    pad_role='train' throughout. Callers must restrict those donors to the
+    training partition; this function does not construct validation folds.
+
+    Each nonempty frame must have one unambiguous well_id. Self donors are
+    excluded by that identity. Predictor inputs never include TVT_true. Missing
+    target/donor coordinates or labels remain unsupported rather than filled.
     """
-    tx = target["X"].to_numpy(dtype=float)
-    ty = target["Y"].to_numpy(dtype=float)
+    if label_policy not in ("observed_only", "full_tvt"):
+        raise ValueError(f"unknown donor label policy: {label_policy!r}")
+    if not np.isfinite(max_dist) or max_dist < 0:
+        raise ValueError("max_dist must be finite and nonnegative")
+    if not isinstance(k, (int, np.integer)) or isinstance(k, bool) or k < 1:
+        raise ValueError("k must be a positive integer")
     n = len(target)
     est = np.full(n, np.nan, dtype=float)
-    if not donors:
+    if not n:
         return est
 
-    donor_pts: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+    def frame_identity(frame: pd.DataFrame) -> str:
+        if "well_id" not in frame or frame["well_id"].isna().any():
+            raise ValueError("each nonempty frame needs one non-null well_id")
+        ids = frame["well_id"].astype(str).str.strip().unique()
+        if len(ids) != 1 or not ids[0]:
+            raise ValueError("each nonempty frame needs one unambiguous well_id")
+        return str(ids[0])
+
+    target_id = frame_identity(target)
+    tx = target["X"].to_numpy(dtype=float)
+    ty = target["Y"].to_numpy(dtype=float)
+    target_rows = np.flatnonzero(np.isfinite(tx) & np.isfinite(ty))
+    source = "TVT" if label_policy == "full_tvt" else "TVT_input"
+    from rwt.load import normalize_curve_nulls
+
+    donor_pts: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]] = []
+    seen_ids: set[str] = set()
     for d in donors:
-        # use known heel TVT + any labeled train TVT (not predict-masked nans)
-        tv = d["TVT"].to_numpy(dtype=float)
-        if "TVT_true" in d.columns and d["pad_role"].iloc[0] == "train":
-            # train has full labels; use true for dense donor cloud (book-consistent)
-            tv = d["TVT_true"].to_numpy(dtype=float)
-        m = np.isfinite(tv)
+        if not len(d):
+            continue
+        donor_id = frame_identity(d)
+        if donor_id == target_id:
+            continue
+        if donor_id in seen_ids:
+            raise ValueError(f"duplicate donor well_id: {donor_id!r}")
+        seen_ids.add(donor_id)
+        if label_policy == "full_tvt" and (
+            "pad_role" not in d or not d["pad_role"].eq("train").all()
+        ):
+            raise ValueError("full_tvt requires explicitly declared training donors")
+        tv = normalize_curve_nulls(d[source]) if source in d else np.full(len(d), np.nan)
+        dx = d["X"].to_numpy(dtype=float)
+        dy = d["Y"].to_numpy(dtype=float)
+        m = np.isfinite(tv) & np.isfinite(dx) & np.isfinite(dy)
         if m.sum() < 4:
             continue
-        donor_pts.append(
-            (
-                d["X"].to_numpy(dtype=float)[m],
-                d["Y"].to_numpy(dtype=float)[m],
-                tv[m],
-            )
-        )
+        donor_pts.append((donor_id, dx[m], dy[m], tv[m]))
     if not donor_pts:
         return est
 
-    for i in range(n):
-        dists: list[tuple[float, float]] = []
-        for dx, dy, dt in donor_pts:
-            d2 = (dx - tx[i]) ** 2 + (dy - ty[i]) ** 2
-            j = int(np.argmin(d2))
-            dist = float(np.sqrt(d2[j]))
+    for i in target_rows:
+        dists: list[tuple[float, str, float]] = []
+        for donor_id, dx, dy, dt in donor_pts:
+            distance = np.hypot(dx - tx[i], dy - ty[i])
+            j = int(np.argmin(distance))
+            dist = float(distance[j])
             if dist <= max_dist:
-                dists.append((dist, float(dt[j])))
+                dists.append((dist, donor_id, float(dt[j])))
         if not dists:
             continue
-        dists.sort(key=lambda z: z[0])
-        take = dists[: max(1, int(k))]
+        dists.sort(key=lambda z: (z[0], z[1]))
+        take = dists[:int(k)]
         wsum = 0.0
         vsum = 0.0
-        for dist, val in take:
+        for dist, _donor_id, val in take:
             w = 1.0 / (dist + 15.0)
             wsum += w
             vsum += w * val
