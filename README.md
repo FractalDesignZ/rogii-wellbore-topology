@@ -1,7 +1,8 @@
 # rogii-wellbore-topology
 
-*Ai Local Demo of JtechAi Proprietary methods in relation to an open source data Ai Competition.  
-** for [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction) — framed as a demonstration of **abstraction-mode compute** from [`topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence), not a generic “dump features into LGBM” bakeoff.
+An open-core research harness for [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction), with abstraction-mode compute from [`topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence) and an optional boundary to a separately installed Network Engine.
+
+**Validation status:** historical OOF scores below and in linked documents require remeasurement. Spatial donors previously preferred full training `TVT` before the well-group split. The corrected default uses observed `TVT_input` only and supports unseen target geometry. Historical scores do not validate the corrected pipeline or the new Network Engine diagnostics; no predictive gain is claimed for this integration.
 
 | Abstraction mode | Role |
 |------------------|------|
@@ -16,7 +17,7 @@
 Full thesis: [`docs/ABSTRACTION_MODES.md`](docs/ABSTRACTION_MODES.md) · entry blurb: [`docs/KAGGLE_ENTRY.md`](docs/KAGGLE_ENTRY.md)
 
 **NotebookLM / RAG knowledge base (truth-audited):**  
-[`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) — Volume II map, three traps, three-layer stack, Gate3, full-cohort ledger (773w residual OOF **14.54** vs last_known **15.91**).
+[`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) — Volume II map, three traps, three-layer stack, Gate3, and historical full-cohort ledger (requires remeasurement under the corrected spatial policy).
 
 ## Competition law (short)
 
@@ -36,6 +37,25 @@ docs/              # KB, ABSTRACTION_MODES, LINEAGE_TSS, PROTOCOL, KAGGLE_ENTRY
 data/raw/          # Kaggle download (gitignored)
 artifacts/         # CV + certificates (gitignored contents ok to regenerate)
 ```
+
+## Network Engine integration
+
+The first integration exports raw `MD`, `Z`, and `GR`, observation masks, declared depth units, and provenance for offline relational diagnostics. It preserves acquisition order and missing support, converts depth to metres, and uses MD as the analysis axis. The container's sample ordinal is not physical time. Target labels, priors, and private/model features are excluded.
+
+```bash
+# Public preparation path; no Network Engine installation required
+python scripts/measure_network_dynamics.py --synthetic
+
+# One raw lateral; declare its actual depth unit
+python scripts/measure_network_dynamics.py --csv path/to/lateral.csv --well-id WELL_ID --depth-unit ft
+
+# Optional native slice diagnostics with a separately licensed local engine
+python scripts/measure_network_dynamics.py --synthetic --run-local
+```
+
+The synthetic fixture is practice-only and measured in metres. Each run creates a fresh artifact directory with input hashes and a provenance seal. Native runs add diagnostic outputs and a sealed receipt; legacy windowed dynamics stays disabled. Diagnostics do not yet change TVT predictions or Gate3 decisions.
+
+The public neighbor graph now reads observed `TVT_input` only by default. Full donor labels require explicit opt-in and fold-local donor visibility before GroupKFold use. Integration details, current native export limitations, and the validation path to dynamic prior gating: [`docs/NETWORK_ENGINE_INTEGRATION.md`](docs/NETWORK_ENGINE_INTEGRATION.md).
 
 ## Quick start
 
@@ -70,13 +90,17 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 
 ## Status
 
+All numerical results in this table are historical and require remeasurement under the corrected spatial observation policy.
+
 | Phase | Status |
 |-------|--------|
 | Abstraction-mode stack + TSS open-curve geometry | **landed** |
 | PF stack + clamps + Gate3 best pure floor | **landed** (PR#3–#4) |
 | Multi-process assemble + live dashboard | **landed** (PR#5) |
-| Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
+| Historical 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · historical Gate3 ACCEPT; remeasurement required |
 | Multi-neighbor spatial + residual interactions + adaptive Gate3 | **landed** (PR#13) — synthetic seal confirmed |
+| Spatial observation boundary | Observed `TVT_input` donors by default; unseen targets supported; hidden-label mutation tests |
+| Network Engine boundary | Raw measurement export + optional native slice diagnostics; no TVT improvement claim — [`integration guide`](docs/NETWORK_ENGINE_INTEGRATION.md) |
 | Task construct (GR@TVT) | geology = typewell book; place laterals; gated residual — [`docs/TASK_GR_TVT_CONSTRUCT.md`](docs/TASK_GR_TVT_CONSTRUCT.md) |
 | All-context two-step | geometry path then GR@TVT placement — [`docs/ALL_CONTEXT_OPERATOR.md`](docs/ALL_CONTEXT_OPERATOR.md) |
 | Real field slices (773w) | pad XY / section / GR·TVT matrices / heel-toe — `scripts/slice_real_field.py` → `artifacts/field_slices_full` |
@@ -86,7 +110,7 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Gate3 floor honesty | sparse-NaN pure floors no longer dropped — residual must beat **all** floors incl. stack |
 | Auto residual base | default base = best pure floor on labeled toe (`prior_stack` typical); override with `--prior-col` |
 | Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_conf_channel` · thr · lifetime · channel sweep |
-| GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
+| GitHub remote | `FractalDesignZ/rogii-wellbore-topology` |
 | RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
 | Kaggle submit | **OFF** — measure in-repo only (OOF / Gate3 / seals); no competition upload under RESTRICT |
 

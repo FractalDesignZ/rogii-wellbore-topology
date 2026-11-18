@@ -7,9 +7,13 @@ restriction. Proprietary sheaf Laplacians stay in private_kernel.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 import pandas as pd
+
+
+SpatialLabelPolicy = Literal["observed_only", "full_tvt"]
 
 
 @dataclass
@@ -22,7 +26,8 @@ class WellSpatialNode:
     md: np.ndarray
     x: np.ndarray
     y: np.ndarray
-    tvt: np.ndarray  # known / train labels; NaN where unknown
+    tvt: np.ndarray  # visible donor observations; NaN where unknown
+    label_policy: SpatialLabelPolicy = "observed_only"
 
 
 @dataclass
@@ -30,6 +35,7 @@ class SpatialIndex:
     nodes: dict[str, WellSpatialNode] = field(default_factory=dict)
     max_dist: float = 600.0
     close_dist: float = 150.0
+    label_policy: SpatialLabelPolicy = "observed_only"
 
     def add(self, node: WellSpatialNode) -> None:
         self.nodes[node.well_id] = node
@@ -41,12 +47,14 @@ class SpatialIndex:
         k: int = 5,
         max_dist: float | None = None,
         min_cos_azimuth: float = -0.25,
+        query_node: WellSpatialNode | None = None,
     ) -> list[tuple[str, float]]:
-        """Return [(neighbor_id, xy_dist)] within max_dist, azimuth-compatible."""
-        if well_id not in self.nodes:
+        """Find donors for indexed or unseen query geometry without changing the index."""
+        well_id = str(well_id)
+        a = query_node if query_node is not None else self.nodes.get(well_id)
+        if a is None or k <= 0:
             return []
         max_dist = float(self.max_dist if max_dist is None else max_dist)
-        a = self.nodes[well_id]
         if not (np.isfinite(a.cx) and np.isfinite(a.cy)):
             return []
         hits: list[tuple[str, float]] = []
@@ -66,7 +74,7 @@ class SpatialIndex:
             if cos < min_cos_azimuth:
                 continue
             hits.append((wid, d))
-        hits.sort(key=lambda t: t[1])
+        hits.sort(key=lambda t: (t[1], t[0]))
         return hits[:k]
 
 
@@ -76,46 +84,52 @@ def well_spatial_node_from_lateral(
     *,
     tvt_col: str = "TVT",
     tvt_input_col: str = "TVT_input",
+    label_policy: SpatialLabelPolicy = "observed_only",
 ) -> WellSpatialNode:
-    x = df["X"].to_numpy(dtype=float)
-    y = df["Y"].to_numpy(dtype=float)
+    """Snapshot geometry and explicitly visible observations.
+
+    The default never reads full TVT, even if TVT_input is absent or empty.
+    ``full_tvt`` is an explicit opt-in for authorized training donors only;
+    callers must exclude held-out labels before selecting that policy.
+    """
+    if label_policy not in ("observed_only", "full_tvt"):
+        raise ValueError(f"unknown spatial label policy: {label_policy!r}")
+    x = df["X"].to_numpy(dtype=float).copy()
+    y = df["Y"].to_numpy(dtype=float).copy()
     md = df["MD"].to_numpy(dtype=float) if "MD" in df.columns else np.arange(len(df), dtype=float)
     n = len(x)
     if n == 0:
         return WellSpatialNode(
             well_id=str(well_id),
-            cx=0.0,
-            cy=0.0,
-            azimuth_x=1.0,
+            cx=float("nan"),
+            cy=float("nan"),
+            azimuth_x=0.0,
             azimuth_y=0.0,
             md=md,
             x=x,
             y=y,
             tvt=np.zeros(0),
+            label_policy=label_policy,
         )
-    # centroid of lateral body (prefer last 60% / higher MD); guard empty slice
+    # Prefer the last 60% of the path. Only paired finite XY observations
+    # define position; missing coordinates must not become an origin node.
     cut = min(max(0, int(0.4 * n)), n - 1)
-    xs, ys = x[cut:], y[cut:]
-    if len(xs) == 0 or not np.isfinite(xs).any():
-        cx = float(np.nanmean(x[np.isfinite(x)])) if np.isfinite(x).any() else 0.0
-        cy = float(np.nanmean(y[np.isfinite(y)])) if np.isfinite(y).any() else 0.0
-    else:
-        cx = float(np.nanmean(xs[np.isfinite(xs)])) if np.isfinite(xs).any() else float(x[-1])
-        cy = float(np.nanmean(ys[np.isfinite(ys)])) if np.isfinite(ys).any() else float(y[-1])
-    if not np.isfinite(cx):
-        cx = 0.0
-    if not np.isfinite(cy):
-        cy = 0.0
-    dx = float(x[-1] - x[cut]) if n > cut else float(x[-1] - x[0])
-    dy = float(y[-1] - y[cut]) if n > cut else float(y[-1] - y[0])
-    hn = float(np.hypot(dx, dy)) + 1e-15
-    ax, ay = dx / hn, dy / hn
-    if tvt_col in df.columns and df[tvt_col].notna().any():
-        tvt = df[tvt_col].to_numpy(dtype=float)
-    elif tvt_input_col in df.columns:
-        tvt = df[tvt_input_col].to_numpy(dtype=float)
-    else:
-        tvt = np.full(n, np.nan)
+    valid_xy = np.flatnonzero(np.isfinite(x) & np.isfinite(y))
+    body = valid_xy[valid_xy >= cut]
+    if not len(body):
+        body = valid_xy
+    cx = float(np.mean(x[body])) if len(body) else float("nan")
+    cy = float(np.mean(y[body])) if len(body) else float("nan")
+    ax = ay = 0.0
+    if len(body) >= 2:
+        dx = float(x[body[-1]] - x[body[0]])
+        dy = float(y[body[-1]] - y[body[0]])
+        hn = float(np.hypot(dx, dy))
+        if hn > 1e-15:
+            ax, ay = dx / hn, dy / hn
+    source = tvt_col if label_policy == "full_tvt" else tvt_input_col
+    tvt = df[source].to_numpy(dtype=float).copy() if source in df.columns else np.full(n, np.nan)
+    tvt[~np.isfinite(tvt)] = np.nan
     return WellSpatialNode(
         well_id=str(well_id),
         cx=cx,
@@ -126,6 +140,7 @@ def well_spatial_node_from_lateral(
         x=x,
         y=y,
         tvt=tvt,
+        label_policy=label_policy,
     )
 
 
@@ -143,7 +158,8 @@ def neighbor_tvt_transfer(
     out_d = np.full(n, np.nan)
     nx, ny, ntvt = neighbor.x, neighbor.y, neighbor.tvt
     finite = np.isfinite(ntvt) & np.isfinite(nx) & np.isfinite(ny)
-    if not finite.any():
+    target_rows = np.flatnonzero(np.isfinite(tx) & np.isfinite(ty))
+    if not finite.any() or not len(target_rows):
         return {
             "neighbor_tvt": out_tvt,
             "neighbor_xy_dist": out_d,
@@ -151,10 +167,10 @@ def neighbor_tvt_transfer(
         }
     nx, ny, ntvt = nx[finite], ny[finite], ntvt[finite]
     # (n, m) distances via broadcasting in chunks if huge
-    d2 = (nx[None, :] - tx[:, None]) ** 2 + (ny[None, :] - ty[:, None]) ** 2
+    d2 = (nx[None, :] - tx[target_rows, None]) ** 2 + (ny[None, :] - ty[target_rows, None]) ** 2
     j = np.argmin(d2, axis=1)
-    out_tvt = ntvt[j].astype(float)
-    out_d = np.sqrt(d2[np.arange(n), j])
+    out_tvt[target_rows] = ntvt[j]
+    out_d[target_rows] = np.sqrt(d2[np.arange(len(target_rows)), j])
     ok = (out_d <= close_dist).astype(float)
     return {
         "neighbor_tvt": out_tvt,
@@ -190,11 +206,12 @@ def attach_spatial_features(
     out["neighbor_tvt_wmean"] = np.nan
     out["neighbor_weight_sum"] = 0.0
     out["neighbor_count_close"] = 0.0
-    if index is None or well_id not in index.nodes:
+    if index is None:
         return out
     max_dist = float(index.max_dist if max_dist is None else max_dist)
     close_dist = float(index.close_dist if close_dist is None else close_dist)
-    neigh = index.neighbors(well_id, k=k_neighbors, max_dist=max_dist)
+    query = well_spatial_node_from_lateral(well_id, lateral)
+    neigh = index.neighbors(well_id, k=k_neighbors, max_dist=max_dist, query_node=query)
     out["neighbor_count"] = float(len(neigh))
     if not neigh:
         return out
@@ -271,14 +288,19 @@ def build_spatial_index(
     *,
     max_dist: float | None = None,
     close_dist: float | None = None,
+    label_policy: SpatialLabelPolicy = "observed_only",
 ) -> SpatialIndex:
     """
-    Build index; if radii unset, use field quantiles of centroid distances
+    Build an observed-only donor index by default. Full training labels require
+    explicit ``label_policy="full_tvt"`` and caller-controlled fold visibility.
+    If radii unset, use field quantiles of centroid distances
     so sparse pads still form a useful graph (coherence on real ROGII scales).
     """
-    idx = SpatialIndex()
+    if label_policy not in ("observed_only", "full_tvt"):
+        raise ValueError(f"unknown spatial label policy: {label_policy!r}")
+    idx = SpatialIndex(label_policy=label_policy)
     for wid, df in wells:
-        idx.add(well_spatial_node_from_lateral(wid, df))
+        idx.add(well_spatial_node_from_lateral(wid, df, label_policy=label_policy))
     nodes = [n for n in idx.nodes.values() if np.isfinite(n.cx) and np.isfinite(n.cy)]
     if len(nodes) >= 2 and (max_dist is None or close_dist is None):
         pts = np.array([[n.cx, n.cy] for n in nodes], dtype=float)
