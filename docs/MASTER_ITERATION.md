@@ -56,6 +56,23 @@ The earlier baseline excluded one pilot row with a nonfinite residual base. Its 
 
 The first native selector remains unpromoted. Its contract, predictions, metric report and execution receipts stay local; the result directs the next operator experiment rather than being described as a successful predictive integration.
 
+### Matched full-development comparison
+
+A subsequent rapid-model baseline uses only each well's MD, XYZ, GR and visible `TVT_input`, plus its own typewell TVT/GR. Its 92 features summarize consecutive eight-row toe blocks, geometry, heel calibration and 41 GR costs. Three well-grouped folds use training-fold medians, represented-row sample weights and 600 fixed LightGBM rounds. Predictions are expanded back to every original station before scoring. There is no output clamp or score-based checkpoint selection.
+
+| Candidate | Development RMSE (ft) | Paired SSE change versus preceding candidate |
+| --- | ---: | ---: |
+| Last-known TVT | 15.993630 | — |
+| Standard 92-feature baseline | 14.812938 | −110,371,428.63 |
+| Baseline + 20 cost-profile graph features | 14.656995 | −13,945,090.96 |
+| Baseline + graph + 7 Julia descriptors | 14.679919 | +2,040,763.20 |
+
+All rows use the same 619 development wells and 3,034,427 toe-station keys. The graph and Julia arms preserve the baseline feature prefix bit-for-bit, and share its folds, target labels, sample weights, learner parameters and training-median prefix. No rows disappear when a representation lacks support. Independent artifact and paired-metric audits passed. The standard baseline improves 342 wells versus last-known; the graph addition improves 327 versus the standard baseline; the Julia addition improves 309 and worsens 310 versus the graph arm.
+
+The graph prototype infers independent transports between GR-cost profiles and checks compatible edge/triangle incidence (`d1*d0 = 0`). Its features describe a fitted potential and independently measured cycle closures. This is not a claim of Hodge decomposition, recovered physical structure or execution through the native Network Engine API. The current Julia descriptors iterate at each observation separately; they do not supply memory between stations. Their incremental result is negative and they remain unpromoted.
+
+The standard feature cache took 31.36 seconds and its three model fits about 46.47 seconds on the local CPU. The label-blind graph/Julia lift took 22.06 seconds; the six matched model fits took 101.03 seconds in total. These are scoped measurements, not an end-to-end GPU benchmark. Source, input, prediction and execution identities remain in local retained attempts. The 154 confirmation wells remain unmeasured. These development comparisons justify further work, not field-performance admission or an official leaderboard rank.
+
 The first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. Fresh attempts retain the old runs unchanged and use stronger station-key/fold audits. The two selectors formerly scored 10.997149 ft with an incomplete path library; repaired path availability changes both to 11.030914 ft. This is an ingestion/library effect, not a native gain.
 
 ## Image-to-table relationships
