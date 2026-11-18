@@ -32,6 +32,8 @@ The CLI requires a manifest with disjoint `development_well_ids` and
 members. Role validation occurs before any source CSV is opened. There is no
 implicit discovery of all wells. A manifest describes the caller's reservation;
 the software cannot infer a reservation that the manifest omits.
+IDs must be unique and disjoint across roles ignoring case, to preserve that
+reservation on Windows. Selected IDs must use the manifest's exact spelling.
 
 ```powershell
 python -m rwt.block_model fit --data-root data/raw/example --manifest cohort.json --well-id DEV_A --well-id DEV_B --well-id DEV_C --out artifacts/block_experiment

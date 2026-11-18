@@ -11,7 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rwt.features import build_station_frame, feature_matrix, FEATURE_COLS_DEFAULT  # noqa: E402
 from rwt.middle_out import resolve_middle_out  # noqa: E402
+from rwt.load import LAS_NULL_SENTINELS  # noqa: E402
 from rwt.spatial import (  # noqa: E402
+    WellSpatialNode,
     attach_spatial_features,
     build_spatial_index,
     neighbor_tvt_transfer,
@@ -185,6 +187,53 @@ class TestSpatial(unittest.TestCase):
         np.testing.assert_array_equal(full.nodes["donor"].tvt, donor["TVT"].to_numpy())
         with self.assertRaises(ValueError):
             build_spatial_index([], label_policy="typo")
+
+    def test_label_null_codes_never_create_donor_support(self) -> None:
+        for sentinel in LAS_NULL_SENTINELS:
+            with self.subTest(sentinel=sentinel):
+                donor = self._well(y=10.0)
+                donor["TVT_input"] = sentinel
+                donor.loc[5, "X"] = -9999.25
+                donor.loc[5, "MD"] = -9999.25
+                before = donor.copy(deep=True)
+                node = well_spatial_node_from_lateral("donor", donor)
+                self.assertTrue(np.isnan(node.tvt).all())
+                np.testing.assert_array_equal(node.x, donor.X)
+                np.testing.assert_array_equal(node.md, donor.MD)
+                transfer = neighbor_tvt_transfer(donor, node)
+                self.assertTrue(np.isnan(transfer["neighbor_tvt"]).all())
+                self.assertTrue((transfer["neighbor_transfer_ok"] == 0).all())
+                pd.testing.assert_frame_equal(donor, before)
+                # Explicit full labels must decode their own nulls and never
+                # fall back to finite visible input labels.
+                donor["TVT_input"], donor["TVT"] = 100., sentinel
+                full = well_spatial_node_from_lateral("donor", donor, label_policy="full_tvt")
+                self.assertTrue(np.isnan(full.tvt).all())
+                observed = well_spatial_node_from_lateral("donor", donor)
+                np.testing.assert_array_equal(observed.tvt, 100.)
+
+    def test_direct_node_nulls_are_masked_without_mutation(self) -> None:
+        target = self._well()
+        raw = np.full(len(target), -9999.25)
+        node = WellSpatialNode("direct", 0., 0., 1., 0., target.MD.to_numpy(),
+                               target.X.to_numpy(), target.Y.to_numpy(), raw)
+        transfer = neighbor_tvt_transfer(target, node)
+        self.assertTrue(np.isnan(transfer["neighbor_tvt"]).all())
+        self.assertTrue((transfer["neighbor_transfer_ok"] == 0).all())
+        np.testing.assert_array_equal(node.tvt, -9999.25)
+        np.testing.assert_array_equal(raw, -9999.25)
+
+    def test_raw_target_nulls_do_not_corrupt_visible_heel_offset(self) -> None:
+        target = self._well()
+        target["TVT_input"] = np.r_[np.full(8, 100.), np.full(12, -9999.25)]
+        donor = self._well(y=10.)
+        donor["TVT_input"] = 90.
+        before = target.copy(deep=True)
+        output = attach_spatial_features(self._stations(target), target,
+                    build_spatial_index([("donor", donor)]), "target")
+        np.testing.assert_array_equal(output.neighbor_offset, 10.)
+        np.testing.assert_array_equal(output.neighbor_tvt, 100.)
+        pd.testing.assert_frame_equal(target, before)
 
     def test_self_is_excluded_even_with_external_query(self) -> None:
         target = self._well()

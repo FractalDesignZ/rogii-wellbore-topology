@@ -482,12 +482,21 @@ def select_development_wells(manifest: dict, requested: list[str] | None = None)
     """Validate roles before constructing/opening any selected source CSV path."""
     development = manifest.get("development_well_ids")
     confirmation = manifest.get("confirmation_well_ids")
-    valid = lambda items: (isinstance(items, list) and all(isinstance(wid, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", wid) for wid in items) and len(set(items)) == len(items))
-    if not valid(development) or not valid(confirmation) or not development or set(development) & set(confirmation):
-        raise ValueError("manifest requires disjoint explicit development/confirmation well lists")
+
+    def valid(items):
+        return (isinstance(items, list)
+                and all(isinstance(wid, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", wid) for wid in items)
+                and len({wid.casefold() for wid in items}) == len(items))
+
+    if not valid(development) or not valid(confirmation) or not development:
+        raise ValueError("manifest requires case-unambiguous explicit development/confirmation well lists")
+    confirmation_ids = {wid.casefold() for wid in confirmation}
+    if {wid.casefold() for wid in development} & confirmation_ids:
+        raise ValueError("development/confirmation well lists must be disjoint ignoring case")
     selected = list(development) if requested is None else list(requested)
-    if not valid(selected) or not selected or not set(selected).issubset(development) or set(selected) & set(confirmation):
-        raise ValueError("selected wells must be a unique subset of manifest development wells; confirmation is reserved")
+    if (not valid(selected) or not selected or not set(selected).issubset(development)
+            or {wid.casefold() for wid in selected} & confirmation_ids):
+        raise ValueError("selected wells must use unique exact manifest development IDs; confirmation is reserved ignoring case")
     if len(selected) < 3:
         raise ValueError("fixed three-fold training requires at least three selected development wells")
     return selected

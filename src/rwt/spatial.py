@@ -12,6 +12,8 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from rwt.load import normalize_curve_nulls
+
 
 SpatialLabelPolicy = Literal["observed_only", "full_tvt"]
 
@@ -128,7 +130,7 @@ def well_spatial_node_from_lateral(
         if hn > 1e-15:
             ax, ay = dx / hn, dy / hn
     source = tvt_col if label_policy == "full_tvt" else tvt_input_col
-    tvt = df[source].to_numpy(dtype=float).copy() if source in df.columns else np.full(n, np.nan)
+    tvt = normalize_curve_nulls(df[source]) if source in df.columns else np.full(n, np.nan)
     tvt[~np.isfinite(tvt)] = np.nan
     return WellSpatialNode(
         well_id=str(well_id),
@@ -156,7 +158,9 @@ def neighbor_tvt_transfer(
     n = len(tx)
     out_tvt = np.full(n, np.nan)
     out_d = np.full(n, np.nan)
-    nx, ny, ntvt = neighbor.x, neighbor.y, neighbor.tvt
+    # Public nodes can also be constructed directly. Decode label nulls at
+    # consumption without changing the node's observations or coordinates.
+    nx, ny, ntvt = neighbor.x, neighbor.y, normalize_curve_nulls(neighbor.tvt)
     finite = np.isfinite(ntvt) & np.isfinite(nx) & np.isfinite(ny)
     target_rows = np.flatnonzero(np.isfinite(tx) & np.isfinite(ty))
     if not finite.any() or not len(target_rows):
@@ -232,7 +236,7 @@ def attach_spatial_features(
         # Heel-only affine offset (TVT_input only)
         offset = 0.0
         if "TVT_input" in lateral.columns:
-            heel_tvt = lateral["TVT_input"].to_numpy(dtype=float)
+            heel_tvt = normalize_curve_nulls(lateral["TVT_input"])
             tr_full = tr["neighbor_tvt"]
             m = (
                 np.isfinite(heel_tvt)

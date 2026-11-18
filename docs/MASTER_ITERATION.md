@@ -21,6 +21,8 @@ Failures remain in their original attempt directories. New criteria or source ch
 
 The old WP8 harness could return success when pad transfer failed. It also read synthetic oracle truth in the donor predictor and allowed self-transfer when scoring training wells. The corrected donor interface defaults to observed `TVT_input`; full `TVT` requires an explicit training-donor policy. `TVT_true` is evaluator-only.
 
+The public spatial API also decodes declared TVT curve null sentinels when constructing donors, consuming directly constructed nodes and calibrating a target's visible heel. Such values cannot become finite donor support or heel offsets. This curve policy leaves finite coordinates intact. Cohort-role checks reject case aliases before CSV access, including on Windows filesystems where differently cased filenames identify the same well.
+
 ```bash
 python scripts/measure_manifold_gr_synth.py --donor-policy observed_only
 python scripts/measure_manifold_gr_synth.py --donor-policy full_tvt

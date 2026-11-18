@@ -86,6 +86,31 @@ class BlockFeatureTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 select_development_wells({"development_well_ids": ["../A"], "confirmation_well_ids": []})
 
+    def test_manifest_case_aliases_rejected_before_source_access(self):
+        manifest = {"development_well_ids": ["DevA", "DevB", "DevC"], "confirmation_well_ids": ["Hold"]}
+        cases = [
+            ({**manifest, "confirmation_well_ids": ["deva"]}, None),
+            ({**manifest, "development_well_ids": ["DevA", "deva", "DevC"]}, None),
+            ({**manifest, "confirmation_well_ids": ["Hold", "hold"]}, None),
+            (manifest, ["HOLD", "DevA", "DevB"]),
+            (manifest, ["deva", "DevB", "DevC"]),
+            (manifest, ["DevA", "deva", "DevC"]),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for index, (contents, requested) in enumerate(cases):
+                with self.subTest(index=index):
+                    path = root / f"manifest{index}.json"
+                    path.write_text(json.dumps(contents))
+                    arguments = ["fit", "--data-root", str(root), "--manifest", str(path), "--out", str(root / f"out{index}")]
+                    for wid in requested or []:
+                        arguments.extend(["--well-id", wid])
+                    with patch("rwt.block_model._sha", side_effect=AssertionError("source bytes must remain unopened")), patch("rwt.block_model.pd.read_csv", side_effect=AssertionError("source CSV must remain unparsed")):
+                        with self.assertRaises(ValueError):
+                            main(arguments)
+                    self.assertFalse((root / f"out{index}").exists())
+        self.assertEqual(select_development_wells(manifest, ["DevC", "DevA", "DevB"]), ["DevC", "DevA", "DevB"])
+
 
 class BlockFitTests(unittest.TestCase):
     @classmethod
