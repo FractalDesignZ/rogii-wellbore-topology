@@ -70,6 +70,8 @@ python scripts/inspect_registered_views.py --image path/to/well.png --lateral pa
 
 The ROI above is an example requiring verification for the supplied image. Without explicit control points the result is unregistered pixel candidates, not recovered geometry or a TVT prediction.
 
+Registration design and the checked development-image correspondence are documented in [`docs/REGISTERED_IMAGE_VIEWS.md`](docs/REGISTERED_IMAGE_VIEWS.md).
+
 ## Quick start
 
 ```bash
