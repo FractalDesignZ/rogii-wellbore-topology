@@ -16,6 +16,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Policy refinement.** A bounded OODA adapter records evidence-bound policy states, accepts strict objective improvements and reports explicit stops. Adaptive merit weights propagate through a parent graph while counting shared factors once. Their field replay reproduces all native forecasts byte-for-byte. Predictive admission uses its own unchanged objective. [Policy mapper and weight graph](docs/POLICY_REFINEMENT.md)
 
+**Label ancestry.** A declared artifact graph carries hidden-label well dependencies through derived curves and selectors. Filtering cannot erase a parent's exposure. Metadata replay accepted all 18 matching model/context pairings and rejected 144 inappropriate pairings; a separate audit verified the 81 original-model cases. [Role guard, evidence limits and example](docs/LABEL_LINEAGE.md)
+
 **Broader model checks.** Seven further comparisons tested learner capacity/family, continuous leaves, physical target coordinates, donor innovations, GR calibration and decoder execution. None passed its complete final-error gate. [Matched results and scopes](docs/LEARNER_AND_RELATION_CHECKS.md)
 
 **Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay at eight passes and after fixed continuation to 64. The continued two-way model beat all learned controls but missed the incumbent pooled score; the current 9.988991-ft development route remains retained. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
