@@ -1,5 +1,7 @@
 # Jovin source enrollment
 
+**Accepted.** On commit `17cf7559`, Jovin passed baseline binding, inventory, Python AST and native CPU verification. The project receipt is `20261119T030604Z-ff81a4fcfc71`. The native check covers minimum-cost depth paths on 1,309 synthetic lattices. [Observed wellbore runs and field scores](NODAL_HARNESS.md)
+
 The Jovin project manifest covers the Python launcher, worker, statically resolved first-party modules and targeted tests for the nodal comparison. It also enrolls a C++17 verifier for the minimum-cost depth path. The configured gates are file inventory, Python AST analysis and native CPU checks. The existing run harness separately measures worker execution, model comparisons and predictive error. The launcher records the design reference at [mission-lab, revision dfdf8b7](https://github.com/ZuluYokohama/mission-lab/tree/dfdf8b7dded59f06d0fc2bc581a9292de305e977).
 
 ## Original Python-only check
@@ -23,6 +25,22 @@ The local enrollment root is `artifacts/jovin_nodal_enrollment_001/source`. The 
 The shared synthetic corpus contains 1,309 depth lattices. Thirteen target empty, singleton, boundary, tie, signed, disabled and unreachable cases. The other 1,296 exhaust all four-station-cell assignments drawn from −1, 0 and 1 on a two-station, two-bin lattice and all 16 admissible-edge masks. The signed costs on enabled crossings are fixed. Each row stores the path returned by the production Python solver and its computed total cost, or an unreachable marker. A Python test invokes the production solver on every frozen row and checks exact path and cost. Two independent C++ procedures solve each row using dynamic programming and exhaustive complete-path enumeration, including the specified tie preference for the lowest terminal bin and then lowest predecessors. [Corpus](../qa/path_vectors.txt) · [Python comparison](../tests/test_native_path_vectors.py) · [Native verifier](../qa/path_verify.cpp)
 
 The Windows CMake build with MSVC 19.44.35229 passed CTest on all 1,309 lattices and enumerated 6,562 complete paths. Production Python verification and the existing offset-path tests passed seven tests. These cases check the combinatorial solver on small, exactly representable numbers. They establish neither field accuracy nor parity at arbitrary floating-point magnitudes.
+
+## Final native and project receipts
+
+Jovin enrolled the revised report viewer and its regression test with the native checker at commit `17cf7559b9d8e7245cd0ee3820da79d5f944dadf`. The scoped inventory contained 26 files (308,667 bytes). Every inventoried file matched its Git blob. The source manifest SHA-256 was `e2fdfc9ff0c8f47ce674267a3494677b42b802a84c320c7b3c1f4fa0e53b101a`. A separate invocation of the production Python solver passed both corpus tests against this same checkout.
+
+| Operation | Final local receipt | Result |
+| --- | --- | --- |
+| Baseline | `20261119T030555Z-70009ff410f3` | Enrolled |
+| Native CPU check | `20261119T030604Z-546a69dd043b` | Passed `path_parity` |
+| Project check | `20261119T030604Z-ff81a4fcfc71` | Passed with zero source drift |
+
+All four project gates passed. `baseline_binding` and `inventory` verified the working snapshot against the baseline, `python_ast` recorded the Python syntax and call projections, and `native_cpu` verified the supervised native phase receipts. The final chain contained 16 linked receipts, zero verification problems and head SHA-256 `00b8bf2518c5d7dc1834b28ac5484c003bf5a3252cb4ad42ffa9bf80aaccb76b`.
+
+The installed Jovin CLI built and ran the checker with cached Linux toolchain image `sha256:9e1fa3183ce71070a422e13121a49eab4ada0ce6d0be22a3a57e4439b090ad4a` on rootless Podman. Compilation produced a 33,888-byte ELF executable with SHA-256 `415cd7083426d4357cecae54d774fe386af1c06142e88ae256999c57aa912f37`. The supervised command reported all 1,309 lattices and 6,562 complete paths, exited zero and confirmed cleanup. The 9.12 seconds for the native CLI invocation included the supervised build, artifact packaging, execution and receipt creation. That time measures verification of the small solver fixtures. Field-model runtime and accuracy have separate receipts.
+
+The final run evidence resides under `artifacts/jovin_nodal_native_002/`, including frozen inventory, production Python replay, native status, baseline, native result, project check and chain verification. The shared receipt store remains under `artifacts/jovin_nodal_enrollment_001/receipts_data/`. The first successful native enrollment at commit `644a5057c71e721a286da8e25174e0e20d5a723f` preceded the report fix and remains under `artifacts/jovin_nodal_native_001/` with baseline `20261119T030339Z-aeabd6f153cf`, native result `20261119T030348Z-abda56fe9153` and project check `20261119T030349Z-3d135226129a`.
 
 ## Reproducing the source scope
 
