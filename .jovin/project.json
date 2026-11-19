@@ -54,7 +54,7 @@
     {
       "id": "tests",
       "language": "python",
-      "paths": ["tests/test_ast_evidence.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py"],
+      "paths": ["tests/test_ast_evidence.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py"],
       "depends_on": ["launcher", "study", "path_verification"]
     }
   ],

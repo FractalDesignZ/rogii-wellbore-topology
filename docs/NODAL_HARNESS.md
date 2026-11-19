@@ -23,7 +23,7 @@ On a fresh checkout, create the cohort manifest before running the launcher. Wit
 
 Use `--all-development` and a different output directory for the full development comparison. To check the original pilot evidence on its originating checkout, run `python -B scripts/run_nodal_harness.py --verify artifacts/nodal_mission_001`. Verification is read-only and requires the original source bytes, raw files and recorded path layout. A new execution records new processes and timings. [Launcher](../scripts/run_nodal_harness.py) · [Worker](../scripts/nodal_worker.py)
 
-To inspect the result visually, generate an offline HTML report. It verifies the saved run, draws its executed dependency edges and lets you expand each source file to inspect imports, branches and call expressions. Supply a fresh HTML filename. [Report generator](../scripts/render_nodal_evidence.py)
+To inspect the result visually, generate an offline HTML report. It verifies the saved run, draws its executed dependency edges and lets you expand each source file to inspect imports, branches and call expressions. Under **Trace a block**, one original reading and its incident edges share a well and row key with four saved predictions and their controls. This identifies the model row that consumed the observations. Supply a fresh HTML filename. [Report generator](../scripts/render_nodal_evidence.py)
 
 ```powershell
 & $python -B scripts/render_nodal_evidence.py $run "$run/evidence.html"
@@ -78,7 +78,7 @@ The same recipe covered all 3,034,427 toe stations in 379,568 blocks across 619 
 | Random forest | 15.037972 | 15.111924 | 307 | −0.074 [−0.165, +0.022] |
 | Neural network | 18.655931 | 19.793604 | 333 | −1.138 [−2.143, −0.178] |
 
-The forest beat last-visible TVT in all three folds. Its matched forest had lower error in one fold. The paired interval against last visible was −1.305 to −0.599 ft. The neural network improved against its matched control and scored 2.662 ft above last visible. Each interval uses 10,000 resamples of whole wells, seed 42, with predictions held fixed. The intervals omit retraining variation and possible geographical dependence between wells.
+The forest beat last-visible TVT in all three folds. Its matched forest had lower error in one fold. The paired interval against last visible was −1.305 to −0.599 ft. The neural network improved against its matched control and scored 2.662 ft above last visible. For each interval, sort the well IDs lexically and draw 10,000 resamples of 619 whole wells with replacement using NumPy PCG64 seeded with 42. Each replicate uses the same sampled wells for all arms. Compute each RMSE as the square root of summed squared error divided by summed row count, then take the linear 2.5th and 97.5th percentiles of the paired differences. The intervals hold predictions fixed and omit retraining variation and possible geographical dependence between wells.
 
 The backward revision changed 237,451 of 378,949 edge weights. The decoder then selected different offsets on 15,228 blocks covering 121,738 original stations (4.01%). Among the 573 wells with at least one change, 309 improved and 264 worsened. The other 46 kept the same path. This establishes that later evidence can change earlier weights and that some changes reach the output. The graph arm's 40.469240 ft remains well above the 15.993630 ft carry-forward baseline.
 
