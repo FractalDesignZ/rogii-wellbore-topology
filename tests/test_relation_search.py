@@ -50,6 +50,11 @@ class RelationSearchTests(unittest.TestCase):
         final = search_relations(anchor, candidates, obs, goal=SearchGoal(3), boundary=motion)
         self.assertEqual((final.value_ft,final.unique_path), (101.,True))
         self.assertEqual(final.nodes[-1].parents[0].source_node_id, rising.node_id)
+        self.assertEqual([s.proposed.tvt_ft for s in final.supporting_steps()], [99.,100.,101.])
+        self.assertEqual([s.proposed.tvt_ft for s in middle.supporting_steps(falling)], [101.,100.])
+        self.assertEqual(len(middle.supporting_steps()), 4)
+        with self.assertRaises(ValueError):
+            final.supporting_steps(falling)
         for invalid in ("", 1):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 state(2, activity=invalid)

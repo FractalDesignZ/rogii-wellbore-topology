@@ -107,7 +107,7 @@ The label-blind transform took 19.08 seconds; nine fits totaled 343.37 seconds a
 
 ### Transporting local layer changes between wells
 
-The strongest checked development model scores **11.581639 ft**. It adds 12 directional geology features to the 14.534777 ft context and graph model. All three folds improve on the same 3,034,427 stations, with 438 well improvements and 181 regressions. The pooled reduction in squared error is 234,031,299.66 ft². The fixed half-sequence blend scores 12.126157 ft, up from the directional model's error and down from the previous blend's 14.150791 ft.
+Adding 12 directional geology features to the 14.534777 ft context and graph model brought development RMSE to **11.581639 ft**. All three folds improved on the same 3,034,427 stations, with 438 well improvements and 181 regressions. The pooled reduction in squared error was 234,031,299.66 ft². The fixed half-sequence blend scored 12.126157 ft.
 
 For a training donor, let layer height be `S = TVT + Z`. Two positions along that well give a height change and a horizontal displacement. A constant vertical datum offset cancels in the difference. Nearby donor directions constrain a local horizontal gradient, which is projected along a query step and integrated from the query's visible heel. Nearly parallel donor paths give little evidence about the transverse gradient. The model receives the donor count, alignment and directional balance alongside the estimated change.
 
@@ -125,6 +125,26 @@ A fixed two-dimensional convolution model used the measured-depth and candidate-
 | Half learned alignment, half context and graph | 14.731799 | 14.150791 for the preceding sequence blend |
 
 Both comparisons lost all three folds. The auditor reproduced the station keys, labels, weights and grouped folds for all 3,034,427 toe rows. All predictions were finite, with zero fallbacks. The three GPU runs took 400.66 seconds in total. Peak field process memory was 2.20 GB and peak reserved CUDA memory was 407 MB.
+
+### Two maps contributing evidence to the same transition
+
+The soft-overlay experiment centers a 41-depth graph on the raw fold-local directional estimate. At each successive station, a candidate can stay at its offset or move one offset bin in either direction. Survey geometry and the calibrated gamma-ray cost each supply evidence on that same edge. Unsupported measurements contribute neutral evidence. The path can therefore continue through a missing reading.
+
+The conventional and Julia arms share the directional feature matrix, candidate grid, legal transitions, ten graph summaries and fixed 600-round learner. Both propagate evidence forward and backward within each well. The Julia arm adds bounded orbit-dependent penalties before that propagation. Both learners were trained separately with the same recipe and identical fold assignments.
+
+| Full-toe model | RMSE (ft) | Wells improved by soft Julia overlay |
+| --- | ---: | ---: |
+| Directional geology reference | 11.581639 | 328 of 619 |
+| Conventional candidate graph | 11.643708 | 331 of 619 |
+| Same graph with two soft Julia maps | **11.506689** | — |
+
+Against the matched graph, Julia evidence reduced pooled SSE by **9,625,306.27 ft²** and improved all three folds. Against the directional model, it reduced pooled SSE by **5,250,990.05 ft²**. Two folds improved and one regressed by 60,798.49 ft². All six saved models replayed, and a second calculation verified the exact original station keys and paired errors. The result supports this pair of penalties on development. Their individual contributions and the roles of other nonlinear scoring rules are open questions.
+
+### Switching between depth models
+
+A separate experiment tested a persistent activity-state interpretation using two frozen out-of-fold models. At each station, the gamma-ray mismatch scored each model's proposed depth. A two-state dynamic program penalized switches and reset at each well. All route choices were saved before scoring on the original 3,034,427 toe stations.
+
+The switch penalty reduced the number of switches from 62,449 to 8,676 and increased median run length from two to 22 blocks. The persistent route scored **12.736616 ft**, the greedy route **12.718122 ft**, and the always-directional reference **11.581639 ft**. The regularized route was more stable and had higher depth error in every fold against the directional reference. This comparator tested whether the observed gamma-ray mismatch could identify which model to trust.
 
 The first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. Fresh attempts retain the old runs unchanged and use stronger station-key/fold audits. The two selectors formerly scored 10.997149 ft with an incomplete path library; repaired path availability changes both to 11.030914 ft. This is an ingestion/library effect, not a native gain.
 

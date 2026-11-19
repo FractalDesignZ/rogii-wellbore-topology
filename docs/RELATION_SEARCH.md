@@ -38,6 +38,10 @@ Eight layers of three candidates can describe 6,561 complete paths. The unfilter
 
 Observed conditions travel on the relation. An optional `CandidateState.activity` label carries the inferred mode that matters to the next decision. For example, two routes may reach 100 ft from opposite directions. Both give the same answer to a depth query at that station, but an observation of continuing increase can distinguish their next transitions. A test preserves both states and recovers the single compatible route to 101 ft. Omitting activity reproduces the original depth-only node identities and serialized traces.
 
+The label can carry a proposed activity regime. Establishing such a regime requires evidence that relationships behave differently over a sustained interval. The direction example tests preservation of memory. It supplies no evidence by itself for a geological regime change.
+
+`result.supporting_steps()` traces backward from the reached goals and returns the original observed crossings with their map evidence. Pass one reached terminal state to inspect just its supporting routes. The trace includes every admitted parent on those routes, and skips branches that lead elsewhere. This walk is linear in the number of recorded crossings and avoids enumerating individual paths.
+
 ### Related work
 
 - Constraint propagation on networks of relations and message passing on factor graphs give precedents for assembling a global answer from local compatibility conditions. The periodic example resolves residues at coprime periods, a direct application of the Chinese remainder theorem. [Mackworth (1977)](https://www.cs.ubc.ca/~mack/Publications/AI77.pdf) · [Kschischang, Frey and Loeliger (2001)](https://www.cise.ufl.edu/~arunava/Teaching/cap6617sp21/Readings/frey2001factor.pdf) · [Chinese remainder theorem](https://crypto.stanford.edu/pbc/notes/numbertheory/crt.html)
@@ -72,3 +76,19 @@ A separate diagnostic froze the next 48 development wells and saved evidence for
 The primary comparison asked how often the candidate nearest the measured TVT had a smaller mean boundary distance than either alternative, with half credit for ties. The evaluator used the previous station's nearest true candidate to select among already saved transitions. This tests the representation under a known previous state. A second calculation held the source at the visible heel depth throughout.
 
 Of 384 stations, 363 had common support across all three proposed depths. The combined proximity measure scored **18.04%** against a 50% chance reference. A well-level bootstrap gave a 95% interval of **12.18% to 24.44%**. Using the fixed heel source gave **19.83%**. The prespecified initial-radius residual control scored **98.48%** on the primary comparison. On 25 of the 363 eligible stations, the nearest candidate differed from the heel depth. These are short-span ranking measurements. They give no support to choosing a candidate by closeness to these two basin boundaries.
+
+## Using a boundary signal to allocate search
+
+A separate experiment asked where an extra candidate would earn its cost. It used 96 further development wells, each with eight near-heel block centers. Every station started with one candidate at the last visible depth. A fixed budget allowed two additional depths at two stations per well. The three budgeted policies differed only in which stations they expanded. The chooser scored the resulting candidates against the same geometry and gamma-ray observations.
+
+| Expansion policy | Candidate checks | RMSE on 768 centers (ft) |
+| --- | ---: | ---: |
+| Heel only | 768 | 1.0071 |
+| Uniform placement on supported stations | 1,152 | 0.9761 |
+| Shift in the Julia boundary statistic | 1,152 | 0.9574 |
+| Direct disagreement in observed geometry and GR | 1,152 | 0.9415 |
+| Every supported station | 2,240 | 0.9076 |
+
+The Julia policy varied its quadratic parameter with the observed discrepancies. It counted adjacent seed-grid locations with differing finite escape outcomes, then ranked the change from a reference parameter. The 769 parameter settings, including the reference, produced identical integer counts on CPU and GPU. A warmed float64 batch on the RTX 5070 took 57 ms including transfers, versus 605 ms for the vectorized CPU calculation. These timings cover the boundary calculation. Each policy also incurs its own screening and candidate-evaluation costs.
+
+The Julia policy beat uniform allocation on one well, lost on one and tied on 94. Direct discrepancy beat uniform on two and tied on 94. At this budget direct discrepancy had lower pooled error than the Julia statistic. The limited number of changed well outcomes confines the interpretation to this pilot.

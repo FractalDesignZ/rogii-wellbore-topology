@@ -229,6 +229,24 @@ class SearchResult:
     def to_dict(self) -> dict[str, Any]:
         return {**_plain(self), "value_ft": self.value_ft}
 
+    def supporting_steps(self, goal_state: CandidateState | None = None) -> tuple[TraversalStep, ...]:
+        """Trace accepted routes to reached goals, retaining their map evidence.
+
+        Select a particular reachable terminal state to narrow the trace.
+        Unresolved alternatives remain recorded in the full search result.
+        """
+        if goal_state is not None and goal_state not in self.goal_states:
+            raise ValueError("the selected state was not reached at the goal")
+        targets = self.goal_states if goal_state is None else (goal_state,)
+        ancestors = {state.node_id for state in targets}
+        support = []
+        # The forward traversal processes earlier source stations first.
+        for step in reversed(self.steps):
+            if step.admitted and step.proposed.node_id in ancestors:
+                ancestors.add(step.source_node_id)
+                support.append(step)
+        return tuple(reversed(support))
+
 
 def search_relations(anchor: CandidateState, candidates_by_station: Mapping[int, Sequence[CandidateState]],
                      observations: Sequence[ObservedRelation], *, goal: SearchGoal, boundary: Boundary,
