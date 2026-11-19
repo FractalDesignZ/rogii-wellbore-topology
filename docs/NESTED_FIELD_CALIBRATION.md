@@ -64,7 +64,7 @@ All ten O surfaces were independently reconstructed before O target issuance, in
 
 The remaining eight-bank batch took **2,191.17 s elapsed** with two context pipelines. The prior pilot took 541.97 s. The five sequential suffix phases took 10.72 s for the bank seal, 99.94 s for B custody, 61.45 s for objectives/policies, 43.69 s for O deployment and 95.67 s for grading/closure. These active intervals exclude intervening source review and independent audits. Summed bounded worker wall time was **4,036.97 s**; it is not elapsed wall time or CPU time. The 27 depth workers contributed 2,385.60 s, nine two-head workers 241.31 s and the three analytic policy-fit workers 11.31 s. The last measurement includes interpreter/data overhead, not just the small convex solve.
 
-The user's proposed weights by clustered condition/activity types were recorded before this O grading, with parent-policy fallbacks and matched extra-capacity, q-only and type-reassignment controls. That separate study's implementation and predictive result remain pending. A cluster must earn its weight on excluded complete forecasts; grouping by held error is not a permitted type definition.
+The user's clustered condition/activity proposal was recorded before this O grading. That separate study has now completed: its five-feature primary scored 9.865546 ft and improved every fold against retained 9.909565 ft, but passed only six of sixteen comparisons. q-only grouping and matched untyped policies were stronger in every fold, so it was not admitted. Parent fallbacks, original-station actions and all seventeen surfaces were independently checked. Grouping by held error was prohibited. [Complete clustered comparison](CLUSTERED_NATIVE_WEIGHTS.md)
 
 ## Completed baseline replay
 

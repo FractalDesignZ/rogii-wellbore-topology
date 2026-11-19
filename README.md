@@ -20,6 +20,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Complete-pipeline calibration.** A nested study fitted weights from fully excluded native forecasts. Its 9.858253-ft primary improved all folds over retained 9.909565 ft but lost to reassigned reliability at 9.848064 ft, failing one of nine required comparisons. All 45 new fits, native forecasts and original-row scores were checked; neither candidate nor control was promoted. [Roles, ten arms, timings and independent evidence](docs/NESTED_FIELD_CALIBRATION.md)
 
+**Cluster-conditioned weights.** The frozen five-feature type policy scored **9.865546 ft**, improving every fold against retained **9.909565 ft**, but passed only **6 of 16** comparisons. q-only grouping and matched untyped policies were stronger in every fold; the incumbent stays installed. All 17 native surfaces, coefficient roles and original-row scores passed independent checks. [Type schema, matched controls, uncertainty and execution evidence](docs/CLUSTERED_NATIVE_WEIGHTS.md)
+
 **Broader model checks.** Seven further comparisons tested learner capacity/family, continuous leaves, physical target coordinates, donor innovations, GR calibration and decoder execution. None passed its complete final-error gate. [Matched results and scopes](docs/LEARNER_AND_RELATION_CHECKS.md)
 
 **Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay at eight passes and after fixed continuation to 64. The continued two-way model beat all learned controls but missed its frozen 9.988991-ft incumbent and was not admitted. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
