@@ -2,7 +2,7 @@
 
 The objective is stronger GR-to-TVT placement with reproducible evidence. Network Engine provides relational hypotheses and changing support; the wellbore evaluator decides whether they improve placement. A local score is not an official leaderboard rank.
 
-Ruby won the completed competition with **5.639 ft** on Kaggle's private test set. Its archive lists per-family out-of-fold errors from 4.8045 to 5.5360 ft using repeated geographic splits. Our development split uses different wells and folds. A head-to-head comparison would require fitting both methods on the same training wells and scoring their frozen predictions on the same withheld rows. [Final leaderboard](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/leaderboard) · [Winner's archived recipes](https://github.com/IAmAValidUsername/kaggle_ROGII_1st_place_solution_Ruby/blob/fade6112ffebd9e27c08ac7f053e8d4c3d5c319a/README.md)
+Ruby won the completed competition with **5.639 ft** on Kaggle's private test set. Our measurements use a separate development split. External solutions supply benchmark context only. [Final leaderboard](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/leaderboard) · [First-party design rule](../AGENTS.md)
 
 Two linked tracks share cohort identities and scoring rules. The rapid-model track tests strong standard alignment/model candidates quickly. The operator track tests changing maps, registered image relationships and higher-order consistency. Features or priors may cross between tracks only through explicit contracts; ablations must distinguish an alignment gain from an incremental operator gain.
 
@@ -12,10 +12,10 @@ This is an extension of this repository. The existing Network Engine and MaxOp p
 
 | Stage | Required evidence | Next step |
 | --- | --- | --- |
-| Plan | Input identities, observation policy, source closure, cohort assignment, fixed criteria and dependency graph | Start a fresh attempt |
+| Plan | First-party design and parameter origins, input identities, observation policy, source closure, cohort assignment, fixed criteria and dependency graph | Start a fresh attempt |
 | Mutate / measure | Allowed observations only; explicit candidate predictions and support; retained execution result | Recompute metrics |
 | Verify / audit | Artifact hashes, common-support metrics, coverage and declared gate checks | Record the decision |
-| Admit | Every required engineering gate passes | Admit only the stated claim |
+| Admit | First-party provenance, including upstream inputs, and all required engineering checks pass | Admit only the stated claim |
 
 Failures remain in their original attempt directories. New criteria or source changes require a new attempt. A synthetic construct pass never admits field performance. Source ASTs and static call sites are syntax evidence; they are not a dynamic call graph or a sandbox.
 
@@ -52,7 +52,7 @@ The fixed filename-only assignment contains 619 development and 154 confirmation
 | Raw last-known comparator | All 54,833 pilot toe rows | 11.616770 ft |
 | GR-only whole-path selector | Same 54,833 pilot rows, corrected coordinate policy | 11.030914 ft |
 | Native-augmented whole-path selector | Same library and 54,833 rows | 11.030914 ft; identical choices, zero incremental native gain |
-| Reviewed plain Forward–Backward candidate | All 54,833 pilot rows, corrected coordinate policy | 60.817223 ft; rejected |
+| Historical external Forward–Backward port | All 54,833 pilot rows, corrected coordinate policy | 60.817223 ft, excluded from the candidate pool |
 | Oracle projection into heel ±18 ft | 3,034,427 development toe rows | 7.4585 ft lower bound for tracks constrained to that band |
 | Oracle projection into heel ±36 ft | Same development rows | 3.8306 ft lower bound; not an attained prediction |
 
@@ -119,6 +119,8 @@ A follow-up used six named formation-top elevations from other training wells as
 
 ### Extending structural height from the observed heel
 
+**Historical, excluded from active selection.** This experiment has an independently written implementation, but its design contract records consultation of a competitor's implementation for using visible-prefix structural height. The exclusion also covers its blends, graph combinations and later path policies that use its features or predictions. The numbers below document past measurements.
+
 The query well supplies its own structural-height measurements before the hidden toe starts. At measured-depth windows of 128, 512 and 1,536 ft behind the heel anchor, a ridge fit estimates how `TVT_input + Z` changes with horizontal displacement. Projecting that gradient along the survey gives a structural-height change. Subtracting the observed change in Z converts it to a predicted TVT change. The 48 added features include fit support, geometry and agreement with the training-donor gradient. A nearly straight heel provides limited evidence about the cross-track slope.
 
 This addition reduced full-toe development RMSE from **11.581639 to 11.358078 ft**. All three folds improved, with 332 wells improving and 287 worsening. Across 3,034,427 original stations the squared-error reduction was 15,561,830.41 ft². The 619 visible heels supplied 1,047,316 finite TVT and coordinate measurements. Each fold retained the original 286 directional features and their training medians byte for byte. All three saved models reproduced their predictions. A fixed half-sequence, half-heel blend scored 12.077808 ft.
@@ -126,6 +128,8 @@ This addition reduced full-toe development RMSE from **11.581639 to 11.358078 ft
 A separate serving check rebuilt one validation query per fold from its allowed horizontal-well and typewell measurements. Each saved model used its original training donors and medians. All 612,890 feature cells and 14,672 toe-row predictions matched the development artifacts bit for bit, and all 5,137 observed heel rows retained their supplied depths. This checks the raw-input prediction path for those three wells. It uses the privately retained feature providers and donor support.
 
 ### Learned alignment over candidate depths
+
+**Historical, excluded from active selection.** This proposal consulted a competitor's implementation when specifying the alignment task. Its results and derivatives are outside the first-party candidate pool.
 
 A fixed two-dimensional convolution model used the measured-depth and candidate-TVT axes. It assigned mass over 41 offsets at 5 ft spacing, with explicit masks for unsupported gamma-ray costs. Each training fold used the preceding sequence model's preprocessing, an unclipped regression loss and a fixed 20th-epoch checkpoint. A separate CPU audit began after all three GPU folds saved predictions.
 
@@ -152,7 +156,7 @@ Against the matched graph, Julia evidence reduced pooled SSE by **9,625,306.27 f
 
 A post-hoc paired bootstrap resampled complete development wells 5,000 times with fixed predictions and NumPy seed 20261119. The 95% interval for the Julia-minus-conventional RMSE difference was −0.231 to −0.044 ft. Against the directional reference it was −0.189 to +0.036 ft. These intervals describe sampling variation among these wells with the fitted models held fixed.
 
-A matched follow-up added each graph's ten summaries to the stronger 334-feature own-heel model. The underlying graphs kept the original directional centers, evidence and transitions. The conventional version scored **11.458987 ft** and the two-map version **11.424718 ft** on all 619 wells. The two maps reduced pooled squared error by 2,379,613.04 ft² against the conventional graph and improved two of three folds. The own-heel model alone retained the lowest error at **11.358078 ft**.
+A historical follow-up, excluded with the own-heel branch, added each graph's ten summaries to the stronger 334-feature own-heel model. The underlying graphs kept the original directional centers, evidence and transitions. The conventional version scored **11.458987 ft** and the two-map version **11.424718 ft** on all 619 wells. The two maps reduced pooled squared error by 2,379,613.04 ft² against the conventional graph and improved two of three folds. The own-heel model alone retained the lowest error at **11.358078 ft**.
 
 We replayed the orbit penalties on an RTX 5070 using the exact edge inputs from 12 development wells. CPU and GPU agreed on every discrete outcome across 1,685,100 map positions, of which 1,582,681 had measurement support. The largest penalty difference was 2.22 × 10⁻¹⁶ in double precision. Median timings over three runs included transfers in both directions.
 
@@ -167,7 +171,13 @@ Peak GPU memory was 97.2 MB allocated and 140.5 MB reserved. These timings cover
 
 A diagnostic supplied the measured depths to the path selector after model scoring. A path had to choose one of the 41 offsets at every block, move at most one offset bin per transition and reset at each well. The minimum full-row RMSE of any such path was **1.558950 ft**. Choosing the best bin independently at every block gave **1.558898 ft**. Only 5,296 of 3,034,427 original stations lay outside the ±100 ft band around the raw directional center. This gives an upper bound on what a perfect selector could recover from this grid and a lower bound on the error of a single discrete path.
 
-In a second run, the observed-data own-heel model supplied the desired depths. We saved the selected paths before scoring them. The same reachability rule scored **11.419827 ft**, independent rounding to the nearest bin scored **11.420237 ft**, and the continuous own-heel predictions scored **11.358078 ft**. Reachability changed 43 of 379,568 block choices versus independent rounding. Most of the remaining error comes from identifying the relevant depth using observations. The 1.558950 ft diagnostic uses hidden measurements and cannot serve as a prediction.
+In a historical run excluded with the own-heel branch, that model supplied the desired depths. We saved the selected paths before scoring them. The same reachability rule scored **11.419827 ft**, independent rounding to the nearest bin scored **11.420237 ft**, and the continuous own-heel predictions scored **11.358078 ft**. Reachability changed 43 of 379,568 block choices versus independent rounding. Most of the remaining error comes from identifying the relevant depth using observations. The 1.558950 ft diagnostic uses hidden measurements and cannot serve as a prediction.
+
+### First-party test of relationship weights
+
+This pilot began with the user's instruction to weight candidate moves by their observed relationships. Its declared inputs were the project's generic path solver, the existing cohort assignments and 12 raw development well/typewell pairs. The visible heel supplied the depth anchor and an estimate of gamma-ray error. Survey Z set the moving depth center. On each crossing the gamma-ray weight reflected both measurement availability and how well the typewell signal distinguished candidate depths. The equal-weight control used exactly the same states, measurements and transitions.
+
+All predictions were frozen before reading the hidden evaluation depths. On all **54,833** toe rows, the observation-weighted graph scored **37.614555 ft RMSE**, the equal-weight graph **35.346225 ft**, and the last observed depth **11.616770 ft**. The weights changed 9,226 predictions and improved six of 12 wells against equal weighting. The pooled error increased, so this weighting rule did not pass the development comparison. Its provenance receipt binds the first-party source, raw observations, parameter origins and predictions. A label-mutation test and a second prediction run verified the input boundary and deterministic replay.
 
 ### Switching between depth models
 

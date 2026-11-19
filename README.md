@@ -2,9 +2,11 @@
 
 An open-core research harness for [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction), with abstraction-mode compute from [`topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence) and an optional boundary to a separately installed Network Engine.
 
-**Validation status:** historical OOF scores below and in linked documents require remeasurement. Spatial donors previously preferred full training `TVT` before the well-group split. The corrected default uses observed `TVT_input` only and supports unseen target geometry. Historical scores do not validate the corrected pipeline or the new Network Engine diagnostics; no predictive gain is claimed for this integration.
+**Original work is a project requirement.** External solutions provide context for typical approaches and published results. Candidate designs, features and weights require traceable first-party origins. [Repository rule](AGENTS.md)
 
-**Current development evidence.** Projecting structural height from each well's visible heel reduced TVT error from 11.581639 to **11.358078 ft RMSE**. In a separate matched comparison, two Julia maps scoring candidate-depth transitions gave **11.506689 ft** against **11.643708 ft** for the conventional graph. Both improvements held across all three folds. These scores cover 619 development wells and 3,034,427 toe stations. The 154 confirmation wells remain reserved. [Measurements and controls](docs/MASTER_ITERATION.md)
+**Validation status.** Earlier spatial experiments selected full training `TVT` before splitting wells into folds. Their historical scores require remeasurement. The corrected default uses observed `TVT_input` and supports unseen target geometry. The current development comparisons below isolate supervised donors by training fold. The optional native Network Engine checks measure graph structure.
+
+**Development measurements.** Two Julia maps scoring candidate-depth transitions gave **11.506689 ft RMSE** against **11.643708 ft** for the matched conventional graph on 619 development wells and 3,034,427 toe stations. The 154 confirmation wells remain reserved. The measurement history identifies branches excluded from current candidate selection after a provenance review. [Measurements and controls](docs/MASTER_ITERATION.md)
 
 | Abstraction mode | Role |
 |------------------|------|
@@ -62,6 +64,8 @@ The public neighbor graph now reads observed `TVT_input` only by default. Full d
 ### Master iteration and image relationships
 
 The public relation search overlays multiple maps on each observed transition and traces which candidate depths survive. Run `python scripts/demo_relation_search.py --phase-stack` to see complementary periodic readings resolve one of 30 depths. With a local Network Engine installation, add `--native-lift` to turn admitted transitions into relation nodes. The 12-well pilot records which maps helped resolve a depth and which exhausted the available paths. [Shared-graph search and measurements](docs/RELATION_SEARCH.md)
+
+Use `rwt.offset_path.relation_cost` to weight evidence separately for each candidate crossing. `minimum_cost_offset_path` selects the least-cost reachable trajectory through those crossings. [Worked example with observation-dependent weights](docs/RELATION_SEARCH.md#weighting-relationships-inside-the-search)
 
 The next iteration uses two linked tracks: rapid model/alignment candidates and relational operator/image candidates, compared on the same fixed development cohort. The controller retains static AST/import evidence, a dependency graph, bounded subprocess receipts, exact selected OOF predictions, and a separate metric audit. Confirmation wells remain outside candidate selection. See [`docs/MASTER_ITERATION.md`](docs/MASTER_ITERATION.md).
 

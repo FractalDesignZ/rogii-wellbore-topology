@@ -1,5 +1,7 @@
 # Review of the supplied v0.2.1 archive
 
+This historical review records claims about an external package. The project uses external packages of this kind only for context about typical approaches and reported results. The review supplies no candidate specification. [First-party design rule](../AGENTS.md)
+
 This is a source review of `1-rogii-wellbore-topology-v0.2.1-updated.zip`. Archive tests and benchmark results were not executed as part of this review. Its reported **1.5019 ft** result describes a 16-well **synthetic StarSteer** cohort, not the real 773-well ROGII cohort (`docs/UPGRADE_V02_CHANGELOG.md:22-35`; `scripts/benchmark_upgrade_ablation.py:23,35-50`). The archive contains no retained ablation report or per-row OOF predictions for independently checking that number.
 
 All paths and line numbers below refer to files inside the supplied archive.
