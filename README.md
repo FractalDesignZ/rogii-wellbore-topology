@@ -16,6 +16,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Policy refinement.** A bounded OODA adapter records evidence-bound policy states, accepts strict objective improvements and reports explicit stops. Adaptive merit weights propagate through a parent graph while counting shared factors once. Their field replay reproduces all native forecasts byte-for-byte. Predictive admission uses its own unchanged objective. [Policy mapper and weight graph](docs/POLICY_REFINEMENT.md)
 
+**Broader model checks.** Seven further comparisons tested learner capacity/family, continuous leaves, physical target coordinates, donor innovations, GR calibration and decoder execution. None passed its complete final-error gate. [Matched results and scopes](docs/LEARNER_AND_RELATION_CHECKS.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
