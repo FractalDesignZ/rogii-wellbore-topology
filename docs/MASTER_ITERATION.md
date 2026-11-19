@@ -544,3 +544,38 @@ The Julia mapper reduced validation SSE in 17 of 45 searches but missed its bank
 The separately sealed transfer to the registered blended path scored **10.150449 ft** for Julia, **10.173618 ft** for plain order and **10.187848 ft** for static routing. Fixed affine and merit actions scored **10.030446 ft** and **10.027222 ft**. Julia changed 24 outer actions relative to plain order, and its entire pooled advantage came from one fold. The transfer also failed its declared gate. These transferred curves are distinct from the same-member bank forecasts in the table above.
 
 The independent audit authenticated all 49 stage receipts, reconstructed all 45 rotation roles and reproduced every pooled and fold RMSE within 10⁻¹² ft. Exact historical prelabel hashes authenticated the original action forecasts. A manual schema inspection displayed one archived bank row with identical action errors before dispatch; it supplied no policy or selection input. The run opened no fresh raw toe targets or confirmation data and fitted no forecast models. Local evidence root `1f5941c876ca8ee64cb1f73accbac9cf33dd1636536fb8bc411d368892203eb9`. The retained ordinal development lead remains **9.997405 ft**.
+
+### Extending observed evidence to reference-abstaining wells
+
+A raw observation audit reproduced the original 416 supported wells and classified the 203 fallbacks before joining historical errors in a separate process. Every fallback had zero pointwise held-heel reliability. An early affine reference map existed on 201 wells; two lacked finite reference-domain coverage. Of those 201, 200 had sufficient toe observations for the original 25-state comparison. Missing lateral GR caused none of these exclusions. Local audit root `5b839112f4a78526de95339d4652b962f2e72239bf010b274a2ca085e3b0de95`.
+
+The same-instrument study used GR differences between native bins at four fixed measured-depth lags. An early visible-heel segment fitted a nonnegative dependence on vertical separation in addition to the lag-specific mean. A disjoint later segment measured whether that relation beat the lag-only reference. Eligible toe edges linked either two toe observations or a visible-heel observation to the toe. Candidate depth paths changed those edge separations while retaining the measured GR at both endpoints. This supplied evidence without requiring a useful paired typewell. The original 416 forecasts remained byte-identical.
+
+| Readout on all 619 development wells | RMSE (ft) |
+| --- | ---: |
+| Ordinal incumbent / OFF | 9.997405 |
+| Same-lateral GR relation | **9.994968** |
+| Same edges with shuffled activity | 10.009869 |
+| Same likelihood with heel-anchor displacement removed | 9.995387 |
+
+The self-GR primary passed its prespecified pooled and two-winning-fold comparisons. It beat shuffled activity in all three folds. Its paired 95% RMSE interval against OFF was −0.016415 to +0.014263 ft and against shuffled activity was −0.033867 to −0.000132 ft. This is a small development improvement with unresolved sampling variation against the incumbent.
+
+New support covered 13 wells and 61,883 stations, bringing coverage by either evidence route to 429 of 619 wells. Their RMSE changed from 7.553634 to 7.393801 ft, with nine well improvements and four regressions. There were 220 heel-to-toe and 4,108 toe-to-toe edges. The separate original-row audit verified all 3,034,427 station errors and every protected forecast. Prediction seal `8f255e075c9692a8fe5f767fa139fa83682742ca55549bf9b06c69bb42717c63`; raw audit SHA-256 `96d072764af47f1f9b05699e4b3be014564256244e05a5db9a487bb8a1a020c1`.
+
+The first self-GR descriptor clipped vertical separation at 16 ft. A later visible-only inspection found that all eligible early-heel separations exceeded this cap on 165 of the 180 weak-variation wells. Their unbounded separations varied, reaching 600.20 ft. The chosen encoding made their calibration inputs constant. That mechanical loss of variation motivates a separately frozen scale-aware test.
+
+A parallel experiment replaced pointwise held-heel reliability with distribution agreement while retaining the same early affine map. It sorted measured and predicted held-heel GR before calculating skill against the same constant reference. Only prior fallbacks could receive the new correction. All 416 original forecasts were retained. This expanded eligible evidence to 127 wells and 621,705 stations.
+
+| Distribution-reliability readout | RMSE (ft) |
+| --- | ---: |
+| Original ordinal incumbent | 9.997405 |
+| Shape reliability and true toe activity | 9.960076 |
+| Same reliability with rotated toe activity | 9.996689 |
+| Same reliability with recurrence OFF | 9.960875 |
+| Same support and posterior, constant reliability 0.25 | 9.967692 |
+
+The shape candidate improved all three folds against the incumbent, two against rotated activity and two against recurrence OFF. It improved only one against the constant-reliability control and failed its full gate. The interval against the incumbent was −0.089628 to +0.009717 ft. Distribution agreement increased measurable support; it did not validate the held-heel depth ordering. Two separate inference processes reproduced every native prediction before scoring, and an independent original-row cross-term audit reproduced the errors. Local evidence root `77c0623cbb76d2cc67c308c24e94f07b35f5ee3d697f07c7f742b9a87fc16ba0`. The smaller 9.994968-ft self-GR improvement remains the retained development result. All 154 confirmation wells remain sealed.
+
+The separately frozen self-GR follow-up replaced the 16-ft cap with `log1p(abs(ΔTVT)/scale)`, using each lag's median positive early-heel separation as its scale. It retained the previous 429 forecasts byte-for-byte. A matched raw-linear separation control used the same early scales, query edges, eligibility and primary reliability. The log branch scored **10.071722 ft**, compared with **9.994968 ft** for OFF, **9.994738 ft** for shuffled activity, **10.046308 ft** without anchor evidence and **10.064980 ft** for raw-linear separation. The primary lost all three folds against OFF. Its paired 95% increase was +0.013095 to +0.147456 ft.
+
+Scaling restored eligibility to 127 further wells, including 109 of the 165 previously saturated wells, but 99.71% of the actual toe edges lay outside that well/lag's early-heel separation range. Median disjoint-heel reliability was 0.754. The experiment exposed transfer beyond calibration support despite good within-heel validation. Of 611,457 eligible native stations, 574,878 actually changed. All original rows and protected forecasts passed the separate audit. Prediction seal `fc7ae82c1bf4513d508727dbadb24cadf6ee2fa850bf332a57820dfd87551f28`; audit SHA-256 `b742f4958b58aa800f5b3b3e7d24717c91575361bd845ead44e24b2f5af7674d`. This larger-support branch remains unpromoted.
