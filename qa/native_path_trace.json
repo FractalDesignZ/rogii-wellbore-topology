@@ -1,0 +1,9 @@
+{
+  "format": "jovin-harness.trace-plan.v1",
+  "objective": "Observe the native depth path verifier build and fixture check from process creation through cleanup.",
+  "scope": "native_build_and_checks",
+  "native_plan": "qa/native_path_plan.json",
+  "ast_plan": "qa/native_path_ast.json",
+  "required_events": ["process", "network"],
+  "identity_bindings": [{"artifact": "build/rwt_path_verify", "ast_contexts": ["path_verifier"]}]
+}

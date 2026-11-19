@@ -1,0 +1,136 @@
+{
+  "schema": "rwt.method-references.v1",
+  "references": [
+    {"id": "rlm", "title": "Recursive Language Models", "sha256": "7f0e822fdde98bdb7348fe565481e59b70470b240e43d23cc2b7ffac13d9cd75", "pages": 33},
+    {"id": "math", "title": "Mathematics of Machine Learning", "sha256": "52efecdf62380ee3881e5f4d61d3a241b80d2dd33e45ed305ea78cdeef6083b3", "pages": 118},
+    {"id": "tree", "title": "Classifier Series - Decision Trees", "sha256": "1ccf23ade43557a1468f7777486d4062768edfc39906526297b83a1764ed00c6", "pages": 9},
+    {"id": "ml", "title": "Machine Learning Cheat Sheet", "sha256": "6e12260cd1994e29f946294b0913e4d14df5ba646e90159a2b923127a0748846", "pages": 135},
+    {"id": "forest", "title": "Random Forest - Predictive Maintenance", "sha256": "c6313bab3b7412fb5810ebe4c9753cc383c2eec6646bac0e7e1347c1f97d1096", "pages": 12},
+    {"id": "persistence", "title": "Persistent Topological Features in Large Language Models", "sha256": "d2b967107fc3c59cead2cc0a12dcc681482bd9d874e4c2c9c96f1cfafeb951ba", "pages": 27}
+  ],
+  "concepts": [
+    {
+      "id": "addressable_observations",
+      "claim": "Source records retain identities across derived representations and bounded accesses.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5]}, {"reference": "persistence", "pages": [3, 4, 5]}],
+      "operators": [{"path": "src/rwt/observation_tensors.py", "symbol": "pack_well_observations"}, {"path": "src/rwt/nodal_bundle.py", "symbol": "trace_node"}],
+      "checks": [{"path": "tests/test_observation_tensors.py", "symbol": "test_inbound_tensor_keeps_exact_source_values_schema_and_null_mask"}]
+    },
+    {
+      "id": "conditional_decisions",
+      "claim": "The same role-filtered bundle supplies graph, tree, forest and neural decisions.",
+      "status": "implemented",
+      "citations": [{"reference": "tree", "pages": [1, 6, 7]}, {"reference": "ml", "pages": [17, 18, 57, 58, 59, 71, 72, 73]}, {"reference": "math", "pages": [82, 85, 89, 94, 104, 107]}],
+      "operators": [{"path": "src/rwt/nodal_study.py", "symbol": "_train"}, {"path": "src/rwt/nodal_study.py", "symbol": "predict_run"}],
+      "checks": [{"path": "tests/test_nodal_bundle.py", "symbol": "test_three_well_worker_views_match_original_rows_and_scored_targets"}]
+    },
+    {
+      "id": "generalization_boundary",
+      "claim": "Whole-well roles and prediction seals separate fitting, calibration and final scoring.",
+      "status": "implemented",
+      "citations": [{"reference": "math", "pages": [46, 50, 51, 54, 55]}, {"reference": "forest", "pages": [9, 10, 11, 12]}],
+      "operators": [{"path": "src/rwt/crossfit_roles.py", "symbol": "nested_well_roles"}, {"path": "scripts/run_nodal_harness.py", "symbol": "selected"}, {"path": "scripts/run_nodal_harness.py", "symbol": "stage_inputs"}, {"path": "scripts/run_nodal_harness.py", "symbol": "execute"}],
+      "checks": [{"path": "tests/test_crossfit_roles.py", "symbol": "test_nested_roles_preserve_original_order_and_exclude_outer_query"}, {"path": "tests/test_nodal_harness.py", "symbol": "test_confirmation_role_rejected_before_opening_measurements"}, {"path": "tests/test_nodal_harness.py", "symbol": "test_worker_cannot_replace_a_sealed_upstream_artifact"}]
+    },
+    {
+      "id": "supported_revision",
+      "claim": "Graph propagation supplies a reference analogy for the tested local revision of supported edge weights.",
+      "status": "implemented",
+      "citations": [{"reference": "math", "pages": [116]}, {"reference": "persistence", "pages": [3, 4]}],
+      "operators": [{"path": "src/rwt/nodal_bundle.py", "symbol": "window_messages"}, {"path": "src/rwt/nodal_bundle.py", "symbol": "revise_edge_weights"}],
+      "checks": [{"path": "tests/test_nodal_bundle.py", "symbol": "test_later_observation_revises_earlier_edge_only_with_a_connected_context"}]
+    },
+    {
+      "id": "observed_execution",
+      "claim": "The control graph binds planned work to completed workers and parsed artifact bytes.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5, 6, 7, 8]}],
+      "operators": [{"path": "src/rwt/execution_graph.py", "symbol": "run_bounded"}, {"path": "scripts/run_nodal_harness.py", "symbol": "artifact_read_evidence"}],
+      "checks": [{"path": "tests/test_nodal_harness.py", "symbol": "test_successful_process_can_skip_a_required_read_but_cannot_complete_mission"}]
+    },
+    {
+      "id": "predictive_merit",
+      "claim": "A separate numerical replay tests depth error on original station identities.",
+      "status": "implemented",
+      "citations": [{"reference": "ml", "pages": [17, 18]}, {"reference": "math", "pages": [46, 50, 51, 54, 55]}, {"reference": "tree", "pages": [8, 9]}],
+      "operators": [{"path": "scripts/run_nodal_harness.py", "symbol": "replay_station_errors"}, {"path": "src/rwt/station_error.py", "symbol": "decompose_station_error"}],
+      "checks": [{"path": "tests/test_nodal_harness.py", "symbol": "test_separate_station_variance_replay_catches_erroneous_scores_and_keys"}, {"path": "tests/test_station_error.py", "symbol": "test_station_error_separates_affine_and_finer_error_on_irregular_depth"}]
+    },
+    {
+      "id": "persistent_relation_identity",
+      "claim": "Compute adjacent H0 component spans from shared vertex and edge identities across graph revisions.",
+      "status": "implemented",
+      "citations": [{"reference": "persistence", "pages": [3, 4, 5, 6, 7]}],
+      "operators": [{"path": "src/rwt/relation_history.py", "symbol": "component_history"}],
+      "checks": [{"path": "tests/test_relation_history.py", "symbol": "test_component_maps_preserve_shared_vertices_when_members_change"}, {"path": "tests/test_relation_history.py", "symbol": "test_bridge_cut_and_restoration_are_a_split_then_merge"}, {"path": "tests/test_relation_history.py", "symbol": "test_intersection_removes_nonshared_edges_even_if_both_graphs_are_connected"}]
+    },
+    {
+      "id": "persistent_barcodes",
+      "claim": "Compute persistent barcode intervals and higher-dimensional cycles through general relation revisions.",
+      "status": "hypothesis",
+      "citations": [{"reference": "persistence", "pages": [4, 5, 6]}],
+      "operators": [],
+      "checks": []
+    },
+    {
+      "id": "nested_operator_selection",
+      "claim": "Choose OFF or one of two operators using paired errors from an excluded training bank and explicit outer roles.",
+      "status": "implemented",
+      "citations": [{"reference": "math", "pages": [46, 50, 51]}, {"reference": "ml", "pages": [17, 18]}, {"reference": "forest", "pages": [10]}],
+      "operators": [{"path": "src/rwt/operator_selection.py", "symbol": "select_supported_operator"}],
+      "checks": [{"path": "tests/test_operator_selection.py", "symbol": "test_comparison_requires_whole_bank_and_disjoint_roles"}, {"path": "tests/test_operator_selection.py", "symbol": "test_missing_evidence_weak_support_uncertainty_and_ties_choose_off"}]
+    },
+    {
+      "id": "bounded_policy_refinement",
+      "claim": "Accept only strict decreases of a fixed observed policy objective, retain evidence-bound state identities and stop within an explicit proposal budget.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5]}, {"reference": "math", "pages": [46, 50, 51]}],
+      "operators": [{"path": "src/rwt/policy_refinement.py", "symbol": "refine_policy"}],
+      "checks": [{"path": "tests/test_policy_refinement.py", "symbol": "test_monotonic_acceptance_and_ancestor_proposal"}, {"path": "tests/test_policy_refinement.py", "symbol": "test_budget_unchanged_and_off"}, {"path": "tests/test_policy_refinement.py", "symbol": "test_invalid_state_and_objective_fail_closed"}]
+    },
+    {
+      "id": "recursive_merit_weights",
+      "claim": "Propagate supported policy factors and paired held-bank loss ratios through an evidence-bound acyclic parent graph, counting each shared factor once.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5]}, {"reference": "math", "pages": [46, 50, 51]}],
+      "operators": [{"path": "src/rwt/merit_weights.py", "symbol": "resolve_weights"}],
+      "checks": [{"path": "tests/test_merit_weights.py", "symbol": "test_recursive_merit_counts_a_shared_factor_once"}, {"path": "tests/test_merit_weights.py", "symbol": "test_merit_rejects_role_aliases_and_unpaired_footprints"}, {"path": "tests/test_merit_weights.py", "symbol": "test_zero_unsupported_and_insufficient_merit_turn_children_off"}, {"path": "tests/test_merit_weights.py", "symbol": "test_rejects_invalid_edges_provenance_and_fixed_values"}, {"path": "tests/test_merit_weights.py", "symbol": "test_weights_cannot_admit_a_worse_fixed_objective"}]
+    },
+    {
+      "id": "bidirectional_attention_policy",
+      "claim": "Test a learned policy-to-given-to-policy attention map with explicit source identities, role separation and a fixed predictive merit gate.",
+      "status": "hypothesis",
+      "citations": [{"reference": "ml", "pages": [71, 72, 73]}, {"reference": "rlm", "pages": [2, 4]}],
+      "operators": [],
+      "checks": []
+    },
+    {
+      "id": "general_model_operator_selection",
+      "claim": "Select among graph, tree, forest and neural models under one complete nested process and resource budget.",
+      "status": "hypothesis",
+      "citations": [{"reference": "math", "pages": [46, 50, 51]}, {"reference": "ml", "pages": [17, 18]}],
+      "operators": [],
+      "checks": []
+    }
+  ],
+  "flows": [
+    {"source": "addressable_observations", "target": "conditional_decisions", "kind": "data"},
+    {"source": "generalization_boundary", "target": "conditional_decisions", "kind": "control"},
+    {"source": "conditional_decisions", "target": "predictive_merit", "kind": "data"},
+    {"source": "observed_execution", "target": "predictive_merit", "kind": "control"},
+    {"source": "supported_revision", "target": "conditional_decisions", "kind": "data"},
+    {"source": "persistent_relation_identity", "target": "supported_revision", "kind": "proposed"},
+    {"source": "persistent_barcodes", "target": "persistent_relation_identity", "kind": "proposed"},
+    {"source": "nested_operator_selection", "target": "generalization_boundary", "kind": "control"},
+    {"source": "general_model_operator_selection", "target": "nested_operator_selection", "kind": "proposed"},
+    {"source": "generalization_boundary", "target": "bounded_policy_refinement", "kind": "control"},
+    {"source": "bounded_policy_refinement", "target": "nested_operator_selection", "kind": "control"},
+    {"source": "observed_execution", "target": "bounded_policy_refinement", "kind": "control"},
+    {"source": "addressable_observations", "target": "recursive_merit_weights", "kind": "data"},
+    {"source": "generalization_boundary", "target": "recursive_merit_weights", "kind": "control"},
+    {"source": "recursive_merit_weights", "target": "bounded_policy_refinement", "kind": "control"},
+    {"source": "bidirectional_attention_policy", "target": "recursive_merit_weights", "kind": "proposed"},
+    {"source": "bidirectional_attention_policy", "target": "bounded_policy_refinement", "kind": "proposed"}
+  ]
+}

@@ -404,6 +404,7 @@ def train_lgbm_residual(
 
     n_groups = len(np.unique(groups))
     oof_res_map = {b: np.zeros(len(train_df)) for b in residual_bases}
+    oof_fold_ids = np.full(len(train_df), -1, dtype=int)
     fold_best_iters: list[int] = []
     fold_scores: list[float] = []
     def _env_threads(*keys: str, default: int | None = None) -> int:
@@ -529,6 +530,7 @@ def train_lgbm_residual(
             head_tvt.append(priors_map[base][va] + pred_res)
         oof_ens = _ensemble_heads(head_tvt)
         fold_scores.append(rmse(y[va], oof_ens))
+        oof_fold_ids[va] = int(fold)
 
     oof_mask = np.zeros(len(train_df), dtype=bool)
     y_res_primary = y_res_map[prior_col]
@@ -792,6 +794,67 @@ def train_lgbm_residual(
             flush=True,
         )
 
+    # Retain the exact scored OOF rows and chosen prediction path for replay.
+    # No feature columns or private prior names are needed to audit these values.
+    adaptive_fire = np.full(len(y_s), bool(use_residual), dtype=bool)
+    if adaptive_selected:
+        from rwt.gates import adaptive_residual_mask, apply_adaptive_residual
+
+        adaptive_fire = adaptive_residual_mask(
+            len(y_s), pf_confidence=pf_conf_s,
+            conf_threshold=adaptive_conf_threshold,
+            min_lifetime=adaptive_min_lifetime,
+            well_ids=groups_s,
+        )
+        selected_oof = apply_adaptive_residual(oof_s, prior_m, adaptive_fire)
+        selected_mode = "adaptive_residual"
+    elif use_residual:
+        selected_oof = oof_s.copy()
+        selected_mode = "residual"
+    else:
+        selected_oof = train_df[serve_prior_col].to_numpy(dtype=float)[row_m][shared]
+        selected_mode = "pure_prior"
+    evidence_rmse = rmse(y_s, selected_oof)
+    if not np.isclose(evidence_rmse, final_oof, rtol=1e-10, atol=1e-10):
+        raise RuntimeError(
+            f"Selected OOF evidence disagrees with report: {evidence_rmse} vs {final_oof}"
+        )
+    selected_finite = np.isfinite(selected_oof)
+    evidence_data: dict[str, Any] = {
+        "well_id": groups_s,
+        "fold_id": oof_fold_ids[row_m][shared],
+        "y_true": y_s,
+        "pred_residual": oof_s,
+        "pred_selected": selected_oof,
+        "prior_base": prior_m,
+        "selected_mode": selected_mode,
+        "selected_finite": selected_finite,
+        "adaptive_fire": adaptive_fire,
+    }
+    for column in ("station", "MD"):
+        if column in train_df:
+            evidence_data[column] = train_df[column].to_numpy()[row_m][shared]
+    if "prior_last_tvt" in train_df:
+        evidence_data["last_known"] = train_df["prior_last_tvt"].to_numpy(dtype=float)[row_m][shared]
+    oof_evidence = pd.DataFrame(evidence_data)
+    evidence_meta = {
+        "schema": "rwt.oof-evidence.v1",
+        "cv_strategy": "GroupKFold_by_well" if n_groups >= 2 else "single_well_tail_holdout",
+        "eligible_rows": int(len(train_df)),
+        "validation_rows": int(oof_mask.sum()),
+        "shared_rows": int(len(oof_evidence)),
+        "selected_finite_rows": int(selected_finite.sum()),
+        "selected_shared_coverage_complete": bool(selected_finite.all()),
+        "selected_shared_coverage_fraction": float(selected_finite.mean()) if len(selected_finite) else 0.0,
+        "selected_rmse_recomputed": float(evidence_rmse),
+        "selected_mode": selected_mode,
+        "adaptive_conf_channel": adaptive_conf_channel,
+        "adaptive_conf_threshold": float(adaptive_conf_threshold),
+        "adaptive_min_lifetime": int(adaptive_min_lifetime),
+        "prediction_scope": "exact row_m/shared OOF mask; finite selected pairs scored",
+        "selection_scope": "OOF-selected configuration; no independent final holdout claim",
+    }
+
     report = {
         "ok": True,
         "n_stations": int(len(train_df)),
@@ -803,6 +866,7 @@ def train_lgbm_residual(
         "cv_rmse_std": float(np.std(fold_scores)),
         "oof_rmse": oof_r,
         "oof_rmse_selected": final_oof,
+        "oof_evidence": evidence_meta,
         "max_precision": bool(max_precision),
         "deep_residual": bool(use_deep),
         "lgb_threads": int(lgb_threads),
@@ -872,6 +936,7 @@ def train_lgbm_residual(
     report["provenance"] = seal_artifact(report, kind="cv_report")
     return {
         "report": report,
+        "oof_evidence": oof_evidence,
         "models": final_models,
         "residual_heads": residual_heads,
         "dual_residual_weights": (
@@ -954,6 +1019,7 @@ def main(argv: list[str] | None = None) -> int:
             max_precision=bool(args.max_precision),
         )
         report = result["report"]
+        result["oof_evidence"].to_csv(out / "oof_predictions.csv", index=False)
         (out / "cv_report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         try:
             import joblib

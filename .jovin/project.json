@@ -1,0 +1,62 @@
+{
+  "format": "jovin-harness.project.v1",
+  "project_id": "rogii-nodal-harness",
+  "objective": "Verify the nodal harness source snapshot and independently check offset-path parity, compiler structure and the native process lifecycle.",
+  "exclude": [".jovin", ".git", ".venv", "venv", "private_research", "private_kernel", "artifacts", "data", "secrets", ".env", ".env.example", "submissions", "__pycache__"],
+  "partitions": [
+    {
+      "id": "core",
+      "language": "python",
+      "paths": [
+        "src/rwt/__init__.py", "src/rwt/baselines.py", "src/rwt/block_model.py", "src/rwt/crossfit_roles.py", "src/rwt/ensemble.py",
+        "src/rwt/gr_match.py", "src/rwt/load.py", "src/rwt/member_corrections.py", "src/rwt/merit_weights.py", "src/rwt/middle_out.py", "src/rwt/observation_tensors.py", "src/rwt/operator_selection.py", "src/rwt/relation_history.py",
+        "src/rwt/offset_path.py", "src/rwt/policy_refinement.py", "src/rwt/priors.py", "src/rwt/registered_views.py",
+        "src/rwt/simd.py", "src/rwt/station_corrections.py"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "evidence",
+      "language": "python",
+      "paths": ["src/rwt/ast_evidence.py", "src/rwt/execution_graph.py", "src/rwt/label_lineage.py"],
+      "depends_on": ["core"]
+    },
+    {
+      "id": "study",
+      "language": "python",
+      "paths": ["src/rwt/nodal_bundle.py", "src/rwt/nodal_study.py"],
+      "depends_on": ["core"]
+    },
+    {
+      "id": "worker",
+      "language": "python",
+      "paths": ["scripts/nodal_worker.py"],
+      "depends_on": ["study"]
+    },
+    {
+      "id": "launcher",
+      "language": "python",
+      "paths": ["scripts/render_nodal_evidence.py", "scripts/run_nodal_harness.py", "scripts/verify_method_graph.py"],
+      "depends_on": ["worker", "evidence"]
+    },
+    {
+      "id": "path_native",
+      "language": "cpp",
+      "paths": ["qa/path_verify.cpp"],
+      "depends_on": []
+    },
+    {
+      "id": "path_verification",
+      "language": "build",
+      "paths": ["CMakeLists.txt", "qa/native_path_plan.json", "qa/native_path_ast.json", "qa/native_path_trace.json", "qa/path_vectors.txt", "qa/method_references.json"],
+      "depends_on": ["path_native", "core"]
+    },
+    {
+      "id": "tests",
+      "language": "python",
+      "paths": ["tests/test_execution_graph.py", "tests/test_ast_evidence.py", "tests/test_label_lineage.py", "tests/test_member_corrections.py", "tests/test_merit_weights.py", "tests/test_method_graph.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_observation_tensors.py", "tests/test_operator_selection.py", "tests/test_policy_refinement.py", "tests/test_relation_history.py", "tests/test_station_corrections.py"],
+      "depends_on": ["launcher", "study", "path_verification"]
+    }
+  ],
+  "required_gates": ["inventory", "python_ast", "native_ast", "native_cpu", "process_trace", "network_trace"]
+}

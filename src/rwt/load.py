@@ -33,8 +33,9 @@ LAS_NULL_SENTINELS: tuple[float, ...] = (
     -9999.25,
     -999.99,
 )
-# Curves that must never treat LAS nulls as numeric measurements.
-NULLABLE_CURVES: tuple[str, ...] = ("GR", "TVT", "TVT_input", "Z")
+# Curve conventions do not declare coordinate null codes. A valid position may
+# cross -9999.25; decode coordinate sentinels only with an explicit source rule.
+NULLABLE_CURVES: tuple[str, ...] = ("GR", "TVT", "TVT_input")
 # GR is non-negative API in this domain; values ≤ this floor are treated as null.
 GR_ABSURD_LE: float = -50.0
 
@@ -66,13 +67,25 @@ def apply_curve_nulls_frame(
     *,
     columns: tuple[str, ...] | list[str] = NULLABLE_CURVES,
 ) -> pd.DataFrame:
-    """In-place-safe: return copy with nullable curves cleaned of LAS sentinels."""
+    """Return a copy with declared curve nulls decoded and coordinate gaps kept.
+
+    Defaults decode GR/TVT/TVT_input only. Finite MD/X/Y/Z values are preserved,
+    including numbers resembling LAS null codes. Explicitly including a
+    coordinate in ``columns`` opts into LAS-sentinel decoding for that column;
+    the caller must establish that source's null declaration first. Nonfinite
+    coordinates become NaN independently of any finite sentinel convention.
+    """
     out = df.copy()
     for col in columns:
         if col not in out.columns:
             continue
         absurd = GR_ABSURD_LE if col == "GR" else None
         out[col] = normalize_curve_nulls(out[col], absurd_le=absurd)
+    for coordinate in ("MD", "X", "Y", "Z"):
+        if coordinate in out:
+            values = out[coordinate].to_numpy(dtype=float, copy=True)
+            values[~np.isfinite(values)] = np.nan
+            out[coordinate] = values
     return out
 
 

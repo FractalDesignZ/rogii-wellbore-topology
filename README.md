@@ -1,7 +1,42 @@
 # rogii-wellbore-topology
 
-*Ai Local Demo of JtechAi Proprietary methods in relation to an open source data Ai Competition.  
-** for [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction) — framed as a demonstration of **abstraction-mode compute** from [`topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence), not a generic “dump features into LGBM” bakeoff.
+An open-core research harness for [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction), with abstraction-mode compute from [`topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence) and an optional boundary to a separately installed Network Engine.
+
+**Original work is a project requirement.** External solutions provide context for typical approaches and published results. Candidate designs, features and weights require traceable first-party origins. [Repository rule](AGENTS.md) · [Supplied OODA assistance: claims and evidence](docs/OODA_V04_REFERENCE_REVIEW.md)
+
+**Validation status.** Earlier spatial experiments selected full training `TVT` before splitting wells into folds. Their historical scores require remeasurement. The corrected default uses observed `TVT_input` and supports unseen target geometry. The current development comparisons below isolate supervised donors by training fold. The optional native Network Engine checks measure graph structure.
+
+**Development measurements.** The retained route now scores **9.909565 ft RMSE** on 619 development wells and 3,034,427 original toe stations. Changing the visible-heel weight on 416 existing ordinal paths improved all three folds against the 9.988991-ft predecessor, with paired 95% interval −0.118721 to −0.041558 ft. All eight fixed controls passed; the narrower comparisons against pooled or reassigned weight increments remain uncertain. The other 203 forecasts stayed byte-identical. The public weight graph rebuilt every station value, and the selected policy retains its development-label ancestry. These offline comparisons use the complete recorded lateral; all 154 confirmation wells remain sealed. [Weights, controls, installation and scope](docs/ORDINAL_SHAPE_WEIGHTS.md)
+
+**Run the shared nodal comparison.** Follow a reading from its original CSV row through a revised edge weight to four predictions on the same stations. The controller records the Python AST, source dependencies, worker runs and artifact reads, then recomputes each model's error from the raw depth labels. [Run and verify](docs/NODAL_HARNESS.md) · [Typed observations and neighbor axes](docs/NODAL_HARNESS.md#typed-observations-and-neighbor-axes) · [Relational methods](docs/RELATIONAL_METHODS.md) · [Jovin source and native checks](docs/JOVIN_ENROLLMENT.md)
+
+**Reference-to-source graph.** The six supplied mathematical and ML PDFs are cross-referenced to process decisions, Python definitions and checks. Adjacent H0 component spans and a role-checked three-operator selector now have runnable APIs. The graph retains general persistence barcodes and selection across model families as proposed extensions. [Process and control graph](docs/METHOD_REFERENCE_GRAPH.md)
+
+**Measured GPU search.** The RTX 5070 evaluated 15,625 coherent depth paths over 416 supported development wells, with CPU parity checks and an independent original-row audit. Increasing the grid worsened the prediction error. The compute report separates device timings, full-run cost and proposed shader/ray-query routes. [Compute routes and controls](docs/COMPUTE_ROUTES.md)
+
+**Policy refinement.** A bounded OODA adapter records evidence-bound policy states, accepts strict objective improvements and reports explicit stops. Adaptive merit weights propagate through a parent graph while counting shared factors once. Their field replay reproduces all native forecasts byte-for-byte. Predictive admission uses its own unchanged objective. [Policy mapper and weight graph](docs/POLICY_REFINEMENT.md)
+
+**Label ancestry.** A declared artifact graph carries hidden-label well dependencies through derived curves and selectors. Filtering cannot erase a parent's exposure. Metadata replay accepted all 18 matching model/context pairings and rejected 144 inappropriate pairings; a separate audit verified the 81 original-model cases. [Role guard, evidence limits and example](docs/LABEL_LINEAGE.md)
+
+**Complete-pipeline calibration.** A nested study fitted weights from fully excluded native forecasts. Its 9.858253-ft primary improved all folds over retained 9.909565 ft but lost to reassigned reliability at 9.848064 ft, failing one of nine required comparisons. All 45 new fits, native forecasts and original-row scores were checked; neither candidate nor control was promoted. [Roles, ten arms, timings and independent evidence](docs/NESTED_FIELD_CALIBRATION.md)
+
+**Cluster-conditioned weights.** The frozen five-feature type policy scored **9.865546 ft**, improving every fold against retained **9.909565 ft**, but passed only **6 of 16** comparisons. q-only grouping and matched untyped policies were stronger in every fold; the incumbent stays installed. All 17 native surfaces, coefficient roles and original-row scores passed independent checks. [Type schema, matched controls, uncertainty and execution evidence](docs/CLUSTERED_NATIVE_WEIGHTS.md)
+
+**Q-only merit test.** A separate frozen follow-up reproduced **9.853415 ft** and passed **16 of 18** comparisons, beating the incumbent in all three folds. Same-group constant weights (**9.850860 ft**) and the stronger prior reassigned-q control (**9.848064 ft**) each won two folds. The full gate failed, so the incumbent remains installed. All 17 overlapping surfaces reproduced exactly; all 154 confirmation wells remain sealed. This reuses known development outcomes. [Frozen plan, all 19 arms and verification](docs/Q_ONLY_NATIVE_WEIGHTS.md)
+
+**Broader model checks.** Seven further comparisons tested learner capacity/family, continuous leaves, physical target coordinates, donor innovations, GR calibration and decoder execution. None passed its complete final-error gate. [Matched results and scopes](docs/LEARNER_AND_RELATION_CHECKS.md)
+
+**Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay at eight passes and after fixed continuation to 64. The continued two-way model beat all learned controls but missed its frozen 9.988991-ft incumbent and was not admitted. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
+
+**Held neural merit.** Ninety fresh fits in separate FIT/CAL/TEST roles tested whether calibration earns a neural deployment weight. The selector mostly retained OFF and failed its gate against fixed half strength. [Role boundaries, adaptive amplitude and native audit](docs/NEURAL_MERIT_CALIBRATION.md)
+
+**Direct native-loss solve.** Linear and radial kernels fit the original-station quadratic without training epochs. Both the member-calibration primary and an independently fixed complete-field primary failed their gates. [Algebra, compute timings and full-pipeline controls](docs/NATIVE_KERNEL_STUDIES.md)
+
+**Kernel relationships as decoder inputs.** Four excluded-well kernel features expanded the retained decoder from 334 to 338 columns. Matching features scored 10.016188 ft, versus incumbent 9.988991 ft and matched permuted features 10.001499 ft. The primary failed both comparisons; the retained route remains unchanged. [Feature provenance, controls and native replay](docs/KERNEL_FEATURE_DECODER.md)
+
+**Two maps on shared states.** A zero-fit joint operator compared chart and TRAIN-derived GR ranks on the same candidate paths and physical sections. Its 9.977000-ft result beat the incumbent in every fold but lost to chart-only controls and failed its full gate. [All 16 arms, section-reassignment control and original-station proof](docs/GR_MAP_BUNDLE.md)
+
+**Testing the adaptive weight.** The known 9.955172-ft chart-priority curve failed new controls that reassigned its visible-heel reliability or used a constant fold mean/median. The study verified calibration and native execution but did not admit the well-specific weighting rule. [Ten arms, known-primary scope and independent audit](docs/SOURCE_PRIORITY_SHAPE.md)
 
 | Abstraction mode | Role |
 |------------------|------|
@@ -16,7 +51,7 @@
 Full thesis: [`docs/ABSTRACTION_MODES.md`](docs/ABSTRACTION_MODES.md) · entry blurb: [`docs/KAGGLE_ENTRY.md`](docs/KAGGLE_ENTRY.md)
 
 **NotebookLM / RAG knowledge base (truth-audited):**  
-[`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) — Volume II map, three traps, three-layer stack, Gate3, full-cohort ledger (773w residual OOF **14.54** vs last_known **15.91**).
+[`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) — Volume II map, three traps, three-layer stack, Gate3, and historical full-cohort ledger (requires remeasurement under the corrected spatial policy).
 
 ## Competition law (short)
 
@@ -37,6 +72,51 @@ data/raw/          # Kaggle download (gitignored)
 artifacts/         # CV + certificates (gitignored contents ok to regenerate)
 ```
 
+## Network Engine integration
+
+The first integration exports raw `MD`, `Z`, and `GR`, observation masks, declared depth units, and provenance for offline relational diagnostics. It preserves acquisition order and missing support, converts depth to metres, and uses MD as the analysis axis. The container's sample ordinal is not physical time. Target labels, priors, and private/model features are excluded.
+
+```bash
+# Public preparation path; no Network Engine installation required
+python scripts/measure_network_dynamics.py --synthetic
+
+# One raw lateral; declare its actual depth unit
+python scripts/measure_network_dynamics.py --csv path/to/lateral.csv --well-id WELL_ID --depth-unit ft
+
+# Optional native slice diagnostics with a separately licensed local engine
+python scripts/measure_network_dynamics.py --synthetic --run-local
+```
+
+The synthetic fixture is practice-only and measured in metres. Each run creates a fresh artifact directory with input hashes and a provenance seal. Native runs add diagnostic outputs and a sealed receipt; legacy windowed dynamics stays disabled. Diagnostics do not yet change TVT predictions or Gate3 decisions.
+
+The public neighbor graph now reads observed `TVT_input` only by default. Full donor labels require explicit opt-in and fold-local donor visibility before GroupKFold use. Integration details, current native export limitations, and the validation path to dynamic prior gating: [`docs/NETWORK_ENGINE_INTEGRATION.md`](docs/NETWORK_ENGINE_INTEGRATION.md).
+
+### Master iteration and image relationships
+
+The public relation search overlays multiple maps on each observed transition and traces which candidate depths survive. Run `python scripts/demo_relation_search.py --phase-stack` to see complementary periodic readings resolve one of 30 depths. With a local Network Engine installation, add `--native-lift` to turn admitted transitions into relation nodes. The 12-well pilot records which maps helped resolve a depth and which exhausted the available paths. [Shared-graph search and measurements](docs/RELATION_SEARCH.md)
+
+Use `rwt.offset_path.relation_cost` to weight evidence separately for each candidate crossing. `minimum_cost_offset_path` selects the least-cost reachable trajectory through those crossings. [Worked example with observation-dependent weights](docs/RELATION_SEARCH.md#weighting-relationships-inside-the-search)
+
+The next iteration uses two linked tracks: rapid model/alignment candidates and relational operator/image candidates, compared on the same fixed development cohort. The controller retains static AST/import evidence, a dependency graph, bounded subprocess receipts, exact selected OOF predictions, and a separate metric audit. Confirmation wells remain outside candidate selection. See [`docs/MASTER_ITERATION.md`](docs/MASTER_ITERATION.md).
+
+The standard BASE92 route is available as an [experimental fit/predict interface](docs/EXPERIMENTAL_BLOCK_MODEL.md). It requires an explicit development/confirmation manifest, stores training medians and a versioned LightGBM text bundle, and retains exact grouped-OOF evidence. It preserves the visible heel and uses no residual output clamp.
+
+```bash
+python -m rwt.block_model fit --data-root data/raw/example --manifest cohort.json --out artifacts/block_experiment
+python -m rwt.block_model predict --model artifacts/block_experiment/model --lateral target.csv --typewell reference.csv --well-id TARGET --out artifacts/target_predictions.csv
+```
+
+Supplied well figures are retained as paired views. The image ingress can extract a declared path-color region and register projected XYZ to pixel coordinates using explicit control points. Full-TVT and formation-top panels are training/evaluator data; supplied PNGs are training-only. Neither a fixed viewing angle nor an image label's unit is silently assumed.
+
+```bash
+pip install -e ".[images]"
+python scripts/inspect_registered_views.py --image path/to/well.png --lateral path/to/well.csv --depth-unit ft --azimuth-deg -74.5 --path-roi 350 1650 2500 2535 --out artifacts/image_attempt_001
+```
+
+The ROI above is an example requiring verification for the supplied image. Without explicit control points the result is unregistered pixel candidates, not recovered geometry or a TVT prediction.
+
+Registration design and the checked development-image correspondence are documented in [`docs/REGISTERED_IMAGE_VIEWS.md`](docs/REGISTERED_IMAGE_VIEWS.md).
+
 ## Quick start
 
 ```bash
@@ -45,8 +125,11 @@ python -m venv .venv && .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
 pip install -e .
 
+# installed-package smoke (synthetic data; writes to the current directory)
+rwt-smoke --out artifacts/smoke_synthetic.json
+
 # unit tests
-python -m unittest discover -s tests -v
+python -m pytest -q
 
 # full driver (downloads if credentials exist; else synthetic demo)
 python scripts/run_late_entry.py
@@ -70,13 +153,17 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 
 ## Status
 
+All numerical results in this table are historical and require remeasurement under the corrected spatial observation policy.
+
 | Phase | Status |
 |-------|--------|
 | Abstraction-mode stack + TSS open-curve geometry | **landed** |
 | PF stack + clamps + Gate3 best pure floor | **landed** (PR#3–#4) |
 | Multi-process assemble + live dashboard | **landed** (PR#5) |
-| Full 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · Gate3 ACCEPT |
+| Historical 773-well OOF (public kernel) | residual **14.54** · stack **15.11** · last_known **15.91** · historical Gate3 ACCEPT; remeasurement required |
 | Multi-neighbor spatial + residual interactions + adaptive Gate3 | **landed** (PR#13) — synthetic seal confirmed |
+| Spatial observation boundary | Observed `TVT_input` donors by default; unseen targets supported; hidden-label mutation tests |
+| Network Engine boundary | Raw measurement export + optional native slice diagnostics; no TVT improvement claim — [`integration guide`](docs/NETWORK_ENGINE_INTEGRATION.md) |
 | Task construct (GR@TVT) | geology = typewell book; place laterals; gated residual — [`docs/TASK_GR_TVT_CONSTRUCT.md`](docs/TASK_GR_TVT_CONSTRUCT.md) |
 | All-context two-step | geometry path then GR@TVT placement — [`docs/ALL_CONTEXT_OPERATOR.md`](docs/ALL_CONTEXT_OPERATOR.md) |
 | Real field slices (773w) | pad XY / section / GR·TVT matrices / heel-toe — `scripts/slice_real_field.py` → `artifacts/field_slices_full` |
@@ -86,7 +173,7 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_parallel_train.ps1
 | Gate3 floor honesty | sparse-NaN pure floors no longer dropped — residual must beat **all** floors incl. stack |
 | Auto residual base | default base = best pure floor on labeled toe (`prior_stack` typical); override with `--prior-col` |
 | Adaptive serve fields in CV report | `adaptive_oof_rmse` · `adaptive_conf_channel` · thr · lifetime · channel sweep |
-| GitHub remote | `ZuluYokohama/rogii-wellbore-topology` |
+| GitHub remote | `FractalDesignZ/rogii-wellbore-topology` |
 | RAG / NotebookLM pack | [`docs/KB_TOPOLOGICAL_WELLBORE_RWT.md`](docs/KB_TOPOLOGICAL_WELLBORE_RWT.md) |
 | Kaggle submit | **OFF** — measure in-repo only (OOF / Gate3 / seals); no competition upload under RESTRICT |
 

@@ -1,0 +1,7 @@
+{
+  "format": "jovin-harness.native-ast-plan.v2",
+  "objective": "Record declarations, call sites and compiler control flow for the independent depth path verifier.",
+  "standard": "c++20",
+  "include_dirs": [],
+  "units": [{"id": "path_verifier", "path": "qa/path_verify.cpp", "language": "cpp", "defines": ["NDEBUG"]}]
+}

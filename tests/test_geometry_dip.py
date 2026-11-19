@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 
@@ -39,10 +41,90 @@ class TestDipRotation(unittest.TestCase):
 
 
 class TestSimd(unittest.TestCase):
+    def tearDown(self) -> None:
+        cpu_feature_report.cache_clear()
+
     def test_cpu_report(self) -> None:
+        cpu_feature_report.cache_clear()
         r = cpu_feature_report()
         self.assertIn("numpy_version", r)
         self.assertIn("simd", r)
+        self.assertIn("openblas", r)
+        self.assertEqual(r["openblas"], "openblas" in r["blas_backend"].lower())
+
+    def test_cpu_report_numpy_version_fallbacks(self) -> None:
+        features = {"SSE2": True, "AVX2": True, "FMA3": True, "AVX512F": False}
+        core = SimpleNamespace(
+            __cpu_features__=features,
+            __cpu_baseline__=["SSE2"],
+            __cpu_dispatch__=["AVX2", "AVX512F"],
+        )
+        cases = (
+            (
+                "2.5.5", "numpy._core._multiarray_umath",
+                SimpleNamespace(CONFIG={"Build Dependencies": {
+                    "blas": {"name": "scipy-openblas", "found": True},
+                }}), "scipy-openblas", True,
+            ),
+            (
+                "1.24.4", "numpy.core._multiarray_umath",
+                SimpleNamespace(get_info=lambda key: {
+                    "libraries": ["mkl_rt"],
+                } if key == "blas_opt_info" else {}), "mkl", False,
+            ),
+            (
+                "1.24.4", "numpy.core._multiarray_umath",
+                SimpleNamespace(get_info=lambda key: {
+                    "libraries": ["openblas64_"],
+                } if key == "blas_ilp64_opt_info" else {}), "openblas", True,
+            ),
+        )
+        for version, module_name, config, backend, openblas in cases:
+            with self.subTest(numpy=version, backend=backend):
+                def import_module(name: str) -> object:
+                    if name == module_name:
+                        return core
+                    if name == "numpy.__config__":
+                        return config
+                    raise ImportError(name)
+
+                cpu_feature_report.cache_clear()
+                with (
+                    patch("rwt.simd.import_module", side_effect=import_module),
+                    patch("rwt.simd.np", SimpleNamespace(__version__=version)),
+                    patch("rwt.simd.platform.machine", return_value="AMD64"),
+                    patch.dict(sys.modules, {"numba": None}),
+                ):
+                    r = cpu_feature_report()
+                self.assertEqual(r["simd_family"], "x86")
+                self.assertEqual(r["simd"], features)
+                self.assertEqual(r["numpy_cpu_baseline"], ["SSE2"])
+                # A compiled dispatch target must not turn a False runtime flag True.
+                self.assertEqual(r["numpy_cpu_dispatch"], ["AVX2", "AVX512F"])
+                self.assertEqual(r["blas_backend"], backend)
+                self.assertIs(r["openblas"], openblas)
+
+    def test_cpu_report_unknown_hardware_and_backend(self) -> None:
+        # Importing config alone proves neither OpenBLAS nor an ISA capability.
+        for machine, family in (("mips64", "unknown"), ("armv7l", "ARM")):
+            with self.subTest(machine=machine):
+                def import_module(name: str) -> object:
+                    if name == "numpy.__config__":
+                        return SimpleNamespace()
+                    raise ImportError(name)
+
+                cpu_feature_report.cache_clear()
+                with (
+                    patch("rwt.simd.import_module", side_effect=import_module),
+                    patch("rwt.simd.np", SimpleNamespace(__version__="unknown")),
+                    patch("rwt.simd.platform.machine", return_value=machine),
+                    patch.dict(sys.modules, {"numba": None}),
+                ):
+                    r = cpu_feature_report()
+                self.assertEqual(r["simd_family"], family)
+                self.assertEqual(r["simd"], {})
+                self.assertEqual(r["blas_backend"], "unknown")
+                self.assertIs(r["openblas"], False)
 
     def test_ncc_vectorized(self) -> None:
         t = np.sin(np.linspace(0, 20, 200))
