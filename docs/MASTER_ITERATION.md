@@ -424,3 +424,19 @@ The typed observation and neighbor APIs preserve original parsed values, channel
 The first joint relation test kept 95,137 measured-depth bins with three positions and four fields per bin. It compared gamma-ray distributions after grouping bins by signed survey slope. It scored **10.036962 ft** against **10.030446 ft** for the incumbent and **10.032018 ft** with the same survey-group labels rotated within each window. The true versus rotated interval was −0.012 to +0.027 ft. The control moved 73,798 labels and the predictions differed on 2,046,530 original stations. An independent audit recovered the input values, support and all scores from raw data. This grouping missed its gate. Local metrics SHA-256 `62679ebb5ba1f83d230098bf4ad7c088ffa2275584c26a3b2581c30b88088297`.
 
 A higher-layer test kept gamma-ray evidence indexed by measured-depth section, forecast member and one of 25 candidate depth shifts. It applied the same heel reliability and support to a collapsed-mean control and an alternating-section member rotation. The joint model scored **9.993074 ft** on all original stations. The incumbent scored **10.030446 ft**, the collapsed mean **10.028961 ft** and the member rotation **10.001180 ft**. The joint model improved one of three folds against the incumbent, with a paired 95% interval of −0.104 to +0.023 ft. Its prespecified gate failed. The rotation changed predictions in all 416 wells with evidence. An independent audit matched the exact incumbent bytes and all four scores. Local evidence root `7dd1035314bf6b4e78fa9cf89284e5ed5277daebd403f23d09a47baa1d06164f`.
+
+### Julia recurrence in measured-depth and evidence order
+
+The sequence test retained each section's native ID and the distribution losses of the same 25 candidate depth paths. The complex value for each candidate and section encoded its excess loss and signed GR amplitude difference. The recurrence applied `z_next = z*z + c` to that candidate in the chosen sequence and reset at gaps in measured support. The same capped orbit energy affected the candidate weight in each Julia arm. The evidence-order arm went from weak to strong within each supported run, ranking sections by the interquartile range of their candidate losses. Physical section IDs resolved ties. This ordering used only prediction-time data.
+
+| Sequence | RMSE (ft) |
+| --- | ---: |
+| Additive incumbent | 10.030446 |
+| Julia in measured-depth order | 10.030812 |
+| Julia reset at each section | 10.030633 |
+| Julia with permuted section order | 10.029433 |
+| Julia ordered by evidence | **10.027222** |
+
+Evidence order met its separately frozen pooled-error and fold gate. It improved all three folds against physical order, with a paired 95% interval of −0.0075 to −0.0004 ft. It improved two folds against the additive baseline, with a paired interval of −0.0125 to +0.0048 ft. The physical-order primary missed its gate. The evidence order moved 3,501 section positions within the observed runs. The independent audit reproduced all five results on 619 development wells and all 3,034,427 original toe stations. Local metrics SHA-256 `d36fad0674f484ddfe743e5ac9b6556f28385ddb0467191fc02fc50f5ea9d2d9`.
+
+A bounded inference replay bound the source graph and AST, re-read the 1,238 authorized lateral and reference files, and reproduced every ordered section list and native forecast hash. It selected lateral MD, GR and `TVT_input` and paired typewell TVT and GR, with zero held lateral target reads. Local replay evidence root `fee098c4a10036a62d0de7c52a6cd6b282890f48cafdf58a651a97f3a5b7f32e`.
