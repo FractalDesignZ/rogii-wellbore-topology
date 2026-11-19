@@ -30,6 +30,28 @@ class TestExecutionGraph(unittest.TestCase):
             tree.close.assert_called_once_with()
             tree.attach.assert_not_called()
 
+    def test_startup_interruption_reaps_unattached_leader(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            created = []
+            actual_popen = subprocess.Popen
+            def spawn(*args, **kwargs):
+                process = actual_popen(*args, **kwargs)
+                created.append(process)
+                return process
+            factory = "rwt.execution_graph." + ("_WindowsProcessJob" if os.name == "nt" else "_PosixProcessGroup")
+            try:
+                with patch("rwt.execution_graph.subprocess.Popen", side_effect=spawn), patch(factory + ".attach", side_effect=KeyboardInterrupt):
+                    with self.assertRaises(KeyboardInterrupt):
+                        run_bounded([sys.executable, "-c", "import time; time.sleep(10)"],
+                                    cwd=tmp, trace_path=Path(tmp) / "trace.jsonl", node_id="plan", timeout_s=2)
+                self.assertEqual(len(created), 1)
+                self.assertIsNotNone(created[0].returncode)
+            finally:
+                for process in created:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait(timeout=10)
+
     def test_static_relative_import_closure_and_tamper(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

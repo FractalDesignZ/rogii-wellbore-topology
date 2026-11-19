@@ -437,13 +437,28 @@ def run_bounded(
     started = time.monotonic()
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         tree = None
+        process = None
         try:
             tree = _WindowsProcessJob() if os.name == "nt" else _PosixProcessGroup()
             process = subprocess.Popen(command, cwd=cwd, stdout=stdout, stderr=stderr, shell=False, **tree.popen_options)
             tree.attach(process)
         except BaseException as exc:
-            if tree is not None:
-                tree.close()
+            try:
+                # Attachment can be interrupted before containment owns the
+                # leader. On POSIX, reserve the PGID until its group is killed.
+                if process is not None and os.name != "nt":
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            finally:
+                try:
+                    if tree is not None:
+                        tree.close()
+                finally:
+                    if process is not None:
+                        process.kill()
+                        process.wait(timeout=10)
             if not isinstance(exc, OSError):
                 raise
             receipt = {"node_id": node_id, "status": "FAILED", "returncode": None, "wall_seconds": time.monotonic() - started, "error": type(exc).__name__, "command": command}
