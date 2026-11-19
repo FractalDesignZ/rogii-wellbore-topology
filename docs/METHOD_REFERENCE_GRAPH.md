@@ -39,6 +39,8 @@ The OODA analogy gives each pass through this graph a concrete record. Observe r
 
 The policy mapper now has a bounded adapter. It accepts only strict decreases of a fixed observed objective, retains evidence-bound policy state IDs and stops explicitly at a stable examined prefix, an ancestor proposal, absent support or its budget. Julia-derived proposal order and measured predictive merit have separate checks. [Policy adapter, OODA graph and study roles](POLICY_REFINEMENT.md) · [Measured CPU/CUDA and proposed graphics routes](COMPUTE_ROUTES.md)
 
+Adaptive merit weights now propagate from given/source nodes through relationship and action policies. Their graph retains scope, paired observation footprints, factor identity and parent hashes; a shared factor appears only once in an effective product. The field installation reproduced all original forecasts. Two-way attention remains an experimental proposal mechanism with separate controls and a negative first routing result. [Recursive weights and attention scope](POLICY_REFINEMENT.md#adaptive-weights-across-policy-layers)
+
 The process graph controls which evidence may cross each boundary.
 
 ```mermaid
@@ -90,4 +92,4 @@ From the repository root, use a fresh output directory. The optional PDF directo
 
 The output contains the concept graph, data and control links, source dependency graph and AST node IDs for every linked operator and check. An unresolved Python definition, an out-of-range citation or a proposed component incorrectly marked as implemented fails verification. Physical page counts are independently pinned to the authenticated PDF hashes. Test results remain separately recorded by the normal test runner. [Verifier tests](../tests/test_method_graph.py)
 
-The updated graph resolves six documents, eleven concepts and 68 links. Its SHA-256 is `232567e0a4c3dd63fb9d33fcf741a5ac8f6c19e0091203295c483992308797b5`. Its adjacent source and AST graphs record the definitions at verification. All six attached PDFs matched their earlier authenticated copies. Blank physical pages 60 and 74 of the cheat sheet were excluded from the revised citations.
+The updated graph resolves six documents, thirteen concepts and 83 links. Its SHA-256 is `ffde2541d091220c77b3d561002d819046108782656edad349a4eddbc7afe6dd`. Its adjacent source and AST graphs record the definitions at verification. All six attached PDFs matched their earlier authenticated copies. Blank physical pages 60 and 74 of the cheat sheet were excluded from the revised citations.

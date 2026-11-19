@@ -64,3 +64,54 @@ The fixed action choices are OFF, affine GR and merit-ordered Julia. The initial
 Each leaf applies the existing training-bank support and one-standard-error rule. Children with six to eleven fitting wells retain OFF under its 12-well minimum. The search may accept that fallback if validation improves. Such a change measures a conservative action decision. Predictive admission uses the separately reserved policy-test errors and fixed controls. [Training-bank selector](../src/rwt/operator_selection.py) · [Measurements and admission decisions](MASTER_ITERATION.md)
 
 The completed study failed that predictive gate. Same-member policy-test RMSE was 12.192375 ft with Julia ordering, 12.188605 ft with canonical ordering and 12.174820 ft with the static policy. Julia reduced validation SSE in 17 of 45 searches. The schedules agreed in all 45 exhaustive-width searches. Their finite stopping and validation improvement did not establish a better depth predictor. The public adapter remains a tested search control. [Full outcome and transfer controls](MASTER_ITERATION.md#policy-mapping-inside-a-bounded-ooda-loop)
+
+## Adaptive weights across policy layers
+
+`resolve_weights` installs the weight decisions in an explicit parent graph. Each node names its given/source, evidence, role scope, support and rule. A `Given` carries observed support. `HeldMerit` proposes `max(0, 1 - candidate_loss / baseline_loss)` from paired mean losses on the same calibration wells. `FixedWeight` carries a declared factor between zero and one. The loss ratio and the minimum bank size are study choices. They are distinct from the operator selector's one-standard-error rule. [Weight graph API](../src/rwt/merit_weights.py) · [Checks](../tests/test_merit_weights.py)
+
+```mermaid
+flowchart LR
+  M[Meta policy and permitted well roles] --> G[Given with source and support]
+  G --> R[Relationship merit from held calibration]
+  R --> A[Declared action attenuation]
+  A --> D[Discrete candidate weights]
+  R --> V[Another view of the same factor]
+  V --> D
+  D --> F[Fixed-objective policy comparison]
+  F --> M
+```
+
+The feedback arrow starts a new bounded decision pass. The weight dependency graph within each pass remains acyclic. Effective weights multiply each distinct ancestor factor once, even when two views share that ancestor. Unsupported or zero-weight parents switch dependent policies off. This product is a declared attenuation rule. It is not a probability of correctness or an independence claim about its sources.
+
+Each held loss binds an ordered observation-key digest and count for both candidate and baseline. A nonempty merit bank must contain every declared calibration well exactly once. Calibration and query roles must be disjoint. Ambiguous case/Unicode spellings, conflicting factor provenance, cycles and missing parents are rejected. Decisions and graph receipts are immutable and hash their scope, evidence and parent decisions. The caller authenticates the underlying measurements and each calibration model's exclusion of its held wells.
+
+```python
+from rwt.merit_weights import (
+    FixedWeight, Footprint, Given, HeldMerit, PairedWellLoss,
+    WeightNode, WeightScope, resolve_weights,
+)
+
+# Synthetic paired losses; each supplied footprint represents 12 ordered keys.
+wells = tuple(f"train-{i}" for i in range(8))
+scope = WeightScope("example", wells, ("query",))
+fp = Footprint(12, "a" * 64)
+losses = tuple(PairedWellLoss(w, 1.0, 4.0, fp, fp) for w in wells)
+graph = resolve_weights(scope, [
+    WeightNode("meta", "example", "roles", "role-record", Given()),
+    WeightNode("relation", "example", "paired-observations", "loss-record",
+               HeldMerit("relation-skill", losses), ("meta",)),
+    WeightNode("action", "example", "study-rule", "gain-record",
+               FixedWeight("half-gain", 0.5), ("relation",)),
+])
+assert graph.decision("action").weight == 0.375
+```
+
+The installed field replay rebuilt the near-horizontal TRAIN-well calibration losses and original edge footprints. For the three outer scopes it recovered adaptive weights 0.0505213575, 0.0519587814 and 0.0508364092. The fixed half-gain child produced effective actions 0.0252606787, 0.0259793907 and 0.0254182046. Those public-graph weights reproduced all 3,034,427 archived station forecasts across 619 wells byte-for-byte. Rotated-training evidence had negative held merit and its dependent graph action switched off in every scope. The original rotation comparator used the true gain deliberately; it remains a separate measured control.
+
+This replay verifies weight installation and native parity. It performs no new predictive search or scoring. The public regression test connects a proposed weight graph to `refine_policy` and verifies that positive calibration merit cannot admit an action that worsens its unchanged objective. Local replay root `0a75ec9b36b5bca44749157f799f8752cf56064f73e91ff3e699fe5aac757156`. [Field outcome and controls](MASTER_ITERATION.md)
+
+## Two-way attention as a separate proposal mechanism
+
+The user's transformer adaptation suggests policy queries attending to source-addressed given tokens, followed by returned evidence updating the policy context. The reverse pass must retain the given identities and masks. It needs its own comparison against one-way attention, a similar-size ordinary network and fixed actions under identical observation and optimization budgets. Attention proposes relevance; the weight graph and original-row predictive objective retain their own decisions. The reference graph records this extension as a hypothesis. The supplied neural-network and recursive-context references inform the general construction, without supplying a wellbore attention implementation.
+
+The first private routing experiment completed those controls with six aggregated descriptors, 203 parameters and 256 fitting steps per model. Two-way attention scored 12.158561 ft on same-member bank cases, against 12.145331 ft for one-way attention and 12.075073 ft for always choosing affine. It changed 185 policy choices but failed its predictive gate. This is a bounded policy-routing result on reused development banks. A raw-curve reconstruction transformer needs a distinct representation and test. [Measured attention scope and outcome](MASTER_ITERATION.md#two-way-attention-for-policy-proposals)

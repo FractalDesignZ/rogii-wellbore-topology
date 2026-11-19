@@ -579,3 +579,55 @@ The shape candidate improved all three folds against the incumbent, two against 
 The separately frozen self-GR follow-up replaced the 16-ft cap with `log1p(abs(ΔTVT)/scale)`, using each lag's median positive early-heel separation as its scale. It retained the previous 429 forecasts byte-for-byte. A matched raw-linear separation control used the same early scales, query edges, eligibility and primary reliability. The log branch scored **10.071722 ft**, compared with **9.994968 ft** for OFF, **9.994738 ft** for shuffled activity, **10.046308 ft** without anchor evidence and **10.064980 ft** for raw-linear separation. The primary lost all three folds against OFF. Its paired 95% increase was +0.013095 to +0.147456 ft.
 
 Scaling restored eligibility to 127 further wells, including 109 of the 165 previously saturated wells, but 99.71% of the actual toe edges lay outside that well/lag's early-heel separation range. Median disjoint-heel reliability was 0.754. The experiment exposed transfer beyond calibration support despite good within-heel validation. Of 611,457 eligible native stations, 574,878 actually changed. All original rows and protected forecasts passed the separate audit. Prediction seal `fc7ae82c1bf4513d508727dbadb24cadf6ee2fa850bf332a57820dfd87551f28`; audit SHA-256 `b742f4958b58aa800f5b3b3e7d24717c91575361bd845ead44e24b2f5af7674d`. This larger-support branch remains unpromoted.
+
+### Learning relationships on matching training support
+
+The next first-party test learned same-instrument GR variation from permitted TRAIN lateral segments with small vertical separations. Profiles condition on physical MD lag, signed survey slope and heel/toe source role. Each bracketing depth cell needs at least eight distinct training wells, and all 25 query hypotheses must have support before an edge contributes. Three inner held-well groups estimate how much true separation improves activity prediction over the geometry-only profile. Actual TRAIN TVT supplies those supervised separations. Held query targets and OOF forecasts from other outer folds are outside fitting.
+
+| Original-station readout | RMSE (ft) |
+| --- | ---: |
+| Previous self-GR / OFF | 9.994968 |
+| TRAIN-conditioned edge relation | **9.988991** |
+| Same endpoint observations rotated on the query | 9.996423 |
+| Same learner with TRAIN activity rotated | 10.001720 |
+
+The primary passed every prespecified pooled and fold comparison. Both rotations lost all three folds. Against OFF, two folds improved and the paired whole-well 95% RMSE interval was −0.011693 to −0.000190 ft. Intervals against query and training rotation were −0.015312 to −0.000689 ft and −0.022520 to −0.002917 ft. These are small development effects on reused wells, with no independent confirmation or rank claim.
+
+It preserved all 429 previous forecasts byte-for-byte and changed 189 of the remaining 190 wells, covering 925,607 additional stations. Combined supported coverage is 618 of 619 wells. The remaining 407-row well supplied only one eligible section. Of 115,911 geometrically eligible edges, 112,984 had measured training support across all candidates. Original outer/inner role checks and independent raw calibration reproduced each true and rotated skill to within 6 × 10⁻¹⁶. The original-row audit covered all 3,034,427 stations. Prediction seal `78addc071b664d3d2fb9a2104f3a0277fd3755662cad50a34f3fbc6fb843aaf4`; audit SHA-256 `35f2d8dd4df3ef837c2267e296ec65a37f0871834b8601111abcca3826d5219b`.
+
+The public recursive weight graph now reconstructs the actual layer weights from these calibration losses. Adaptive skills are 0.0505213575, 0.0519587814 and 0.0508364092, followed by the declared half-gain action. Its installation replay reproduced every native forecast byte. It introduces no new performance score. Local replay root `0a75ec9b36b5bca44749157f799f8752cf56064f73e91ff3e699fe5aac757156`. [Layer policies and source/footprint safeguards](POLICY_REFINEMENT.md#adaptive-weights-across-policy-layers)
+
+### Rebuilding the inner models with forward observations
+
+The full-outer model already used 32 forward survey/GR channels. A new frozen experiment supplied them to all nine original inner models. Matched past-window models used the same roles, 308-column prefix, capacity, labels and weights. Each direction refitted the unchanged coherent/detail residual heads on its own new excluded-bank errors, then ran the fixed blend, donor registration and ordinal readout. Here the residual learner's 334 columns are 274 observations, 32 forward channels and 28 member conditions. This has separate first-party lineage from the excluded historical own-heel branch.
+
+| Native forecast stage | Original 308 | Backward 340 | Forward 340 |
+| --- | ---: | ---: | ---: |
+| Mean of three inner forecasts | 11.096827 | 11.095215 | 10.740422 |
+| Half blend with fixed full-outer model | 10.648607 | 10.638659 | 10.542127 |
+| After member residual correction | 10.477118 | 10.520077 | 10.517638 |
+| After donor registration | 10.234576 | 10.247684 | 10.228286 |
+| Final ordinal forecast | 9.997405 | 10.006615 | 9.992353 |
+
+Forward observations improved every raw inner model and the inner mean in all three folds. Its final ordinal path improved only one fold against both original and backward controls, so the primary gate failed. The separately declared comparison against 9.994968 also won only one fold, with a paired interval of −0.094186 to +0.089002 ft. The newer 9.988991-ft relation route is lower in pooled error as well. On the original 203 fallback wells, forward RMSE improved from 10.289541 to 10.151779 ft; on the 416 original supported wells, it rose from 9.853287 to 9.914478 ft.
+
+All 619 original forecasts replayed before fitting. Thirty fits completed in 1,235.60 seconds. The independent audit authenticated all nine inner roles, 148 parent bindings, 33 source files, stage exits, saved models and all original station errors. Field evidence SHA-256 `377da5495478b269af292a8e0f35b93a8aa76bee10bfe485f5b8002a4e1d1bd4`. No change was admitted from this model rebuild.
+
+A separate retrospective calculation held the pre-registration decoder displacement fixed. The future model's best single multiplier in [0,2] scored 10.516273 ft versus the actual 10.517638 ft. Choosing the multiplier with each well's hidden targets would reach 10.143528 ft; about 89% of that opportunity was well-wide offset. These oracle weights are representation diagnostics, with direct native reconstructions checking every quadratic value. They are not serving settings. Local diagnostic root `aa49105e8b56777d02ffbaae6289bb5d4638615559457f2fbfdf231972b8a335`.
+
+### Two-way attention for policy proposals
+
+The first transformer-style adaptation tested three policy queries attending to six observed given descriptors, a return pass from policy context to the givens, and another policy read. One-way attention retained the same two reads with local token updates; an ordinary network matched the 203-parameter budget. Each received 256 fixed full-batch steps, the same fitting roles and fit-only scaling. No validation checkpoint or architecture sweep was used. A separate process scored presealed rotation-test choices.
+
+| Same-member bank policy | RMSE (ft) |
+| --- | ---: |
+| Two-way attention | 12.158561 |
+| One-way attention | 12.145331 |
+| Matched ordinary network | 12.167692 |
+| Static policy | 12.174820 |
+| Always affine | 12.075073 |
+| Always merit | 12.076420 |
+
+Two-way attention changed 185 of 1,238 decisions relative to one-way attention. Its 3×6 → 6×3 → 3×6 maps changed the representation and retained source roles. It lost two folds against one-way attention and all three against both fixed active actions, failing the declared gate. Its interval against one-way attention was −0.014925 to +0.048061 ft. The bank test groups two occurrences per original well over 619 distinct IDs and 6,068,854 station-prediction appearances. It measures routing on six aggregated descriptors. These scores do not evaluate raw-curve transformer reconstruction or share the field route's forecast definition.
+
+All 45 learner packs excluded their own test outcomes and all fixed terminal choices were sealed before the bank evaluator opened errors. The independent audit reconstructed role packs, scalers, choices and scores. The run retained parameter hashes and attention summaries, rather than checkpoints for a separate neural inference replay. Local evidence root `c9506c7e720e8b2951c1a762cb577cb8e366304609521e7a18abfe34e598e34a`. The attention adapter remains experimental. The retained field-development route is **9.988991 ft**, and all 154 confirmation wells remain sealed.

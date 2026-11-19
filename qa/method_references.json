@@ -90,6 +90,22 @@
       "checks": [{"path": "tests/test_policy_refinement.py", "symbol": "test_monotonic_acceptance_and_ancestor_proposal"}, {"path": "tests/test_policy_refinement.py", "symbol": "test_budget_unchanged_and_off"}, {"path": "tests/test_policy_refinement.py", "symbol": "test_invalid_state_and_objective_fail_closed"}]
     },
     {
+      "id": "recursive_merit_weights",
+      "claim": "Propagate supported policy factors and paired held-bank loss ratios through an evidence-bound acyclic parent graph, counting each shared factor once.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5]}, {"reference": "math", "pages": [46, 50, 51]}],
+      "operators": [{"path": "src/rwt/merit_weights.py", "symbol": "resolve_weights"}],
+      "checks": [{"path": "tests/test_merit_weights.py", "symbol": "test_recursive_merit_counts_a_shared_factor_once"}, {"path": "tests/test_merit_weights.py", "symbol": "test_merit_rejects_role_aliases_and_unpaired_footprints"}, {"path": "tests/test_merit_weights.py", "symbol": "test_zero_unsupported_and_insufficient_merit_turn_children_off"}, {"path": "tests/test_merit_weights.py", "symbol": "test_rejects_invalid_edges_provenance_and_fixed_values"}, {"path": "tests/test_merit_weights.py", "symbol": "test_weights_cannot_admit_a_worse_fixed_objective"}]
+    },
+    {
+      "id": "bidirectional_attention_policy",
+      "claim": "Test a learned policy-to-given-to-policy attention map with explicit source identities, role separation and a fixed predictive merit gate.",
+      "status": "hypothesis",
+      "citations": [{"reference": "ml", "pages": [71, 72, 73]}, {"reference": "rlm", "pages": [2, 4]}],
+      "operators": [],
+      "checks": []
+    },
+    {
       "id": "general_model_operator_selection",
       "claim": "Select among graph, tree, forest and neural models under one complete nested process and resource budget.",
       "status": "hypothesis",
@@ -110,6 +126,11 @@
     {"source": "general_model_operator_selection", "target": "nested_operator_selection", "kind": "proposed"},
     {"source": "generalization_boundary", "target": "bounded_policy_refinement", "kind": "control"},
     {"source": "bounded_policy_refinement", "target": "nested_operator_selection", "kind": "control"},
-    {"source": "observed_execution", "target": "bounded_policy_refinement", "kind": "control"}
+    {"source": "observed_execution", "target": "bounded_policy_refinement", "kind": "control"},
+    {"source": "addressable_observations", "target": "recursive_merit_weights", "kind": "data"},
+    {"source": "generalization_boundary", "target": "recursive_merit_weights", "kind": "control"},
+    {"source": "recursive_merit_weights", "target": "bounded_policy_refinement", "kind": "control"},
+    {"source": "bidirectional_attention_policy", "target": "recursive_merit_weights", "kind": "proposed"},
+    {"source": "bidirectional_attention_policy", "target": "bounded_policy_refinement", "kind": "proposed"}
   ]
 }
