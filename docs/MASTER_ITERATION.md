@@ -280,3 +280,41 @@ Each saved inner model recomputed its supervised features for the actual outer q
 The uncorrected blend improved all three folds and 371 of 619 wells. It removed 11,670,646 ft² of squared error. A secondary comparison of the fixed predictions gave a paired 95% interval of −0.317 to −0.032 ft against the full model. The spatial correction improved slightly against the uncorrected blend and lost to its permuted-donor control. Its frozen predictive gate failed. The uncorrected ensemble is the leading development candidate.
 
 Nine inference workers reused saved models and matched 5,330 probe block predictions byte-for-byte. They produced 1,138,704 outer block predictions, three per original block. Observed inference target parses covered 2,476 training-donor files and zero outer queries. The evaluator sealed all nine readouts before opening the original target columns. A separate audit reproduced every well's errors, the pooled station scores and the primary decision. Local evidence root `efe4b6277001778ca39c714ee6bc38e95edc4eabd032a283eedf6acff4573c9a`. Confirmation remains reserved.
+
+### Common error and a whole-well neural comparison
+
+The four frozen components often missed in the same direction. The actual depth lay outside their prediction interval at 60.37% of stations, accounting for 94.97% of the fixed ensemble's squared error. Even using the observed targets to pick a separate convex mixture at each station would leave **7.987779 ft** RMSE. The 31 wells carrying 40.65% of squared error had a final-quarter RMSE of 37.185 ft, with truth outside all four predictions at 99.7% of stations in that late segment. Two-sided registered donor coverage existed at 93.16% of the rows of those 31 wells. The measured need is a source of predictions outside the current model range.
+
+A fixed comparison gave two neural readouts the identical 308 features and represented-row weights. Both used the same whole-well observation mean. One updated each node independently and the other additionally used temporal convolutions spanning four dilation scales within each observed well. Both used train-only feature scaling and 24 fixed epochs on the RTX 5070. Preparation reproduced all 12 donor-profile features exactly from permitted outer training donors. All six saved checkpoints reproduced their held-out predictions.
+
+| Native station readout | RMSE (ft) |
+| --- | ---: |
+| Frozen four-model ensemble | 10.900780 |
+| Pointwise control | 12.254424 |
+| Temporal readout | 11.870908 |
+| Fixed half ensemble, half pointwise | 11.095939 |
+| Fixed half ensemble, half temporal | 10.853233 |
+
+The temporal blend improved the pooled score and one of three outer folds against the frozen ensemble. The paired 95% interval for its RMSE change was −0.267 to +0.175 ft. It failed the frozen rule requiring at least two winning outer folds. Adding both neural outputs to the truth-informed mixture calculation lowered the six-model bound to **7.007805 ft**. This quantifies potential diversity and leaves a large common error component. The GPU processes took 60.5 to 71.1 seconds per fold for both readouts. The exact 3,034,427-row score and independent error replay are bound to local evidence root `440826e9e5686cae72a2097ef1ebdd068b324157a0d1145594674e7138af5a8e`.
+
+### Registering gamma-ray events between separate laterals
+
+Another fixed test used signed changes in measured gamma ray to choose where to sample structural height on each of two flanking training wells. It compared signed seven-sample traces within ±96 longitudinal feet of the geometric crossing in the query frame. A separate visible-heel segment checked the registration. The equal-coordinate and rotated-event-order controls shared the same observed support and correction strength. Forecast construction read held-out measurements and visible heel TVT, took structural heights only from training donors, and sealed every station value before evaluation.
+
+The registered readout reached 329,665 stations in 111 wells and scored **10.886076 ft** against **10.900780 ft** for the frozen ensemble. Equal-coordinate transfer scored **10.885071 ft**, and using rotated event order scored **10.885145 ft**. Actual event order lost all three folds against equal coordinates. Its improvement versus the frozen ensemble was small and the matched-control gate failed. The reached stations carried 4.43% of baseline squared error. Using the actual targets at every reached station would still leave **10.656826 ft** RMSE. Independent raw-row verification reproduced the recorded errors and confirmed opposite-side donors belonged to the allowed fold.
+
+### Synchronizing height offsets across training donors
+
+A separate experiment used sustained overlaps between training wells to fit one vertical offset per well in each connected donor group. The same group had to support both the visible query heel and the toe location. Three matched learners appended four features to the 308-column readout using the same geometry and missing-support mask. Their height references came from synchronized offsets, independent per-well heel datums and shuffled overlap differences. Training queries excluded their own wells from the relevant fit and lookup.
+
+On the training overlap equations, synchronization reduced weighted RMS discrepancy across the three folds to 1.27–1.84 ft, from 58.11–65.49 ft for the independent heel datums. Transfer covered 235,193 original block centers. Replacing the outer half of the ensemble with the synchronized learner gave **10.931480 ft** against **10.900780 ft** for the byte-identical baseline, **10.897363 ft** for the heel-datum control and **10.904892 ft** for the shuffled-difference control. The synchronized arm lost all three folds against the baseline. Its paired 95% interval for the difference was −0.040 to +0.102 ft. Equation agreement within the training donor group did not carry through to held-out placement.
+
+Nine serial fits and their sealing and scoring stages took 451.35 seconds. The independent audit reproduced all eight station scores and the exact two original comparators. Neither control replaced the leading model. Local evidence root `97f0408daf4bb422188a2701b588cf972ab82437018107ae752ac366e3480e8d`.
+
+### Raw serving for the leading ensemble
+
+The leading **10.900780-ft** ensemble now replays from the original surveys, measured gamma ray, visible TVT and paired typewells. The preparation step initializes the three inner models with their frozen training-donor state and model parameters. The held-out query computes its own 274-column observation prefix from raw measurements. Each inner model then builds the supervised features from its own allowed donor state. The public blend checks that the full model and every inner model return exactly the original block IDs. It averages their depths at the block centers before interpolation to survey stations. [Keyed blend API](../src/rwt/ensemble.py) · [Station lift API](../src/rwt/station_lift.py)
+
+The replay covered all 619 outer-held wells and the paired reference logs. All 350,720,832 regenerated inner feature cells, 1,138,704 inner block depth predictions and 3,034,427 saved ensemble station values matched bit-for-bit. All 1,047,316 visible heel values were preserved. The verifier also reconstructed each separate inner model's station prediction from its archived centers and the original survey. Fixtures confirmed that an unseen well identifier with the same observations produces the same result, and that swapping in synthetic lateral target and formation columns leaves the result unchanged.
+
+The workers used at most two concurrent fold processes, with one numerical thread per worker. Observed lateral target parses were confined to 2,476 authorized training-donor reads at initialization. The replay performed zero fits and produced zero new accuracy scores. Parts of model initialization still use frozen local training artifacts. The verified proof covers the original held-well replay. Local evidence root `2916115bfcde6455df89dcc7f5c66ce190a559d7af4269a8d4c3f2c9104e2c1c`. The 154 confirmation wells remain reserved.
