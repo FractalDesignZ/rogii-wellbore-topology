@@ -106,7 +106,7 @@ graph = resolve_weights(scope, [
 assert graph.decision("action").weight == 0.375
 ```
 
-The installed field replay rebuilt the near-horizontal TRAIN-well calibration losses and original edge footprints. For the three outer scopes it recovered adaptive weights 0.0505213575, 0.0519587814 and 0.0508364092. The fixed half-gain child produced effective actions 0.0252606787, 0.0259793907 and 0.0254182046. Those public-graph weights reproduced all 3,034,427 archived station forecasts across 619 wells byte-for-byte. Rotated-training evidence had negative held merit and its dependent graph action switched off in every scope. The original rotation comparator used the true gain deliberately; it remains a separate measured control.
+The installed field replay rebuilt the near-horizontal TRAIN-well calibration losses and original edge footprints. For the three outer scopes it recovered every adaptive weight and fixed half-gain descendant exactly. Those public-graph weights reproduced all 3,034,427 archived station forecasts across 619 wells byte-for-byte. The fitted values remain in the local receipts. Rotated-training evidence had negative held merit and its dependent graph action switched off in every scope. The original rotation comparator used the true gain deliberately; it remains a separate measured control.
 
 This replay verifies weight installation and native parity. It performs no new predictive search or scoring. The public regression test connects a proposed weight graph to `refine_policy` and verifies that positive calibration merit cannot admit an action that worsens its unchanged objective. Local replay root `0a75ec9b36b5bca44749157f799f8752cf56064f73e91ff3e699fe5aac757156`. [Field outcome and controls](MASTER_ITERATION.md)
 
