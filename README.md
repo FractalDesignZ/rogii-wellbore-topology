@@ -22,6 +22,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Held neural merit.** Ninety fresh fits in separate FIT/CAL/TEST roles tested whether calibration earns a neural deployment weight. The selector mostly retained OFF and failed its gate against fixed half strength. [Role boundaries, adaptive amplitude and native audit](docs/NEURAL_MERIT_CALIBRATION.md)
 
+**Direct native-loss solve.** Linear and radial kernels fit the original-station quadratic without training epochs. Both the member-calibration primary and an independently fixed complete-field primary failed their gates. [Algebra, compute timings and full-pipeline controls](docs/NATIVE_KERNEL_STUDIES.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
