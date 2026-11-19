@@ -12,6 +12,8 @@ Each immutable `LabelArtifact` supplies an artifact ID, an evidence SHA-256, par
 
 Unknown parents, cycles, duplicate nodes or parents, malformed digests and ambiguous case or noncanonical Unicode spellings fail. The guard propagates declarations supplied by the caller. It does not discover reads, authenticate a checkpoint's training history or establish completeness of the declared parent edges. Those facts require source, role and execution evidence.
 
+Declare every numerical and data-dependent selection parent, including a model-informed eligibility predicate. Bind unconditional scheduling barriers, opaque identity checks and later audit decisions in the execution/evidence graph separately; they must provide no numerical values or adaptive selection to the local computation. An outer policy worker receives only its own fold's permitted data, even when a global barrier waits for all folds. A retrospective development-selection node carries the evaluation-label ancestry and must not be confused with the earlier presealed numerical forecasts.
+
 | Artifact | Direct hidden-label declaration |
 | --- | --- |
 | Permitted visible heel or paired typewell observations | Empty; the evidence identifies the permitted channels and rows. |
