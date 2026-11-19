@@ -28,6 +28,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Two maps on shared states.** A zero-fit joint operator compared chart and TRAIN-derived GR ranks on the same candidate paths and physical sections. Its 9.977000-ft result beat the incumbent in every fold but lost to chart-only controls and failed its full gate. [All 16 arms, section-reassignment control and original-station proof](docs/GR_MAP_BUNDLE.md)
 
+**Testing the adaptive weight.** The known 9.955172-ft chart-priority curve failed new controls that reassigned its visible-heel reliability or used a constant fold mean/median. The study verified calibration and native execution but did not admit the well-specific weighting rule. [Ten arms, known-primary scope and independent audit](docs/SOURCE_PRIORITY_SHAPE.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
