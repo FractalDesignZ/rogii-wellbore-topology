@@ -12,6 +12,10 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Reference-to-source graph.** The six supplied mathematical and ML PDFs are cross-referenced to process decisions, Python definitions and checks. Adjacent H0 component spans and a role-checked three-operator selector now have runnable APIs. The graph retains general persistence barcodes and selection across model families as proposed extensions. [Process and control graph](docs/METHOD_REFERENCE_GRAPH.md)
 
+**Measured GPU search.** The RTX 5070 evaluated 15,625 coherent depth paths over 416 supported development wells, with CPU parity checks and an independent original-row audit. Increasing the grid worsened the prediction error. The compute report separates device timings, full-run cost and proposed shader/ray-query routes. [Compute routes and controls](docs/COMPUTE_ROUTES.md)
+
+**Policy refinement.** A bounded OODA adapter records evidence-bound policy states, accepts strict objective improvements and reports explicit stops. A policy's held-well merit is evaluated separately from its validation search. [Policy mapper and control graph](docs/POLICY_REFINEMENT.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |

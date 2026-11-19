@@ -82,6 +82,14 @@
       "checks": [{"path": "tests/test_operator_selection.py", "symbol": "test_comparison_requires_whole_bank_and_disjoint_roles"}, {"path": "tests/test_operator_selection.py", "symbol": "test_missing_evidence_weak_support_uncertainty_and_ties_choose_off"}]
     },
     {
+      "id": "bounded_policy_refinement",
+      "claim": "Accept only strict decreases of a fixed observed policy objective, retain evidence-bound state identities and stop within an explicit proposal budget.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5]}, {"reference": "math", "pages": [46, 50, 51]}],
+      "operators": [{"path": "src/rwt/policy_refinement.py", "symbol": "refine_policy"}],
+      "checks": [{"path": "tests/test_policy_refinement.py", "symbol": "test_monotonic_acceptance_and_ancestor_proposal"}, {"path": "tests/test_policy_refinement.py", "symbol": "test_budget_unchanged_and_off"}, {"path": "tests/test_policy_refinement.py", "symbol": "test_invalid_state_and_objective_fail_closed"}]
+    },
+    {
       "id": "general_model_operator_selection",
       "claim": "Select among graph, tree, forest and neural models under one complete nested process and resource budget.",
       "status": "hypothesis",
@@ -99,6 +107,9 @@
     {"source": "persistent_relation_identity", "target": "supported_revision", "kind": "proposed"},
     {"source": "persistent_barcodes", "target": "persistent_relation_identity", "kind": "proposed"},
     {"source": "nested_operator_selection", "target": "generalization_boundary", "kind": "control"},
-    {"source": "general_model_operator_selection", "target": "nested_operator_selection", "kind": "proposed"}
+    {"source": "general_model_operator_selection", "target": "nested_operator_selection", "kind": "proposed"},
+    {"source": "generalization_boundary", "target": "bounded_policy_refinement", "kind": "control"},
+    {"source": "bounded_policy_refinement", "target": "nested_operator_selection", "kind": "control"},
+    {"source": "observed_execution", "target": "bounded_policy_refinement", "kind": "control"}
   ]
 }

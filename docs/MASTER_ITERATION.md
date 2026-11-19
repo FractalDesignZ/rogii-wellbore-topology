@@ -457,7 +457,7 @@ The gain study generated a second level of well-disjoint decoder predictions wit
 
 The signed calibration run retained source, AST, process and original-row audit evidence at root `ff769aaa0c884a26306bc152ea9cd1efa1c6193031b2ad3f907177f864e5c45c`. The four-knot metrics have SHA-256 `f65087f44253884757226ae1ed0afb126a1d755eda496d64b841ca59a53731c4`. The 154 confirmation wells remain sealed.
 
-The supplied mathematics and ML references now have a process/control cross-reference with six authenticated document identities, eight concepts and 47 links to source, AST definitions and checks. It identifies persistent component tracking and a general nested operator selector as proposed components. [Reference graph and next discriminating checks](METHOD_REFERENCE_GRAPH.md)
+The initial mathematics and ML cross-reference authenticated six documents and linked eight concepts to source, AST definitions and checks. The subsequent implementations below add exact adjacent component tracking and a restricted nested operator selector. The current machine-checked inventory and remaining proposed extensions are recorded in the [reference graph](METHOD_REFERENCE_GRAPH.md).
 
 ### Candidate connectivity and representation limits
 
@@ -499,3 +499,26 @@ The bounded-loss consensus trial scored 10.024088 ft, but its equally weighted m
 | Midrank and merit-ordered recurrence | **9.997405** |
 
 The rank operator passed the separately frozen pooled and fold gate against all five comparators. It beat the rotated activity and recurrence-OFF controls in all three folds. Their paired 95% RMSE intervals were −0.238 to −0.105 ft and −0.025 to −0.005 ft respectively. The interval against the previous merit path was −0.092 to +0.031 ft. Two independent inference processes reproduced every native forecast before scoring. Five bounded stages took 29.43 seconds, including the original-row independent audit. Local execution receipt SHA-256 `de89362506ac2f149f83277b6cb9eda0fee6b708aca188b015b06249c57e0354`. All 154 confirmation wells remain sealed.
+
+### Exhaustive GPU paths and reference-map uncertainty
+
+The next frozen experiment compared 25 historical paths, 625 four-knot paths and 15,625 six-knot paths. Each grid retained complete coherent depth paths. All three used the intersection of their finite reference support before constructing the same 512-ft sections. The larger grid used the same ordinal votes and merit-ordered recurrence, with a physical slope/bending prior declared before prediction. Missing evidence retained the geometric parent.
+
+| Native-station readout | RMSE (ft) |
+| --- | ---: |
+| Archived 25 paths, original support | 9.997405 |
+| 25 paths, common support | 9.996844 |
+| 625 four-knot paths, common support | 10.039549 |
+| 15,625 six-knot paths, common support | 10.107876 |
+| Six-knot recurrence OFF | 10.110202 |
+| Six-knot rotated observed GR | 10.202485 |
+
+The six-knot primary missed its gate. It lost all three folds against both smaller grids. Its paired whole-well 95% RMSE difference against the common-support 25-path control was +0.057 to +0.167 ft. Measured GR still beat rotated activity in all three folds, with an interval of −0.172 to −0.021 ft. The smaller-grid common-support result is a comparator in this experiment. It has no separate prospective admission gate and does not replace the archived development lead.
+
+The RTX 5070 processed 993,390,625 logical bin–path combinations and 64,203,125 section–path slots for the six-knot grid. Shared local interpolation results were reused across complete paths. Summed CUDA-event spans were 16.07 seconds, including mixed host/device sequencing and synchronization. Field inference took 23.51 seconds including CPU parity checks; the complete governed run and audit took 47.45 seconds. Peak PyTorch allocation was 72.52 MiB and peak reserved memory was 90 MiB. These are allocator measurements. They exclude the driver context and do not measure physical SM occupancy or tensor-core usage.
+
+All 416 supported wells were independently checked on the 625-state grid and the first three on the 15,625-state grid. Maximum expected-knot discrepancy was 3.20 × 10⁻¹⁴ ft. A separate direct dense-basis CPU reconstruction on one well also checked all four-knot and six-knot arms independently of the field worker's shared interpolation lookup. The native audit covered all 619 wells and 3,034,427 original stations after the prediction seal. The stricter support removed 20 of 63,597 GR bins while retaining the same 416 wells and 2,046,530 supported stations. Local prediction seal `ee2ad030e0cff5004cc0d2195f85dc180dc3d46a82b9c29acefaea087cac57fa`; independent raw-row audit SHA-256 `be9ad03c8481ea957bd4195751acb5d3751ac449dd9147590ff52c219aeea8ee`.
+
+A separate frozen study combined 15 affine reference registrations with the 25 candidate paths. Reference weights came only from earlier visible-heel bins; the held heel segment supplied the existing reliability. The weighted map mixture scored **10.038597 ft**, versus **10.010549 ft** for the selected early-heel map on the same support, **10.084186 ft** for a uniform mixture and **10.036977 ft** after alternating the section-to-map relation. It improved one fold against the common-support selected map and missed the declared gate. The new support retained 413 wells, 4,072 sections and 63,006 bins. Independently verified original-row errors and the early-versus-held-heel weight falsifier bind the result to its permitted evidence. Local evidence root `9a109e046f690725394c3421b34784f408ba35cf51e468b377b8c137467f48c2`.
+
+These tests establish that large coherent searches are affordable on the available GPU. Their predictive results direct the next refinement toward evidence support and policy decisions. Simply increasing the candidate count did not improve native-depth accuracy. [Measured compute routes and timing scope](COMPUTE_ROUTES.md)
