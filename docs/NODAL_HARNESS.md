@@ -29,6 +29,24 @@ To inspect the result visually, generate an offline HTML report. It verifies the
 & $python -B scripts/render_nodal_evidence.py $run "$run/evidence.html"
 ```
 
+## Typed observations and neighbor axes
+
+`pack_well_observations` accepts the complete parsed lateral and its paired typewell. Each value keeps its address `(well, table, source row, channel)`, a declared unit and a validity bit. The lateral supplies MD, XYZ, GR and visible `TVT_input`. The typewell supplies its own TVT and GR on a separate row axis. `to_structured()` returns contiguous typed tuples with named values, source rows and presence fields. Curve-null encodings retain their original parsed value with presence set to false. Coordinate values retain their original units and scope.
+
+`gather_md_neighbors` adds a fixed relation axis without resampling. Its arrays have shape `(receiver, requested MD offset, channel)`. The sender row and actual MD gap remain explicit. Ties resolve to the earlier source row. Out-of-domain or out-of-tolerance relations have sender `-1` and an all-false mask. Channel absence on an available sender remains independent of the row's other channels. [Observation tensor API](../src/rwt/observation_tensors.py)
+
+```python
+from rwt.observation_tensors import gather_md_neighbors, pack_well_observations
+
+obs = pack_well_observations(well_id, lateral, paired_typewell)
+source_tuples = obs.lateral.to_structured()
+relations = gather_md_neighbors(obs.lateral, original_centers, [-64, 0, 64], tolerance_ft=4)
+```
+
+On 619 development wells, a separate audit recovered all 27,018,426 parsed lateral and reference values bit-for-bit, including recognized curve-null values. It matched the source IDs and values of all 2,630,300 available measured-depth relationships with an independent binary search. The receiver axis used the original 379,568 block centers and seven signed offsets. The audit selected only authorized survey, visible depth and reference columns. Local evidence root `1fed621f24edb07929d5362869dddcc50a5e63c0fa9de60301cded8052a3bd87`.
+
+The optional Network Engine bridge exports MD, Z and GR as a separate view. On the fixed 12-well pilot, the typed inputs matched the bridge masks over all 74,988 source rows. The engine's `Stream.to_structured()` retained the original station ordinal and all declared values on 63,023 rows with joint MD/Z/GR support. The bridge converts MD and Z from feet to metres and retains GR in source units. The full inbound tensor keeps all fields and masks across gaps. Local comparison SHA-256 `bb63743ce14e9857c3dc8c5593fbf31b02663c6524c325f88327efe8378ceb07`. [Network Engine bridge](NETWORK_ENGINE_INTEGRATION.md)
+
 ## From a source reading to a depth prediction
 
 A reading is identified by well, table, zero-based row and channel. Preparation preserves parsed values and row order from lateral MD, X, Y, Z, GR and visible TVT, together with reference TVT and GR. Each toe block contains up to eight consecutive original stations. Its first row and row count recover every scored station. A 45-degree drafting rotation retains along-track and cross-track coordinates from the same survey. The out-of-fold learners see whole wells held out together in three folds. Their target is the training block's mean hidden TVT minus its last visible TVT. Imputation and neural scaling use the training fold.
