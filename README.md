@@ -26,6 +26,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Kernel relationships as decoder inputs.** Four excluded-well kernel features expanded the retained decoder from 334 to 338 columns. Matching features scored 10.016188 ft, versus incumbent 9.988991 ft and matched permuted features 10.001499 ft. The primary failed both comparisons; the retained route remains unchanged. [Feature provenance, controls and native replay](docs/KERNEL_FEATURE_DECODER.md)
 
+**Two maps on shared states.** A zero-fit joint operator compared chart and TRAIN-derived GR ranks on the same candidate paths and physical sections. Its 9.977000-ft result beat the incumbent in every fold but lost to chart-only controls and failed its full gate. [All 16 arms, section-reassignment control and original-station proof](docs/GR_MAP_BUNDLE.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
