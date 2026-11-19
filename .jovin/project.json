@@ -1,0 +1,50 @@
+{
+  "format": "jovin-harness.project.v1",
+  "project_id": "rogii-nodal-harness",
+  "objective": "Verify the published nodal comparison harness's scoped source inventory and Python syntax against a recorded baseline.",
+  "exclude": [".jovin", ".git", ".venv", "venv", "private_research", "private_kernel", "artifacts", "data", "secrets", ".env", ".env.example", "submissions", "__pycache__"],
+  "partitions": [
+    {
+      "id": "core",
+      "language": "python",
+      "paths": [
+        "src/rwt/__init__.py", "src/rwt/baselines.py", "src/rwt/block_model.py",
+        "src/rwt/gr_match.py", "src/rwt/load.py", "src/rwt/middle_out.py",
+        "src/rwt/offset_path.py", "src/rwt/priors.py", "src/rwt/registered_views.py",
+        "src/rwt/simd.py"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "evidence",
+      "language": "python",
+      "paths": ["src/rwt/ast_evidence.py", "src/rwt/execution_graph.py"],
+      "depends_on": ["core"]
+    },
+    {
+      "id": "study",
+      "language": "python",
+      "paths": ["src/rwt/nodal_bundle.py", "src/rwt/nodal_study.py"],
+      "depends_on": ["core"]
+    },
+    {
+      "id": "worker",
+      "language": "python",
+      "paths": ["scripts/nodal_worker.py"],
+      "depends_on": ["study"]
+    },
+    {
+      "id": "launcher",
+      "language": "python",
+      "paths": ["scripts/run_nodal_harness.py"],
+      "depends_on": ["worker", "evidence"]
+    },
+    {
+      "id": "tests",
+      "language": "python",
+      "paths": ["tests/test_ast_evidence.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py"],
+      "depends_on": ["launcher", "study"]
+    }
+  ],
+  "required_gates": ["inventory", "python_ast"]
+}

@@ -8,6 +8,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Development measurements.** Two Julia maps scoring candidate-depth transitions gave **11.506689 ft RMSE** against **11.643708 ft** for the matched conventional graph on 619 development wells and 3,034,427 toe stations. The 154 confirmation wells remain reserved. The measurement history identifies branches excluded from current candidate selection after a provenance review. [Measurements and controls](docs/MASTER_ITERATION.md)
 
+**Run the shared nodal comparison.** Follow a reading from its original CSV row through a revised edge weight to four predictions on the same stations. The controller emits the Python AST, source dependencies and observed execution graph, then recomputes each model's error from the raw depth labels. [Run and verify](docs/NODAL_HARNESS.md) · [Relational methods](docs/RELATIONAL_METHODS.md) · [Jovin source checks](docs/JOVIN_ENROLLMENT.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
