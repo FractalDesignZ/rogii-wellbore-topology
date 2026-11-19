@@ -78,6 +78,8 @@ Source-observation replay independently regenerated all learned blends and regis
 
 B feature workers totalled 49.58 seconds; fitting, evaluation and checkpoint workers 32.80 seconds, including 15.70 seconds in kernel construction/solve/optimality checks. Twice-loaded query inference totalled 48.77 worker-seconds. The complete native field workers totalled 101.15 seconds. Descriptor construction, dense distances, serialized model basis and downstream processing remain real costs even though fitting needs no epochs.
 
+A separate follow-up used four kernel-derived inputs in the retained tree decoder instead of applying the kernel correction directly. Matching inputs scored 10.016188 ft versus incumbent 9.988991 ft and permuted inputs 10.001499 ft, failing both gates. Its different FIT and production kernel populations and complete native controls are recorded in the [decoder-feature study](KERNEL_FEATURE_DECODER.md).
+
 ## Evidence identities
 
 - A/B design: `a739464a22b8afd7b66bf650b4704b5224935d3baa823489a1682803a615997f` and `8579e07f7f741bcc4bea172a611b371078213930cba5d24c7ae78b8a5ce00398`.

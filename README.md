@@ -24,6 +24,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Direct native-loss solve.** Linear and radial kernels fit the original-station quadratic without training epochs. Both the member-calibration primary and an independently fixed complete-field primary failed their gates. [Algebra, compute timings and full-pipeline controls](docs/NATIVE_KERNEL_STUDIES.md)
 
+**Kernel relationships as decoder inputs.** Four excluded-well kernel features expanded the retained decoder from 334 to 338 columns. Matching features scored 10.016188 ft, versus incumbent 9.988991 ft and matched permuted features 10.001499 ft. The primary failed both comparisons; the retained route remains unchanged. [Feature provenance, controls and native replay](docs/KERNEL_FEATURE_DECODER.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
