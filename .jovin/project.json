@@ -11,7 +11,7 @@
         "src/rwt/__init__.py", "src/rwt/baselines.py", "src/rwt/block_model.py",
         "src/rwt/gr_match.py", "src/rwt/load.py", "src/rwt/middle_out.py",
         "src/rwt/offset_path.py", "src/rwt/priors.py", "src/rwt/registered_views.py",
-        "src/rwt/simd.py"
+        "src/rwt/simd.py", "src/rwt/station_corrections.py"
       ],
       "depends_on": []
     },
@@ -54,7 +54,7 @@
     {
       "id": "tests",
       "language": "python",
-      "paths": ["tests/test_ast_evidence.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py"],
+      "paths": ["tests/test_ast_evidence.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_station_corrections.py"],
       "depends_on": ["launcher", "study", "path_verification"]
     }
   ],
