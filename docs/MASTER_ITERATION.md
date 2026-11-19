@@ -522,3 +522,25 @@ All 416 supported wells were independently checked on the 625-state grid and the
 A separate frozen study combined 15 affine reference registrations with the 25 candidate paths. Reference weights came only from earlier visible-heel bins; the held heel segment supplied the existing reliability. The weighted map mixture scored **10.038597 ft**, versus **10.010549 ft** for the selected early-heel map on the same support, **10.084186 ft** for a uniform mixture and **10.036977 ft** after alternating the section-to-map relation. It improved one fold against the common-support selected map and missed the declared gate. The new support retained 413 wells, 4,072 sections and 63,006 bins. Independently verified original-row errors and the early-versus-held-heel weight falsifier bind the result to its permitted evidence. Local evidence root `9a109e046f690725394c3421b34784f408ba35cf51e468b377b8c137467f48c2`.
 
 These tests establish that large coherent searches are affordable on the available GPU. Their predictive results direct the next refinement toward evidence support and policy decisions. Simply increasing the candidate count did not improve native-depth accuracy. [Measured compute routes and timing scope](COMPUTE_ROUTES.md)
+
+### Policy mapping inside a bounded OODA loop
+
+The public policy adapter binds each policy state to an evidence digest, measures each distinct policy objective once and accepts only strict objective decreases. It records stops for missing support, an unchanged examined prefix, no observed improvement, ancestor-only proposals or exhausted steps. Callback execution uses the existing bounded worker when wall-time and resource supervision are needed. These controls establish finite search behavior on the examined neighborhood. Predictive admission remains a separate measurement. [Policy adapter, process graph and exact stop meanings](POLICY_REFINEMENT.md)
+
+The frozen field study rebuilt three exact action forecasts for each original inner model on its excluded-well bank. Five rotations in each of nine banks separated fitting leaf actions, adaptive validation and a new policy-test group. Each original well appeared twice in the bank test, yielding 1,238 cases and 6,068,854 station predictions over 619 distinct wells. Bootstrap draws grouped both occurrences by original well ID. A custodian partitioned the previously scored development tables; each solver pack omitted its own test outcomes. All wells retain their history of development reuse.
+
+The initial policy split visible-heel reliability into two regimes. At most two added splits used predefined section-count, evidence-order and endpoint-shift descriptors. The Julia policy mapper composed finite quadratic sequences of fitting-well descriptors to order proposals. The plain mapper used canonical order. Both examined at most two proposals per round for three rounds and accepted only lower validation SSE. A separate exhaustive-width comparison examined every legal neighbor.
+
+| Same-member policy-test readout | RMSE (ft) |
+| --- | ---: |
+| Static policy | 12.174820 |
+| Canonical proposal order | 12.188605 |
+| Julia proposal order | 12.192375 |
+| Always affine | 12.075073 |
+| Always merit | 12.076420 |
+
+The Julia mapper reduced validation SSE in 17 of 45 searches but missed its bank-test gate. Its paired whole-well 95% RMSE interval against canonical order was −0.012252 to +0.021718 ft. The two schedules consumed 136 and 138 distinct objective calls under identical caps. Final policies differed in seven rotations and chose different actions in 53 bank cases. Under exhaustive local proposal width, all 45 final policy identities matched. Julia searches stopped 30 times for no improvement and 15 times at an empty neighborhood. This measured validation stability supplied no new predictive gain.
+
+The separately sealed transfer to the registered blended path scored **10.150449 ft** for Julia, **10.173618 ft** for plain order and **10.187848 ft** for static routing. Fixed affine and merit actions scored **10.030446 ft** and **10.027222 ft**. Julia changed 24 outer actions relative to plain order, and its entire pooled advantage came from one fold. The transfer also failed its declared gate. These transferred curves are distinct from the same-member bank forecasts in the table above.
+
+The independent audit authenticated all 49 stage receipts, reconstructed all 45 rotation roles and reproduced every pooled and fold RMSE within 10⁻¹² ft. Exact historical prelabel hashes authenticated the original action forecasts. A manual schema inspection displayed one archived bank row with identical action errors before dispatch; it supplied no policy or selection input. The run opened no fresh raw toe targets or confirmation data and fitted no forecast models. Local evidence root `1f5941c876ca8ee64cb1f73accbac9cf33dd1636536fb8bc411d368892203eb9`. The retained ordinal development lead remains **9.997405 ft**.
