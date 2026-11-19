@@ -1,8 +1,8 @@
 # Jovin source enrollment
 
-**Accepted.** On commit `17cf7559`, Jovin passed baseline binding, inventory, Python AST and native CPU verification. The project receipt is `20261119T030604Z-ff81a4fcfc71`. The native check covers minimum-cost depth paths on 1,309 synthetic lattices. [Observed wellbore runs and field scores](NODAL_HARNESS.md)
+Jovin checks the enrolled source snapshot, Python AST, native CPU parity, compiler AST and governed native process and socket/FD-I/O traces. The native checker covers minimum-cost depth paths on 1,309 synthetic lattices. Worker artifact reads and field scores have their own evidence in the nodal harness. [Observed wellbore runs and field scores](NODAL_HARNESS.md)
 
-The Jovin project manifest covers the Python launcher, worker, statically resolved first-party modules and targeted tests for the nodal comparison. It also enrolls a C++17 verifier for the minimum-cost depth path. The configured gates are file inventory, Python AST analysis and native CPU checks. The existing run harness separately measures worker execution, model comparisons and predictive error. The launcher records the design reference at [mission-lab, revision dfdf8b7](https://github.com/ZuluYokohama/mission-lab/tree/dfdf8b7dded59f06d0fc2bc581a9292de305e977).
+The project manifest covers the Python launcher, worker, first-party modules, targeted tests and the independent C++ depth-path verifier. The controller follows [Mission Lab at revision `dfdf8b7`](https://github.com/ZuluYokohama/mission-lab/tree/dfdf8b7dded59f06d0fc2bc581a9292de305e977).
 
 ## Original Python-only check
 
@@ -42,6 +42,20 @@ The installed Jovin CLI built and ran the checker with cached Linux toolchain im
 
 The final run evidence resides under `artifacts/jovin_nodal_native_002/`, including frozen inventory, production Python replay, native status, baseline, native result, project check and chain verification. The shared receipt store remains under `artifacts/jovin_nodal_enrollment_001/receipts_data/`. The first successful native enrollment at commit `644a5057c71e721a286da8e25174e0e20d5a723f` preceded the report fix and remains under `artifacts/jovin_nodal_native_001/` with baseline `20261119T030339Z-aeabd6f153cf`, native result `20261119T030348Z-abda56fe9153` and project check `20261119T030349Z-3d135226129a`.
 
+## Compiler and runtime evidence
+
+Jovin accepted the exact scoped Git blobs from `d8a48c963359d1241f303f5bbd3554687437dfd3`. All seven project checks passed, including compiler AST, native parity and governed process and socket/FD-I/O traces. Clang 19.1.7 produced 450 graph nodes and 1,023 edges for the enrolled C++20 `NDEBUG` context. The trace covered configure, build and the 1,309-lattice check. It recorded 40 process or thread lifecycles across the three commands, all with observed exit, and 25,950 syscall entries. The collector reported zero network-category syscalls in those commands.
+
+| Check | Local receipt |
+| --- | --- |
+| Scoped baseline | `20261119T044905Z-32c53c13a92f` |
+| Compiler AST | `20261119T044910Z-14d999befb0f` |
+| Native CPU parity | `20261119T044926Z-2cef69ba543f` |
+| Governed process and socket/FD-I/O trace | `20261119T044928Z-b5c81ed1ce56` |
+| Final project check | `20261119T044934Z-85d8124bb185` |
+
+A second project check omitted the trace receipt. The process and network gates blocked while the other five passed. The source manifest is `483ecca5880b506bffd8e4ada7c57b5d6e650b3b854a5b047f99a4d4d03fa0d6`. The 13-receipt chain verified at `a26f8de8314d6d030b35ae5f2cee217c5e9c0ef417e2dc615a1fd55ec13df493`. Evidence remains local under `artifacts/jovin_native_trace_002/`. The trace plan associates the compiled executable with its enrolled AST context. Individual C++ function execution, GPU activity and field predictions fall outside this native trace. [Build plan](../qa/native_path_plan.json) · [AST plan](../qa/native_path_ast.json) · [Trace plan](../qa/native_path_trace.json)
+
 ## Reproducing the source scope
 
 Use the installed Jovin CLI. Materialize a fresh directory containing the Git blob bytes of `.jovin/project.json` and exactly the relative paths in its `partitions[].paths` at one commit. Compare each file SHA-256 with the corresponding Git blob's SHA-256. Run project enrollment and the later check on that same directory. The project scanner inventories every eligible file under the supplied root. This restricted checkout keeps research, raw measurements, credentials, Git metadata, virtual environments and earlier receipts outside the scanner's input.
@@ -49,9 +63,10 @@ Use the installed Jovin CLI. Materialize a fresh directory containing the Git bl
 Set `JOVIN_HARNESS_DATA_DIR` to a separate local directory before recording the baseline and retain it for the check and chain verification.
 
 ```powershell
-jovin-harness project baseline --root $sourceSnapshot
-jovin-harness native check --root $sourceSnapshot --baseline-receipt $baselineReceipt --plan qa/native_path_plan.json
-jovin-harness project check --root $sourceSnapshot --baseline-receipt $baselineReceipt --native-receipt $nativeReceipt
+$baseline = jovin-harness project baseline --root $sourceSnapshot | ConvertFrom-Json
+$ast = jovin-harness ast check --root $sourceSnapshot --baseline-receipt $baseline.receipt_id --plan qa/native_path_ast.json | ConvertFrom-Json
+$trace = jovin-harness trace check --root $sourceSnapshot --baseline-receipt $baseline.receipt_id --ast-receipt $ast.receipt_id --plan qa/native_path_trace.json | ConvertFrom-Json
+jovin-harness project check --root $sourceSnapshot --baseline-receipt $baseline.receipt_id --ast-receipt $ast.receipt_id --trace-receipt $trace.receipt_id --native-receipt $trace.native_receipt_id
 jovin-harness receipts verify
 ```
 

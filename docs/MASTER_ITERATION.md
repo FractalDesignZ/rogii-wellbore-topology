@@ -277,7 +277,7 @@ Each saved inner model recomputed its supervised features for the actual outer q
 | Fixed blend with permuted residual donors | 10.899905 |
 | Fixed blend with mean residual curves | 10.900651 |
 
-The uncorrected blend improved all three folds and 371 of 619 wells. It removed 11,670,646 ft² of squared error. A secondary comparison of the fixed predictions gave a paired 95% interval of −0.317 to −0.032 ft against the full model. The spatial correction improved slightly against the uncorrected blend and lost to its permuted-donor control. Its frozen predictive gate failed. The uncorrected ensemble is the leading development candidate.
+The uncorrected blend improved all three folds and 371 of 619 wells. It removed 11,670,646 ft² of squared error. A secondary comparison of the fixed predictions gave a paired 95% interval of −0.317 to −0.032 ft against the full model. The spatial correction improved slightly against the uncorrected blend and lost to its permuted-donor control. Its frozen predictive gate failed. The uncorrected ensemble became the development reference for later comparisons.
 
 Nine inference workers reused saved models and matched 5,330 probe block predictions byte-for-byte. They produced 1,138,704 outer block predictions, three per original block. Observed inference target parses covered 2,476 training-donor files and zero outer queries. The evaluator sealed all nine readouts before opening the original target columns. A separate audit reproduced every well's errors, the pooled station scores and the primary decision. Local evidence root `efe4b6277001778ca39c714ee6bc38e95edc4eabd032a283eedf6acff4573c9a`. Confirmation remains reserved.
 
@@ -311,10 +311,47 @@ On the training overlap equations, synchronization reduced weighted RMS discrepa
 
 Nine serial fits and their sealing and scoring stages took 451.35 seconds. The independent audit reproduced all eight station scores and the exact two original comparators. Neither control replaced the leading model. Local evidence root `97f0408daf4bb422188a2701b588cf972ab82437018107ae752ac366e3480e8d`.
 
-### Raw serving for the leading ensemble
+### Raw serving for the original four-model ensemble
 
-The leading **10.900780-ft** ensemble now replays from the original surveys, measured gamma ray, visible TVT and paired typewells. The preparation step initializes the three inner models with their frozen training-donor state and model parameters. The held-out query computes its own 274-column observation prefix from raw measurements. Each inner model then builds the supervised features from its own allowed donor state. The public blend checks that the full model and every inner model return exactly the original block IDs. It averages their depths at the block centers before interpolation to survey stations. [Keyed blend API](../src/rwt/ensemble.py) · [Station lift API](../src/rwt/station_lift.py)
+The **10.900780-ft** ensemble replays from the original surveys, measured gamma ray, visible TVT and paired typewells. The preparation step initializes the three inner models with their frozen training-donor state and model parameters. The held-out query computes its own 274-column observation prefix from raw measurements. Each inner model then builds the supervised features from its own allowed donor state. The public blend checks that the full model and every inner model return exactly the original block IDs. It averages their depths at the block centers before interpolation to survey stations. [Keyed blend API](../src/rwt/ensemble.py) · [Station lift API](../src/rwt/station_lift.py)
 
 The replay covered all 619 outer-held wells and the paired reference logs. All 350,720,832 regenerated inner feature cells, 1,138,704 inner block depth predictions and 3,034,427 saved ensemble station values matched bit-for-bit. All 1,047,316 visible heel values were preserved. The verifier also reconstructed each separate inner model's station prediction from its archived centers and the original survey. Fixtures confirmed that an unseen well identifier with the same observations produces the same result, and that swapping in synthetic lateral target and formation columns leaves the result unchanged.
 
 The workers used at most two concurrent fold processes, with one numerical thread per worker. Observed lateral target parses were confined to 2,476 authorized training-donor reads at initialization. The replay performed zero fits and produced zero new accuracy scores. Parts of model initialization still use frozen local training artifacts. The verified proof covers the original held-well replay. Local evidence root `2916115bfcde6455df89dcc7f5c66ce190a559d7af4269a8d4c3f2c9104e2c1c`. The 154 confirmation wells remain reserved.
+
+### Recorded trajectory ahead of each station
+
+The forward-window learner appended 32 survey and gamma-ray features to the same 308-feature model. Each window measured changes in vertical and horizontal direction and their relationship to gamma ray over 128, 256, 512 and 1,024 measured feet. The matched learner used windows extending backward by the same distances. These features use recorded survey and gamma ray from the complete query lateral and calibrate against visible heel observations. The fixed blend retains the previous mean of the three inner models for half its weight. The measurement applies to offline interpretation of a recorded lateral. Drilling-time availability and the causal effect of steering remain untested.
+
+| Readout | RMSE (ft) |
+| --- | ---: |
+| Original ensemble | 10.900780 |
+| Blend using backward windows | 10.966572 |
+| Blend using forward windows | **10.648607** |
+| Forward-window model alone | 10.709776 |
+
+The forward blend improved all three folds and 373 of 619 wells against the original ensemble. It removed 16,489,629 ft² of squared error. The paired well-bootstrap 95% intervals for the fixed predictions were −0.369 to −0.137 ft against the original blend and −0.480 to −0.157 ft against the backward-window control. The last third of toe stations improved from 13.927433 to 13.645620 ft. Natural near-end support differs by direction because the recorded survey ends at the toe.
+
+The freeze binds source identities, ASTs and three fit workers that produced six fixed tree fits. The observed target reads were confined to the training partition during fitting and went through the score path after sealing. An independent audit matched all 3,034,427 original station keys and recomputed squared errors for each arm. Local evidence root `f7434eeebb03e5173d847970d487b0ca743a943f98902ab56ab5d11d49fede3b`. The separate 154-well confirmation cohort remains reserved.
+
+A separate raw replay regenerated all 129,053,120 inputs to the forward-window model, including 12,146,176 new feature values, and all three unchanged inner-model readouts. The forward and blended center depths and all 3,034,427 toe predictions matched bit-for-bit. The replay preserved all 1,047,316 observed heel values. Its four bounded workers ran zero fits and recorded zero held-lateral target reads. Frozen donor initialization read 2,476 authorized training target files across folds. Local replay evidence root `04015ea1be9ae794bbfff320da14859e1902dc854970bdeecbccc66e88f505b4`.
+
+### Other readouts on the same development folds
+
+Paired typewell gamma-ray distributions gave a stronger correction than preserving exact within-window order. The distribution correction reached **10.740834 ft** on the original ensemble, with a paired interval of −0.393 to +0.064 ft for the RMSE change. Matching exact order reached 10.932973 ft. A later prespecified graph that let each window infer a local depth offset reached 11.352511 ft. Its matched fixed-offset control reached 11.334449 ft. The distribution correction combined with the forward-window blend reached **10.688545 ft** and won only one fold against the forward blend alone. The composition failed its prespecified gate. Local composition evidence root `ebe5f263ceda991c6e9858ffd7bad78705a8f74f2b0ae9a067d645db8526ecb1`.
+
+A spatial estimate of conditional structural-height change reached **10.951606 ft**. Emphasizing training wells with large cross-fitted offset and drift errors reached **10.963244 ft**. Both scored above their original 10.900780-ft reference. Mapping named typewell horizon boundaries through elevations interpolated from training wells reached **12.327599 ft** as a fixed blend. The estimated elevations supported the original named-boundary readout on 938,811 stations across 199 wells.
+
+### Diagnosing horizon elevation error
+
+On that same 938,811-station population, substituting the held wells' own horizon columns reduced direct typed inversion error from 23.753091 to 0.693808 ft under the same lift and fallback. At native stations with valid exact local fields, a single named top reconstructed TVT to **0.007530 ft RMSE** across 3,024,318 rows. With a fixed top and exact heel anchor, the reconstruction is `TVT(s) = TVT(heel) − ΔZ + Δtop_Z`. The serving problem is estimating the change in local formation elevation using allowed observations. The organizer identifies these held-well formation elevations as training-only and leaves their derivation unspecified. They can encode the target and were used only after the predictive results were frozen. Local diagnostic evidence root `b7b804e50fe6c9b7ed195796bba1d207adff3f1eef78137a4384a06ac3e1e3af`.
+
+### Registered height changes along the survey
+
+The next test represented a section of the query as two planes perpendicular to its survey direction. Eligible training laterals supplied their signed change in `TVT + Z` between those planes. A matched control took an equal-length section at a shifted position on each of the same donors. The freeze specified 1,024 measured feet for the main test, with 256 and 4,096 feet as scale checks. The query supplied its recorded survey, visible heel and frozen forward-window predictions. Formation columns were outside this test's inputs.
+
+The direct prediction failed its primary gate. On the 2,122 supported 1,024-ft sections, registered donor increments scored **6.777094 ft** against **6.589917 ft** for increments from the forward-window ensemble and **13.275781 ft** for the shifted-donor control. These are errors in the change across an interval. For the separately prespecified station reconstruction, the forward-window ensemble retained half the weight where donors bracketed the query and three quarters with one-sided support. Unsupported intervals kept the forward-window prediction.
+
+Reconstructing station depths with that fixed combination passed its own gate. It reached **10.433145 ft RMSE** against **10.648607 ft** for the forward-window ensemble and **11.472314 ft** with the shifted-donor control. The combined model improved all three folds and 280 of 619 wells, with 237 worse and 102 unchanged. The paired well-bootstrap 95% interval for the change against the forward-window ensemble was −0.403 to −0.039 ft. A separate audit recomputed the primary interval errors and all 3,034,427 native station errors. Six observed stages ran in 39.03 seconds with one numerical thread and zero fits. Local evidence root `72e1a9519ffb33c44a9681701caa152c4a7841f923a76fafc5a34e880f7515ba`.
+
+The replay independently matched the input ensemble arrays to the raw trajectory seals for each fold. Using original measured-depth rows and the recorded donor increments, it regenerated all registered and shifted-control station values bit-for-bit. This replay reused the previously computed donor increments. Local binding SHA-256 `8c88fcafc0081cc4de00629de0328ae323f1427725c599e7fea591f9e806bc5b`.
