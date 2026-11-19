@@ -1,0 +1,86 @@
+{
+  "schema": "rwt.method-references.v1",
+  "references": [
+    {"id": "rlm", "title": "Recursive Language Models", "sha256": "7f0e822fdde98bdb7348fe565481e59b70470b240e43d23cc2b7ffac13d9cd75", "pages": 33},
+    {"id": "math", "title": "Mathematics of Machine Learning", "sha256": "52efecdf62380ee3881e5f4d61d3a241b80d2dd33e45ed305ea78cdeef6083b3", "pages": 118},
+    {"id": "tree", "title": "Classifier Series - Decision Trees", "sha256": "1ccf23ade43557a1468f7777486d4062768edfc39906526297b83a1764ed00c6", "pages": 9},
+    {"id": "ml", "title": "Machine Learning Cheat Sheet", "sha256": "6e12260cd1994e29f946294b0913e4d14df5ba646e90159a2b923127a0748846", "pages": 135},
+    {"id": "forest", "title": "Random Forest - Predictive Maintenance", "sha256": "c6313bab3b7412fb5810ebe4c9753cc383c2eec6646bac0e7e1347c1f97d1096", "pages": 12},
+    {"id": "persistence", "title": "Persistent Topological Features in Large Language Models", "sha256": "d2b967107fc3c59cead2cc0a12dcc681482bd9d874e4c2c9c96f1cfafeb951ba", "pages": 27}
+  ],
+  "concepts": [
+    {
+      "id": "addressable_observations",
+      "claim": "Source records retain identities across derived representations and bounded accesses.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5]}, {"reference": "persistence", "pages": [3, 4, 5]}],
+      "operators": [{"path": "src/rwt/observation_tensors.py", "symbol": "pack_well_observations"}, {"path": "src/rwt/nodal_bundle.py", "symbol": "trace_node"}],
+      "checks": [{"path": "tests/test_observation_tensors.py", "symbol": "test_inbound_tensor_keeps_exact_source_values_schema_and_null_mask"}]
+    },
+    {
+      "id": "conditional_decisions",
+      "claim": "The same role-filtered bundle supplies graph, tree, forest and neural decisions.",
+      "status": "implemented",
+      "citations": [{"reference": "tree", "pages": [1, 6, 7]}, {"reference": "ml", "pages": [17, 18, 57, 58, 59, 71, 72, 73]}, {"reference": "math", "pages": [82, 85, 89, 94, 104, 107]}],
+      "operators": [{"path": "src/rwt/nodal_study.py", "symbol": "_train"}, {"path": "src/rwt/nodal_study.py", "symbol": "predict_run"}],
+      "checks": [{"path": "tests/test_nodal_bundle.py", "symbol": "test_three_well_worker_views_match_original_rows_and_scored_targets"}]
+    },
+    {
+      "id": "generalization_boundary",
+      "claim": "Whole-well roles and prediction seals separate fitting, calibration and final scoring.",
+      "status": "implemented",
+      "citations": [{"reference": "math", "pages": [46, 50, 51, 54, 55]}, {"reference": "forest", "pages": [9, 10, 11, 12]}],
+      "operators": [{"path": "src/rwt/crossfit_roles.py", "symbol": "nested_well_roles"}, {"path": "scripts/run_nodal_harness.py", "symbol": "selected"}, {"path": "scripts/run_nodal_harness.py", "symbol": "stage_inputs"}, {"path": "scripts/run_nodal_harness.py", "symbol": "execute"}],
+      "checks": [{"path": "tests/test_crossfit_roles.py", "symbol": "test_nested_roles_preserve_original_order_and_exclude_outer_query"}, {"path": "tests/test_nodal_harness.py", "symbol": "test_confirmation_role_rejected_before_opening_measurements"}, {"path": "tests/test_nodal_harness.py", "symbol": "test_worker_cannot_replace_a_sealed_upstream_artifact"}]
+    },
+    {
+      "id": "supported_revision",
+      "claim": "Graph propagation supplies a reference analogy for the tested local revision of supported edge weights.",
+      "status": "implemented",
+      "citations": [{"reference": "math", "pages": [116]}, {"reference": "persistence", "pages": [3, 4]}],
+      "operators": [{"path": "src/rwt/nodal_bundle.py", "symbol": "window_messages"}, {"path": "src/rwt/nodal_bundle.py", "symbol": "revise_edge_weights"}],
+      "checks": [{"path": "tests/test_nodal_bundle.py", "symbol": "test_later_observation_revises_earlier_edge_only_with_a_connected_context"}]
+    },
+    {
+      "id": "observed_execution",
+      "claim": "The control graph binds planned work to completed workers and parsed artifact bytes.",
+      "status": "implemented",
+      "citations": [{"reference": "rlm", "pages": [2, 4, 5, 6, 7, 8]}],
+      "operators": [{"path": "src/rwt/execution_graph.py", "symbol": "run_bounded"}, {"path": "scripts/run_nodal_harness.py", "symbol": "artifact_read_evidence"}],
+      "checks": [{"path": "tests/test_nodal_harness.py", "symbol": "test_successful_process_can_skip_a_required_read_but_cannot_complete_mission"}]
+    },
+    {
+      "id": "predictive_merit",
+      "claim": "A separate numerical replay tests depth error on original station identities.",
+      "status": "implemented",
+      "citations": [{"reference": "ml", "pages": [17, 18]}, {"reference": "math", "pages": [46, 50, 51, 54, 55]}, {"reference": "tree", "pages": [8, 9]}],
+      "operators": [{"path": "scripts/run_nodal_harness.py", "symbol": "replay_station_errors"}, {"path": "src/rwt/station_error.py", "symbol": "decompose_station_error"}],
+      "checks": [{"path": "tests/test_nodal_harness.py", "symbol": "test_separate_station_variance_replay_catches_erroneous_scores_and_keys"}, {"path": "tests/test_station_error.py", "symbol": "test_station_error_separates_affine_and_finer_error_on_irregular_depth"}]
+    },
+    {
+      "id": "persistent_relation_identity",
+      "claim": "Track components and cycles through relation revisions using shared simplex identities and intersection layers.",
+      "status": "hypothesis",
+      "citations": [{"reference": "persistence", "pages": [3, 4, 5, 6, 7]}],
+      "operators": [],
+      "checks": []
+    },
+    {
+      "id": "nested_operator_selection",
+      "claim": "Select an operator or the incumbent inside outer training roles, then measure its sealed action on held wells.",
+      "status": "hypothesis",
+      "citations": [{"reference": "math", "pages": [46, 50, 51]}, {"reference": "ml", "pages": [17, 18]}, {"reference": "forest", "pages": [10]}],
+      "operators": [],
+      "checks": []
+    }
+  ],
+  "flows": [
+    {"source": "addressable_observations", "target": "conditional_decisions", "kind": "data"},
+    {"source": "generalization_boundary", "target": "conditional_decisions", "kind": "control"},
+    {"source": "conditional_decisions", "target": "predictive_merit", "kind": "data"},
+    {"source": "observed_execution", "target": "predictive_merit", "kind": "control"},
+    {"source": "supported_revision", "target": "conditional_decisions", "kind": "data"},
+    {"source": "persistent_relation_identity", "target": "supported_revision", "kind": "proposed"},
+    {"source": "nested_operator_selection", "target": "generalization_boundary", "kind": "proposed"}
+  ]
+}

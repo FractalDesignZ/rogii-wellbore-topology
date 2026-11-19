@@ -36,7 +36,7 @@
     {
       "id": "launcher",
       "language": "python",
-      "paths": ["scripts/render_nodal_evidence.py", "scripts/run_nodal_harness.py"],
+      "paths": ["scripts/render_nodal_evidence.py", "scripts/run_nodal_harness.py", "scripts/verify_method_graph.py"],
       "depends_on": ["worker", "evidence"]
     },
     {
@@ -48,13 +48,13 @@
     {
       "id": "path_verification",
       "language": "build",
-      "paths": ["CMakeLists.txt", "qa/native_path_plan.json", "qa/native_path_ast.json", "qa/native_path_trace.json", "qa/path_vectors.txt"],
+      "paths": ["CMakeLists.txt", "qa/native_path_plan.json", "qa/native_path_ast.json", "qa/native_path_trace.json", "qa/path_vectors.txt", "qa/method_references.json"],
       "depends_on": ["path_native", "core"]
     },
     {
       "id": "tests",
       "language": "python",
-      "paths": ["tests/test_ast_evidence.py", "tests/test_member_corrections.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_observation_tensors.py", "tests/test_station_corrections.py"],
+      "paths": ["tests/test_ast_evidence.py", "tests/test_member_corrections.py", "tests/test_method_graph.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_observation_tensors.py", "tests/test_station_corrections.py"],
       "depends_on": ["launcher", "study", "path_verification"]
     }
   ],
