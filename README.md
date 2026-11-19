@@ -2,7 +2,7 @@
 
 An open-core research harness for [ROGII Wellbore Geology Prediction](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction), with abstraction-mode compute from [`topology-sees-sequence`](https://github.com/ZuluYokohama/topology-sees-sequence) and an optional boundary to a separately installed Network Engine.
 
-**Original work is a project requirement.** External solutions provide context for typical approaches and published results. Candidate designs, features and weights require traceable first-party origins. [Repository rule](AGENTS.md)
+**Original work is a project requirement.** External solutions provide context for typical approaches and published results. Candidate designs, features and weights require traceable first-party origins. [Repository rule](AGENTS.md) · [Supplied OODA assistance: claims and evidence](docs/OODA_V04_REFERENCE_REVIEW.md)
 
 **Validation status.** Earlier spatial experiments selected full training `TVT` before splitting wells into folds. Their historical scores require remeasurement. The corrected default uses observed `TVT_input` and supports unseen target geometry. The current development comparisons below isolate supervised donors by training fold. The optional native Network Engine checks measure graph structure.
 
@@ -18,9 +18,11 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Label ancestry.** A declared artifact graph carries hidden-label well dependencies through derived curves and selectors. Filtering cannot erase a parent's exposure. Metadata replay accepted all 18 matching model/context pairings and rejected 144 inappropriate pairings; a separate audit verified the 81 original-model cases. [Role guard, evidence limits and example](docs/LABEL_LINEAGE.md)
 
+**Complete-pipeline calibration.** A nested study measures adaptive weights on complete native-station forecasts. Its baseline and independent chart reconstruction matched all 619 development wells exactly. New calibration forecasts and the ten-arm field comparison have separate execution gates. [Roles, fixed controls and replay evidence](docs/NESTED_FIELD_CALIBRATION.md)
+
 **Broader model checks.** Seven further comparisons tested learner capacity/family, continuous leaves, physical target coordinates, donor innovations, GR calibration and decoder execution. None passed its complete final-error gate. [Matched results and scopes](docs/LEARNER_AND_RELATION_CHECKS.md)
 
-**Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay at eight passes and after fixed continuation to 64. The continued two-way model beat all learned controls but missed the incumbent pooled score; the current 9.988991-ft development route remains retained. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
+**Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay at eight passes and after fixed continuation to 64. The continued two-way model beat all learned controls but missed its frozen 9.988991-ft incumbent and was not admitted. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
 
 **Held neural merit.** Ninety fresh fits in separate FIT/CAL/TEST roles tested whether calibration earns a neural deployment weight. The selector mostly retained OFF and failed its gate against fixed half strength. [Role boundaries, adaptive amplitude and native audit](docs/NEURAL_MERIT_CALIBRATION.md)
 
