@@ -263,3 +263,20 @@ The two-sided correction changed 789,692 original stations. Those rows carried *
 The training run bound source and AST identities, 14 subprocesses and 21 dependency edges. An independent check verified all nine fit partitions, 2,476 inner-fit target reads and 1,238 post-seal residual target reads. All nine frozen fits were preserved when the audit found that the first phase-bin implementation weighted block centers equally. The corrected replay weighted each center by the original rows it represents and used the exact same residual banks. Independent raw-station error replay verified both attempts on all 619 development wells and 3,034,427 toe stations. The row-weighted evidence root is `231fff1aff9d1fa9b1c15674a17f246f314d959d69360fc30d3b592619665d1f`. The 154 confirmation wells remain reserved.
 
 An internal test then restricted both ends of the relation to wells predicted by the exact same inner model. Each query's residual curve was withheld from its own correction. Across the nine inner holdouts, the spatial rule lowered row-weighted block-center RMSE from **12.322961 to 12.303129 ft**, compared with **12.326495 ft** for permuted donors. Seven of nine groups improved. Each development well appears in two inner training contexts, and the paired bootstrap resampled that well as a single unit. This test evaluates the inner residual banks and motivates testing the same-model rule on actual outer queries.
+
+### Reusing the inner models on actual held-out wells
+
+Each saved inner model recomputed its supervised features for the actual outer queries with that model's own training donors. Its spatial correction used only residuals from the inner holdout predicted by that same model. The fixed combination averaged the three inner predictions at each original block center, then averaged that result 50/50 with the registered-donor model fitted on the full outer training partition. Every arm used the same structural-height interpolation to the original survey stations.
+
+| Prediction on the 619 outer-held development wells | RMSE (ft) |
+| --- | ---: |
+| Full registered-donor model | 11.075788 |
+| Mean of the three inner models | 11.096827 |
+| Fixed 50/50 blend | **10.900780** |
+| Fixed blend with same-model spatial correction | 10.900235 |
+| Fixed blend with permuted residual donors | 10.899905 |
+| Fixed blend with mean residual curves | 10.900651 |
+
+The uncorrected blend improved all three folds and 371 of 619 wells. It removed 11,670,646 ft² of squared error. A secondary comparison of the fixed predictions gave a paired 95% interval of −0.317 to −0.032 ft against the full model. The spatial correction improved slightly against the uncorrected blend and lost to its permuted-donor control. Its frozen predictive gate failed. The uncorrected ensemble is the leading development candidate.
+
+Nine inference workers reused saved models and matched 5,330 probe block predictions byte-for-byte. They produced 1,138,704 outer block predictions, three per original block. Observed inference target parses covered 2,476 training-donor files and zero outer queries. The evaluator sealed all nine readouts before opening the original target columns. A separate audit reproduced every well's errors, the pooled station scores and the primary decision. Local evidence root `efe4b6277001778ca39c714ee6bc38e95edc4eabd032a283eedf6acff4573c9a`. Confirmation remains reserved.

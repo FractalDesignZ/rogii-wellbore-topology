@@ -6,7 +6,7 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Validation status.** Earlier spatial experiments selected full training `TVT` before splitting wells into folds. Their historical scores require remeasurement. The corrected default uses observed `TVT_input` and supports unseen target geometry. The current development comparisons below isolate supervised donors by training fold. The optional native Network Engine checks measure graph structure.
 
-**Development measurements.** Registered training-donor profiles and two Julia transition maps gave **11.075788 ft RMSE** on 619 development wells and 3,034,427 original toe stations. The matched two-map model scored **11.505114 ft** using the same station readout. The 154 confirmation wells remain reserved. [Measurements, controls and provenance](docs/MASTER_ITERATION.md)
+**Development measurements.** A fixed 50/50 blend of the registered-donor model and the mean of three smaller models reached **10.900780 ft RMSE** on 619 development wells and 3,034,427 original toe stations. The single registered-donor model scored **11.075788 ft**. The 154 confirmation wells remain reserved. [Measurements, controls and provenance](docs/MASTER_ITERATION.md)
 
 **Run the shared nodal comparison.** Follow a reading from its original CSV row through a revised edge weight to four predictions on the same stations. The controller emits the Python AST, source dependencies and observed execution graph, then recomputes each model's error from the raw depth labels. [Run and verify](docs/NODAL_HARNESS.md) · [Relational methods](docs/RELATIONAL_METHODS.md) · [Jovin source checks](docs/JOVIN_ENROLLMENT.md)
 
