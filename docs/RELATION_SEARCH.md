@@ -1,6 +1,6 @@
 # Searching for a depth on a shared graph
 
-A query starts at a known station and asks which true vertical thickness (TVT) value can be reached at a later station. Each node represents one well, station, layer and candidate depth in feet. A measured relation connects two stations. A boundary map receives that relation, a reachable source node and a proposed destination. Its decision records which measurements support, contradict or leave open that transition.
+A query starts at a known station and asks which true vertical thickness (TVT) value can be reached at a later station. Each node represents one well, station, layer and candidate depth in feet, with an optional activity state. A measured relation connects two stations. A boundary map receives that relation, a reachable source node and a proposed destination. Its decision records which measurements support, contradict or leave open that transition.
 
 Several maps can examine the same edge. Every map receives the same three objects and contributes its own verdict, evidence and provenance. The supplied overlay admits a transition when every map accepts, rejects it when any map rejects, and otherwise leaves it unresolved. Each admitted destination can become the source of the next step. This implements the user's observation-to-candidate boundary as a finite search in public RWT code. The optional native Network Engine integration has a separate measurement interface.
 
@@ -30,6 +30,23 @@ With the separately installed Network Engine, add `--native-lift` to the command
 
 The two synthetic maps iterate `z ← z² + c` with `c = 0` and `c = −1`. A radius greater than two witnesses escape for these parameters. A radius at most one quarter witnesses attraction to zero or the zero/minus-one cycle, respectively. A finite orbit without either witness remains unresolved. The geological meaning of a coordinate comes from its measurement model and requires a separate accuracy check.
 
+### What the graph saves
+
+Let `R[t,m]` be the set of transitions admitted from station `t` by map `m`. With fully decided evidence, the joint relation is the intersection of those sets. Starting with the known heel, the next reachable set contains each destination with an incoming joint transition from the current reachable set. A singleton at the requested station identifies one value in the candidate model. A finite unresolved witness or execution cutoff is recorded separately.
+
+Eight layers of three candidates can describe 6,561 complete paths. The unfiltered pilot needs only 66 distinct transition checks per well, three from the heel and nine at each of the seven later crossings. This reduction holds because histories reaching an equal state have the same available next decisions. A model that uses path history must encode the relevant memory in its state before merging histories.
+
+Observed conditions travel on the relation. An optional `CandidateState.activity` label carries the inferred mode that matters to the next decision. For example, two routes may reach 100 ft from opposite directions. Both give the same answer to a depth query at that station, but an observation of continuing increase can distinguish their next transitions. A test preserves both states and recovers the single compatible route to 101 ft. Omitting activity reproduces the original depth-only node identities and serialized traces.
+
+### Related work
+
+- Constraint propagation on networks of relations and message passing on factor graphs give precedents for assembling a global answer from local compatibility conditions. The periodic example resolves residues at coprime periods, a direct application of the Chinese remainder theorem. [Mackworth (1977)](https://www.cs.ubc.ca/~mack/Publications/AI77.pdf) · [Kschischang, Frey and Loeliger (2001)](https://www.cise.ufl.edu/~arunava/Teaching/cap6617sp21/Readings/frey2001factor.pdf) · [Chinese remainder theorem](https://crypto.stanford.edu/pbc/notes/numbertheory/crt.html)
+- Graph-directed complex dynamics studies sequences in which previously selected maps constrain the next map. The wellbore overlay asks several maps to judge the same proposed transition. [Sumi and Watanabe (2019)](https://arxiv.org/abs/1810.09922)
+- Using edges as higher-level nodes has an applied geometric precedent in ALIGNN. It uses the line graph of an atomic bond graph to represent angles between bonds. [Choudhary and DeCost (2021)](https://arxiv.org/abs/2106.01829)
+- In geosteering, particle filters maintain competing boundary configurations as gamma-ray observations arrive. The winning ROGII solution also documents geographic priors and particle-filter inputs to a sequence model. [Djecta and colleagues (2025)](https://www.iccs-meeting.org/archive/iccs2025/papers/159070192.pdf) · [Winning ROGII implementation](https://github.com/IAmAValidUsername/kaggle_ROGII_1st_place_solution_Ruby/tree/fade6112ffebd9e27c08ac7f053e8d4c3d5c319a)
+
+The project-specific question is whether orbit evidence derived independently from survey geometry and gamma-ray response on a shared TVT transition improves placement beyond a matched conventional graph. These precedents establish the surrounding techniques. Priority for that exact combination remains open.
+
 ## A 12-well development check
 
 The pilot started at each well's last visible depth and traversed its first eight toe block centers. Each center offered the same three offsets, −4, 0 and +4 ft from the heel depth. The geometry map measured disagreement with the layer trend at the heel. The gamma-ray (GR) map measured disagreement with the calibrated typewell response. Each used a complex coordinate so that two measured discrepancies could contribute to one orbit. The control applied a unit-radius threshold to each of those same coordinates. Every arm saved its graph and predictions before evaluation opened the terminal TVTs.
@@ -47,3 +64,11 @@ RMSE includes one terminal station per well, with last visible TVT as the prespe
 Replaying both rules on **all 792 possible transitions**, including ones pruned early, located their difference. The geometry Julia map matched its radius control on all 792. The GR Julia map rejected 218 edges its radius control accepted, accepted 14 the control rejected and left one additional edge unresolved. This comparison holds the proposed transitions fixed across methods.
 
 All 60 retained search graphs also replayed through the native lift. On one well, the unfiltered search had 25 nodes and 66 edges. The next native level had 66 relation nodes and 300 shared-endpoint pairs. The joint Julia search on that well had nine nodes and eight edges in a single path. Its next level contained eight relation nodes with seven shared-endpoint pairs.
+
+## Does a correct candidate lie near the basin boundary?
+
+A separate diagnostic froze the next 48 development wells and saved evidence for all 3,168 transitions before reading their target depths. It used the same three offsets and eight stations as the pilot. For the geometry map, distance to the unit circle is exact. For the GR map, the nearest tested perturbation with the opposite certified fate gives a numerical proximity estimate. Missing evidence, unresolved starts and searches without an opposite witness are tracked separately.
+
+The primary comparison asked how often the candidate nearest the measured TVT had a smaller mean boundary distance than either alternative, with half credit for ties. The evaluator used the previous station's nearest true candidate to select among already saved transitions. This tests the representation under a known previous state. A second calculation held the source at the visible heel depth throughout.
+
+Of 384 stations, 363 had common support across all three proposed depths. The combined proximity measure scored **18.04%** against a 50% chance reference. A well-level bootstrap gave a 95% interval of **12.18% to 24.44%**. Using the fixed heel source gave **19.83%**. The prespecified initial-radius residual control scored **98.48%** on the primary comparison. On 25 of the 363 eligible stations, the nearest candidate differed from the heel depth. These are short-span ranking measurements. They give no support to choosing a candidate by closeness to these two basin boundaries.

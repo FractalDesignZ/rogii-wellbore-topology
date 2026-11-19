@@ -24,6 +24,36 @@ def accept(observed, source, proposed):
 
 
 class RelationSearchTests(unittest.TestCase):
+    def test_condition_can_distinguish_opposite_activities_at_equal_depth(self):
+        anchor = state(0)
+        rising = state(2, activity="increasing TVT")
+        falling = state(2, activity="decreasing TVT")
+        candidates = {1: [state(1,99), state(1,101)], 2: [rising, falling],
+                      3: [state(3,99), state(3,101)]}
+        obs = [observation(0,1), observation(1,2),
+               ObservedRelation("final", "w", 2, 3, {"measured_sign": 1})]
+
+        def motion(observed, source, proposed):
+            increasing = proposed.tvt_ft > source.tvt_ft
+            if proposed.station == 2:
+                compatible = (proposed.activity == "increasing TVT") == increasing
+            elif proposed.station == 3:
+                compatible = increasing and source.activity == "increasing TVT" and observed.supported_values["measured_sign"] > 0
+            else:
+                compatible = True
+            return BoundaryDecision("accepted" if compatible else "rejected")
+
+        middle = search_relations(anchor, candidates, obs, goal=SearchGoal(2), boundary=motion)
+        self.assertEqual((middle.value_ft, middle.path_count, middle.unique_path), (100.,2,False))
+        self.assertEqual(set(middle.goal_states), {rising, falling})
+        self.assertNotEqual(rising.node_id, falling.node_id)
+        final = search_relations(anchor, candidates, obs, goal=SearchGoal(3), boundary=motion)
+        self.assertEqual((final.value_ft,final.unique_path), (101.,True))
+        self.assertEqual(final.nodes[-1].parents[0].source_node_id, rising.node_id)
+        for invalid in ("", 1):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                state(2, activity=invalid)
+
     def test_observed_boundary_and_unique_value_path(self):
         seen = []
         def boundary(observed, source, proposed):

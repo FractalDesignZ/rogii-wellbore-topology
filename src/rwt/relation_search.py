@@ -43,6 +43,8 @@ def _plain(value: Any) -> Any:
     if is_dataclass(value):
         result = {f.name: _plain(getattr(value, f.name)) for f in fields(value)}
         if isinstance(value, CandidateState):
+            if value.activity is None:
+                result.pop("activity")
             result["node_id"] = value.node_id
         return result
     if isinstance(value, Mapping):
@@ -58,10 +60,13 @@ class CandidateState:
     station: int
     tvt_ft: float
     layer: str = "placement"
+    activity: str | None = None
 
     def __post_init__(self) -> None:
         if not self.well_id or not isinstance(self.well_id, str) or not self.layer or not isinstance(self.layer, str):
             raise ValueError("well_id and layer must be nonempty strings")
+        if self.activity is not None and (not isinstance(self.activity, str) or not self.activity):
+            raise ValueError("activity must be a nonempty state label when supplied")
         object.__setattr__(self, "station", _station(self.station))
         if isinstance(self.tvt_ft, bool) or not math.isfinite(float(self.tvt_ft)):
             raise ValueError("candidate TVT must be finite feet")
@@ -70,7 +75,13 @@ class CandidateState:
     @property
     def node_id(self) -> str:
         body = [self.well_id, self.layer, self.station, self.tvt_ft.hex()]
+        if self.activity is not None:
+            body.append(self.activity)
         return hashlib.sha256(json.dumps(body, separators=(",", ":")).encode()).hexdigest()
+
+    @property
+    def order_key(self) -> tuple[int, float, str]:
+        return self.station, self.tvt_ft, self.activity or ""
 
 
 @dataclass(frozen=True)
@@ -238,7 +249,7 @@ def search_relations(anchor: CandidateState, candidates_by_station: Mapping[int,
         unique = set(states)
         if any(not isinstance(s, CandidateState) or s.station != station or s.well_id != anchor.well_id or s.layer != anchor.layer for s in unique):
             raise ValueError("candidate well/station/layer scope mismatch")
-        candidates[station] = tuple(sorted(unique, key=lambda s: s.tvt_ft))
+        candidates[station] = tuple(sorted(unique, key=lambda s: s.order_key))
     filters = tuple(relation_filters)
     if len({n for n, _ in filters}) != len(filters) or any(not isinstance(n, str) or not n or not callable(f) for n, f in filters):
         raise ValueError("relation filters must have unique names and callable predicates")
@@ -266,7 +277,7 @@ def search_relations(anchor: CandidateState, candidates_by_station: Mapping[int,
     for station in sorted({anchor.station, *candidates}):
         if stop or station not in relevant or station >= goal.final_station:
             continue
-        for source in sorted(at_station[station], key=lambda s: s.tvt_ft):
+        for source in sorted(at_station[station], key=lambda s: s.order_key):
             if stop: break
             for observed in outgoing[station]:
                 if stop: break
@@ -303,11 +314,20 @@ def search_relations(anchor: CandidateState, candidates_by_station: Mapping[int,
                                 record["count"] = min(2, record["count"] + records[source]["count"])
                             at_station[proposed.station].add(proposed); admitted = True
                     steps.append(TraversalStep(observed.observation_id, source.node_id, proposed, decision, admitted, reason))
-    goals = tuple(sorted((s for s in records if goal.matches(s)), key=lambda s: s.tvt_ft))
+    goals = tuple(sorted((s for s in records if goal.matches(s)), key=lambda s: s.order_key))
+    depths = {state.tvt_ft for state in goals}
     complete = not reasons
-    status = "ambiguous" if len(goals) > 1 else "inconclusive" if not complete else "found" if goals else "exhausted"
+    if len(depths) > 1:
+        status = "ambiguous"
+    elif not complete:
+        status = "inconclusive"
+    elif depths:
+        status = "found"
+    else:
+        status = "exhausted"
     unique = status == "found"
     count = min(2, sum(records[s]["count"] for s in goals))
-    nodes = tuple(SearchNode(s, tuple(records[s]["parents"]), records[s]["count"]) for s in sorted(records, key=lambda s: (s.station, s.tvt_ft)))
+    nodes = tuple(SearchNode(s, tuple(records[s]["parents"]), records[s]["count"])
+                  for s in sorted(records, key=lambda s: s.order_key))
     return SearchResult(status, complete, unique, unique and count == 1, count, goals, nodes,
                         tuple(sorted(observations, key=lambda r: r.observation_id)), tuple(steps), tuple(sorted(reasons)), checks, calls)
