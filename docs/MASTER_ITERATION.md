@@ -458,3 +458,44 @@ The gain study generated a second level of well-disjoint decoder predictions wit
 The signed calibration run retained source, AST, process and original-row audit evidence at root `ff769aaa0c884a26306bc152ea9cd1efa1c6193031b2ad3f907177f864e5c45c`. The four-knot metrics have SHA-256 `f65087f44253884757226ae1ed0afb126a1d755eda496d64b841ca59a53731c4`. The 154 confirmation wells remain sealed.
 
 The supplied mathematics and ML references now have a process/control cross-reference with six authenticated document identities, eight concepts and 47 links to source, AST definitions and checks. It identifies persistent component tracking and a general nested operator selector as proposed components. [Reference graph and next discriminating checks](METHOD_REFERENCE_GRAPH.md)
+
+### Candidate connectivity and representation limits
+
+The H0 component-history API computes adjacent intersection graphs and maps their connected components into each neighboring revision. Synthetic checks preserve a component while its members change, cut and restore a bridge, and verify that the intersection removes nonshared edges. The field diagnostic used 25 candidate depth states per supported GR window and tracked 3,690 adjacent window pairs. Measured GR produced 807 component splits and 730 merges. Half-rotating the same observations produced 740 splits and 701 merges. These are connectivity measurements of candidate-parameter sets. The diagnostic produced no new forecast and parsed no hidden toe targets. Local evidence root `4dbcc15d86c442c954cafde5bcb93513d6d32c9afd15a2e2b4aef94b7a4abe50`.
+
+A separate retrospective bound held the current GR support and recorded 0.5*q gain fixed. Choosing the best of the 25 two-knot paths using true depths would score **8.387868 ft**. Continuous coefficients in the same box would score **8.362231 ft**. The 625 four-knot paths would score **8.155884 ft**, with **8.122954 ft** for their continuous box. Even perfect predictions on the 416 supported wells would leave **5.871019 ft** from the other wells. This support covers 2,046,530 native rows and 67.09% of the calibrated parent's squared error. Every discrete bound was checked by direct station reconstruction against its quadratic calculation. The calculation selected no serving coefficients or parameters. Local evidence root `54a9f08d08ec1515845d1944f93f32fa754efccb6bb6c1121930946cf129f388`.
+
+The 5.871019-ft figure is conditional on retaining the forecasts of the 203 unsupported wells. Their own station RMSE is 10.289541 ft. The two-knot family uses an exponential heel ramp, while the four-knot family uses linear quarter-length hats. Their continuous bounds compare different trajectory families. Within either family the discrete-to-continuous comparison isolates the grid effect.
+
+### Nested selection with an incumbent action
+
+Each original inner model supplied OFF, affine GR and merit Julia forecasts on its own excluded training bank. Two fixed visible-heel reliability regimes were compared using training-bank native errors. The public helper verifies the bank identities and outer exclusion roles. An active operator needs at least 12 bank wells, a unique lowest pooled error and a gain over OFF exceeding one whole-well standard error of that paired gain. These are study rules for choosing an action. Model exclusion and station-key alignment remain separately authenticated inputs.
+
+The selected action was then applied to that same member on outer queries before the corrected-member blend, donor registration and final affine GR step. OFF reproduced the incumbent exactly. Among 1,857 member queries the rule selected OFF 804 times, affine 450 times and merit 603 times. Missing evidence forced 609 of those OFF choices. Six hidden-column mutations and three missing-GR fixtures verified the decision boundary.
+
+| Native-station readout | RMSE (ft) |
+| --- | ---: |
+| OFF / incumbent affine path | 10.030446 |
+| Always apply member affine | 9.984733 |
+| Always apply member merit | 9.985035 |
+| Selection using shuffled error tracks | 10.029053 |
+| Training-bank selected member operator | **9.980316** |
+
+The selected path improved one of three folds against the historical 10.027222-ft merit forecast. The paired interval for that RMSE change was −0.132 to +0.029 ft. Its gate failed. Transferring bank rules by a vote to the final blended path scored 10.089542 ft and also failed. The private audit reproduced all original station sums. Local evidence root `9ee56f46561af8cd5ea0a2b83f40cf832894995741c4a43da91b71572420b046`.
+
+The public helper subsequently tightened whitespace aliases and exact equality at the one-standard-error boundary. The original source snapshot remains preserved. A separate replay and exact-arithmetic calculation reproduced all 36 recorded real and shuffled bank decisions under the revised helper. It performed no fits, scoring or raw reads. Local amended binding root `023d3e061b914242bc21fec460ffbc85c4452fc2dfc695b7da4375ebfa2ffc45`.
+
+### Ordinal votes on candidate boundaries
+
+The bounded-loss consensus trial scored 10.024088 ft, but its equally weighted midrank control scored 9.997405 ft. A separately frozen experiment repeated that rank operator with its own rotated-activity and recurrence-OFF controls. Each measured section ranked the same candidate paths, retaining the original support, visible-heel reliability and depth amplitude. The merit-ordered Julia recurrence then accumulated those ordinal comparisons.
+
+| Readout | RMSE (ft) |
+| --- | ---: |
+| Prior additive forecast | 10.030446 |
+| Prior merit traversal | 10.027222 |
+| Pairwise-majority alternative | 10.001204 |
+| Midrank with recurrence OFF | 10.012035 |
+| Midrank with rotated observed activity | 10.168240 |
+| Midrank and merit-ordered recurrence | **9.997405** |
+
+The rank operator passed the separately frozen pooled and fold gate against all five comparators. It beat the rotated activity and recurrence-OFF controls in all three folds. Their paired 95% RMSE intervals were −0.238 to −0.105 ft and −0.025 to −0.005 ft respectively. The interval against the previous merit path was −0.092 to +0.031 ft. Two independent inference processes reproduced every native forecast before scoring. Five bounded stages took 29.43 seconds, including the original-row independent audit. Local execution receipt SHA-256 `de89362506ac2f149f83277b6cb9eda0fee6b708aca188b015b06249c57e0354`. All 154 confirmation wells remain sealed.

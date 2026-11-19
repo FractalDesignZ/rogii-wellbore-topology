@@ -13,13 +13,13 @@ flowchart LR
   TREE[Decision Trees] --> T[Conditional model decisions]
   RF[Random Forest example] --> D
   TDA[Persistent Topological Features] --> A
-  TDA --> H[Component identity through revisions]
+  TDA --> H[Adjacent H0 component spans]
   A --> C
   C --> T
   D --> T
   T --> E
   B --> E
-  H -. proposed .-> C
+  H -. proposed predictive use .-> C
 ```
 
 Physical PDF pages are counted from one. The current attachments have the same SHA-256 identities as the previously reviewed copies. Those identities are recorded in the machine-readable graph.
@@ -34,6 +34,8 @@ Physical PDF pages are counted from one. The current attachments have the same S
 | *Persistent Topological Features in Large Language Models*, pp. 3–7 | Stable sample identities and intersections of adjacent complexes allow components and cycles to be followed across layers. | Specify vertices, simplices, intersection maps and revision index. Measure births/splits/deaths before claiming persistence. |
 
 The supplied references cover mathematical learning, statistical decisions and representation analysis. Physical interpretation of a wellbore relation also needs its declared quantities, units, geometry and observation support. MD, survey coordinates and TVT use feet in the prediction path. The optional Network Engine bridge declares its conversion to metres. Measured-depth order, evidence rank, optimizer iteration and layer index retain separate meanings. [Typed source and relation axes](NODAL_HARNESS.md#typed-observations-and-neighbor-axes) · [Network Engine boundary](NETWORK_ENGINE_INTEGRATION.md)
+
+The OODA analogy gives each pass through this graph a concrete record. Observe reads source tuples and support. Orient constructs candidate relationships and their comparison scores. Decide selects an operator or the incumbent using the permitted training evidence. Act executes the sealed choice through a bounded worker. Its output and read receipts become evidence for subsequent work. Measured depth, evidence rank and graph revision are separate possible ordering axes.
 
 The process graph controls which evidence may cross each boundary.
 
@@ -55,14 +57,26 @@ flowchart TD
   B --> O
 ```
 
-The public nodal controller implements source binding, role filtering, bounded workers, artifact-read checks and independent station error replay. Its fixed experiments specify each candidate in advance. The complete learned choice at **Choose operator or retain incumbent** is a proposed extension. The latest member-gain study tests a narrower train-only calibration decision. It does not implement every graph, ML and NN choice in this diagram. [Current implementation and scope](NODAL_HARNESS.md) · [Measured candidate decisions](MASTER_ITERATION.md)
+The public nodal controller implements source binding, role filtering, bounded workers, artifact-read checks and independent station error replay. Its fixed experiments specify each candidate in advance. The training-bank selector now chooses among OFF, affine GR and merit-ordered Julia using excluded training-well predictions. The caller authenticates each bank's model and original station keys. Selection across graph, tree, forest and neural models under one shared resource budget remains a proposed extension. [Current implementation and scope](NODAL_HARNESS.md) · [Measured candidate decisions](MASTER_ITERATION.md)
 
-The two proposed nodes in the cross-reference graph have explicit next checks.
+The component-span implementation now computes exact adjacent maps between graph revisions. Each shared connected component belongs to one component on each side. Changes in those maps expose local splits and merges while retaining original vertex keys. A field diagnostic processed 3,690 adjacent pairs of 512-ft measurement windows, with 807 splits and 730 merges. Rotating the observed GR changed 3,938 of 4,109 candidate masks and yielded 740 splits and 701 merges. An independent SciPy replay matched every aggregate. This measures connected candidate depth states under a fixed loss threshold. Local evidence root `4dbcc15d86c442c954cafde5bcb93513d6d32c9afd15a2e2b4aef94b7a4abe50`. [H0 component API](../src/rwt/relation_history.py) · [Tests](../tests/test_relation_history.py)
+
+The selector returns OFF for missing support, an undersized bank, an exact tie or an uncertain improvement against OFF. It verifies disjoint outer roles and exact bank membership before comparing per-well native squared errors. In the field test it chose OFF on 804 of 1,857 member queries, including 609 with mandatory unsupported status. The selected path scored 9.980316 ft but improved only one of three folds against the historical merit path, so its predictive gate failed. The training decision and its observed outer merit have separate receipts. [Selector API](../src/rwt/operator_selection.py) · [Tests](../tests/test_operator_selection.py)
+
+```python
+from rwt.relation_history import GraphRevision, component_history
+
+before = GraphRevision("well-A/depth-grid", "before", ("a", "b", "c"), (("a", "b"), ("b", "c")))
+after = GraphRevision("well-A/depth-grid", "after", ("a", "b", "c"), (("a", "b"),))
+span = component_history([before, after]).spans[0]
+```
+
+The remaining extensions have explicit next checks.
 
 | Proposed component | First discriminating check |
 | --- | --- |
-| Persistent identity through relation revision | Construct keyed candidate-state complexes before and after an evidence update, with their intersection. Preserve one component while its members change, then remove and restore its only bridge. Track the resulting component transitions and compare any predictive use with a shuffled evidence schedule. |
-| Nested operator selection with an incumbent option | Let inner training wells select a schedule, threshold or incumbent. Change outer true TVT and require the chosen action and forecast to remain identical. Independently verify incumbent selection where support is absent. Compare outer scores with always-incumbent and always-on controls. |
+| Persistent barcode intervals and higher-order features | Extend the exact adjacent component maps across a complete revision sequence and define filled faces before tracking cycle intervals. Compare any predictive use with a shuffled evidence schedule. |
+| General nested model and operator selection | Extend the measured three-action bank selector to graph, tree, forest and neural consumers at a shared observation and resource budget. Retain the outer-target mutation, absent-support OFF, always-incumbent and always-on comparisons. |
 
 ## Verify the cross-reference
 
@@ -72,6 +86,6 @@ From the repository root, use a fresh output directory. The optional PDF directo
 .\.venv\Scripts\python.exe scripts/verify_method_graph.py --pdf-dir $referencePdfDirectory --out $freshOutputDirectory
 ```
 
-The output contains the concept graph, data and control links, source dependency graph and AST node IDs for every linked operator and check. An unresolved Python definition, an out-of-range citation or a proposed component incorrectly marked as implemented fails verification. Physical page counts are independently pinned to the authenticated PDF hashes. The reference audit resolved six PDF identities, eight concepts and 47 links. Test results remain separately recorded by the normal test runner. [Verifier tests](../tests/test_method_graph.py)
+The output contains the concept graph, data and control links, source dependency graph and AST node IDs for every linked operator and check. An unresolved Python definition, an out-of-range citation or a proposed component incorrectly marked as implemented fails verification. Physical page counts are independently pinned to the authenticated PDF hashes. Test results remain separately recorded by the normal test runner. [Verifier tests](../tests/test_method_graph.py)
 
-The local verified concept graph has SHA-256 `ebffcf65d0c43697f2a35471da07db90e4ec2680feb144fb083afe8c6f763195`. Its adjacent source and AST graphs record the current definitions at verification. All six newly attached PDFs matched their earlier authenticated copies. Blank physical pages 60 and 74 of the cheat sheet were excluded from the revised citations.
+The updated graph resolves six documents, ten concepts and 59 links. Its SHA-256 is `d5863242b14d8df869d86ac4d44ec67bc048fe297427479b09519313ecaacd72`. Its adjacent source and AST graphs record the definitions at verification. All six attached PDFs matched their earlier authenticated copies. Blank physical pages 60 and 74 of the cheat sheet were excluded from the revised citations.
