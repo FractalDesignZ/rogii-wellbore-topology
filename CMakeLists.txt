@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.15)
+project(rwt_path_verifier LANGUAGES CXX)
+add_executable(rwt_path_verify qa/path_verify.cpp)
+target_compile_features(rwt_path_verify PRIVATE cxx_std_17)
+enable_testing()
+add_test(NAME offset_path_parity COMMAND rwt_path_verify "${CMAKE_CURRENT_SOURCE_DIR}/qa/path_vectors.txt")

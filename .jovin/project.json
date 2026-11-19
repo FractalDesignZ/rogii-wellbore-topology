@@ -1,7 +1,7 @@
 {
   "format": "jovin-harness.project.v1",
   "project_id": "rogii-nodal-harness",
-  "objective": "Verify the published nodal comparison harness's scoped source inventory and Python syntax against a recorded baseline.",
+  "objective": "Verify the nodal harness source snapshot and replay the offset-path solver's synthetic reference paths and costs with a supervised independent native checker.",
   "exclude": [".jovin", ".git", ".venv", "venv", "private_research", "private_kernel", "artifacts", "data", "secrets", ".env", ".env.example", "submissions", "__pycache__"],
   "partitions": [
     {
@@ -36,15 +36,27 @@
     {
       "id": "launcher",
       "language": "python",
-      "paths": ["scripts/run_nodal_harness.py"],
+      "paths": ["scripts/render_nodal_evidence.py", "scripts/run_nodal_harness.py"],
       "depends_on": ["worker", "evidence"]
+    },
+    {
+      "id": "path_native",
+      "language": "cpp",
+      "paths": ["qa/path_verify.cpp"],
+      "depends_on": []
+    },
+    {
+      "id": "path_verification",
+      "language": "build",
+      "paths": ["CMakeLists.txt", "qa/native_path_plan.json", "qa/path_vectors.txt"],
+      "depends_on": ["path_native", "core"]
     },
     {
       "id": "tests",
       "language": "python",
-      "paths": ["tests/test_ast_evidence.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py"],
-      "depends_on": ["launcher", "study"]
+      "paths": ["tests/test_ast_evidence.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py"],
+      "depends_on": ["launcher", "study", "path_verification"]
     }
   ],
-  "required_gates": ["inventory", "python_ast"]
+  "required_gates": ["inventory", "python_ast", "native_cpu"]
 }

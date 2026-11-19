@@ -1,6 +1,6 @@
 # Nodal readouts on the same well measurements
 
-The decision tree, random forest and neural network each gained accuracy from the added relationships on the fixed 12-well development pilot. Carrying forward the last visible TVT still had the lowest error, **11.617 ft RMSE**. Revising the graph's edge weights made its path less accurate. The six-stage computation and both numerical checks completed. All four candidates fell short of the two predictive comparisons required for development admission.
+On 619 development wells the random forest with the shared nodal features scored **15.037972 ft RMSE**. Its matched forest scored **15.111924 ft**, and carrying forward the last visible TVT scored **15.993630 ft**. Only the forest passed both pooled-error comparisons. The 95% paired well-bootstrap interval for its difference from the matched forest includes zero. The six planned stages executed on both the fixed 12-well pilot and the larger cohort, and independent numerical checks reproduced every method's station error.
 
 ## Reproduce or verify a run
 
@@ -22,6 +22,12 @@ On a fresh checkout, create the cohort manifest before running the launcher. Wit
 ```
 
 Use `--all-development` and a different output directory for the full development comparison. To check the original pilot evidence on its originating checkout, run `python -B scripts/run_nodal_harness.py --verify artifacts/nodal_mission_001`. Verification is read-only and requires the original source bytes, raw files and recorded path layout. A new execution records new processes and timings. [Launcher](../scripts/run_nodal_harness.py) · [Worker](../scripts/nodal_worker.py)
+
+To inspect the result visually, generate an offline HTML report. It verifies the saved run, draws its executed dependency edges and lets you expand each source file to inspect imports, branches and call expressions. Supply a fresh HTML filename. [Report generator](../scripts/render_nodal_evidence.py)
+
+```powershell
+& $python -B scripts/render_nodal_evidence.py $run "$run/evidence.html"
+```
 
 ## From a source reading to a depth prediction
 
@@ -60,6 +66,23 @@ The following wall times come from the bounded subprocess receipts. The two fit 
 | Audit | 2.09 | — | — |
 
 The six process times sum to 19.66 seconds. The first process start through the final process finish occupied 20.47 seconds. That interval excludes initial planning and final verifier replay. Preparation recorded 1.12 seconds inside the worker for bundle construction and persistence. These measurements combine startup, I/O and computation on one machine. Peak memory, energy, standalone inference latency and an equal-accuracy speedup remain unmeasured.
+
+## Full development results
+
+The same recipe covered all 3,034,427 toe stations in 379,568 blocks across 619 wells. The 12 pilot wells are included in this population. Every arm improved pooled RMSE over its matched control. The table shows how often that also improved an individual well. For example, the tree's pooled improvement occurred despite lowering error on just 204 wells. Pooled station error gives greater weight to wells with more rows and larger errors.
+
+| Readout | Augmented RMSE (ft) | Matched control (ft) | Wells improved vs. control | Paired RMSE change vs. control, 95% interval (ft) |
+| --- | ---: | ---: | ---: | ---: |
+| Graph path | 40.469240 | 40.500066 | 309 | −0.031 [−0.296, +0.197] |
+| Decision tree | 16.062288 | 16.418008 | 204 | −0.356 [−0.774, +0.036] |
+| Random forest | 15.037972 | 15.111924 | 307 | −0.074 [−0.165, +0.022] |
+| Neural network | 18.655931 | 19.793604 | 333 | −1.138 [−2.143, −0.178] |
+
+The forest beat last-visible TVT in all three folds. Its matched forest had lower error in one fold. The paired interval against last visible was −1.305 to −0.599 ft. The neural network improved against its matched control and scored 2.662 ft above last visible. Each interval uses 10,000 resamples of whole wells, seed 42, with predictions held fixed. The intervals omit retraining variation and possible geographical dependence between wells.
+
+The backward revision changed 237,451 of 378,949 edge weights. The decoder then selected different offsets on 15,228 blocks covering 121,738 original stations (4.01%). Among the 573 wells with at least one change, 309 improved and 264 worsened. The other 46 kept the same path. This establishes that later evidence can change earlier weights and that some changes reach the output. The graph arm's 40.469240 ft remains well above the 15.993630 ft carry-forward baseline.
+
+Process wall times were 63.66 seconds for shared preparation, 2.58 for graph export, 122.05 for the tree, 189.55 for the forest, 147.63 for the neural network and 8.02 for the audit. Each learner's time includes both feature views and three folds. For the forest, the timed fit-and-predict calls totaled 102.6 seconds with the augmented view and 80.5 with the control. Both neural views used 24 epochs per fold. The local receipt root is `2ec15f999a2aa9ae7ea9a9338e87c762e8aba6f3618094fe19a8a661c1a234ff`. The machine used Python 3.12.10, NumPy 2.5.5, pandas 3.1.1, SciPy 1.18.1 and scikit-learn 1.9.1.
 
 ## What each record establishes
 
