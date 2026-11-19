@@ -355,3 +355,35 @@ The direct prediction failed its primary gate. On the 2,122 supported 1,024-ft s
 Reconstructing station depths with that fixed combination passed its own gate. It reached **10.433145 ft RMSE** against **10.648607 ft** for the forward-window ensemble and **11.472314 ft** with the shifted-donor control. The combined model improved all three folds and 280 of 619 wells, with 237 worse and 102 unchanged. The paired well-bootstrap 95% interval for the change against the forward-window ensemble was −0.403 to −0.039 ft. A separate audit recomputed the primary interval errors and all 3,034,427 native station errors. Six observed stages ran in 39.03 seconds with one numerical thread and zero fits. Local evidence root `72e1a9519ffb33c44a9681701caa152c4a7841f923a76fafc5a34e880f7515ba`.
 
 The replay independently matched the input ensemble arrays to the raw trajectory seals for each fold. Using original measured-depth rows and the recorded donor increments, it regenerated all registered and shifted-control station values bit-for-bit. This replay reused the previously computed donor increments. Local binding SHA-256 `8c88fcafc0081cc4de00629de0328ae323f1427725c599e7fea591f9e806bc5b`.
+
+The public `lift_increment_corrections` function takes one signed correction per original interval endpoint. It anchors at the final visible station, accumulates the increments and interpolates the cumulative correction in measured depth. A zero increment carries the preceding correction through an unsupported interval. The function preserves every visible heel value and retains the existing toe trace between correction knots. [Station correction API](../src/rwt/station_corrections.py)
+
+A subsequent serving replay regenerated all **14,679** donor interval records from raw surveys and fold-training TVT. It took the forward ensemble from the earlier raw replay after validating each fold's forecast and station-order hashes. Both the registered and phase-control forecasts matched every original toe station bit-for-bit. The public API matched an independent interpolation and preserved all 1,047,316 visible heel values. Four bounded processes took 27.17 seconds. This run performed zero fits, forward-model invocations or score calls and recorded zero held-lateral target reads. Local serving evidence root `2dd54ce8d2c2c43caf853f6eede63e5426d1d548e8e2c6aead23fb7f7b6d4aed`.
+
+### Overlapping intervals and independent depth-level estimates
+
+| Development readout | RMSE (ft) |
+| --- | ---: |
+| Registered single grid | **10.433145** |
+| Single grid on the ensemble with distal forward-window features | 10.437904 |
+| Single grid on the matched distal backward-window ensemble | 10.460289 |
+| Anchored graph with aligned short and overlapping long intervals | 10.454827 |
+| Same graph with only its added donor intervals shifted | 10.810547 |
+| Gamma-ray selection between two registered donor increments | 10.495419 |
+| Equal weights on those donor alternatives | 10.486601 |
+| Extra Trees estimate of two broad depth levels, blended with the single grid | 11.069397 |
+| Extra Trees with the survey quarters rotated per well | 11.246044 |
+
+The distal trial added 27 recorded-survey features over 2,048 ft, 4,096 ft and the whole mutually available span. Forward and backward inputs used identical span and availability at each station. The experiment replayed the original 340 features and re-estimated the relative donor correction against each new model's prediction. The distal forward model improved one fold against the current single grid despite improving 326 wells. Its paired 95% interval for the difference was −0.051 to +0.063 ft. The separate original-row audit reproduced the eight scores after six fixed fits. Local evidence root `64a3ea50e527906f715fe6729ae49cb1f63723e7f67d2fb6f117511d5c40a8a6`.
+
+The graph put half its precision on the existing 1,024-ft intervals and allocated the rest equally between staggered 1,024-ft intervals and 256-ft intervals. In 2,118 supported loops, a registered long interval differed from the sum of four short intervals by 1.009 ft RMS. The same discrepancy with shifted donor observations was 4.856 ft. The aligned graph beat its shifted control and improved one fold against the single grid. Its paired 95% interval for RMSE change against the single grid was −0.007 to +0.049 ft. Local evidence root `5be16007a1c91e64cc74d86e2ed6357f4348384feabccb01d6f361587ea9bb21`.
+
+The gamma-ray test used two actual training-donor alternatives on the same query interval and the query's paired, heel-calibrated reference log. Measured gamma ray favored the closer donor in 505 of 941 sections. The registered increment range excluded the realized interval change in 482 sections. Jointly choosing all interval donor mixtures to minimize each held well's error gave **10.095622 ft RMSE** on this fixed basis and original support. The realized targets supply this retrospective bound. Local bound SHA-256 `8236056c3803ae64f363b85a5e98f0bc804c63b08a8d7d894c4abe7ddd4eedb0`.
+
+The Extra Trees test estimated mean depth in the second and fourth measured-depth quarters independently of the existing forecasts. Its direct errors were 12.440 and 17.101 ft, compared with 8.164 and 12.739 ft from the registered grid. The predeclared blend worsened all three folds. All six fits used only the relevant training-well depths. The original-row audit independently reproduced all station and band sums. Local evidence root `18692e2205f63c8bee480740529695a45735fdfdee2dfd8a519c0650150338a5`.
+
+### Remaining well-wide offset and drift
+
+In the 10.433145-ft readout, the within-well mean error accounts for **63.94%** of squared error and the remaining linear MD drift for **19.35%**. The first toe decile scored 3.399 ft and the last 14.344 ft. Fitting and removing an affine residual from each well using realized targets would leave **4.264585 ft RMSE**. That descriptive projection measures how much error the representation can absorb with known depths.
+
+Resampling entire 20,000-ft heel-coordinate cells gave 95% intervals below zero for the registered grid's improvement over the forward ensemble under all four fixed grid origins. There were 30 to 33 occupied cells depending on origin. The highest upper endpoint was −0.017 ft. This is spatial sensitivity of the existing fixed predictions on the same development folds. Local diagnostic receipt SHA-256 `97c650edb9f64be185824a3b1fa68731d43ae44d2dbac2e99c0f89fb6df71ab0`.
