@@ -441,9 +441,11 @@ def run_bounded(
             tree = _WindowsProcessJob() if os.name == "nt" else _PosixProcessGroup()
             process = subprocess.Popen(command, cwd=cwd, stdout=stdout, stderr=stderr, shell=False, **tree.popen_options)
             tree.attach(process)
-        except OSError as exc:
+        except BaseException as exc:
             if tree is not None:
                 tree.close()
+            if not isinstance(exc, OSError):
+                raise
             receipt = {"node_id": node_id, "status": "FAILED", "returncode": None, "wall_seconds": time.monotonic() - started, "error": type(exc).__name__, "command": command}
             _record(trace_path, {"event": "process_failed_to_start", **receipt})
             return receipt

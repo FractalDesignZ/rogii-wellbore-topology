@@ -10,7 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from rwt.execution_graph import (  # noqa: E402
@@ -20,6 +20,16 @@ from rwt.execution_graph import (  # noqa: E402
 
 
 class TestExecutionGraph(unittest.TestCase):
+    def test_startup_value_error_closes_owned_process_container(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = MagicMock(popen_options={})
+            factory = "rwt.execution_graph." + ("_WindowsProcessJob" if os.name == "nt" else "_PosixProcessGroup")
+            with patch(factory, return_value=tree), self.assertRaises(ValueError):
+                run_bounded([sys.executable, "invalid\x00argument"], cwd=tmp,
+                            trace_path=Path(tmp) / "trace.jsonl", node_id="plan", timeout_s=1)
+            tree.close.assert_called_once_with()
+            tree.attach.assert_not_called()
+
     def test_static_relative_import_closure_and_tamper(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
