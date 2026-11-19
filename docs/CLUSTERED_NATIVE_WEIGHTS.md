@@ -4,6 +4,8 @@ The fixed five-feature clustered primary scored **9.865546 ft RMSE**, versus the
 
 The primary-minus-incumbent difference was **−0.044019 ft**, with original-well paired 95% interval **−0.109781 to +0.013901 ft**. This is reused-development evidence, not independent confirmation or an official rank.
 
+A later [separately frozen q-only test](Q_ONLY_NATIVE_WEIGHTS.md) retained this study's q-only recipe as its primary and added same-group constant and reassigned-type controls. It reproduced all 17 overlapping surfaces exactly and passed 16 of 18 comparisons, but failed against constant weights within q types and the historical shuffled-q policy. That follow-up also retained the incumbent and the confirmation seal.
+
 ## Fixed question and action
 
 The user's suggestion to weight by clustered types was recorded before the preceding nested study's outer grading. A pre-grading addendum fixed the parent, matched prior controls, routing and ID-control semantics. This comparison reused its authenticated first-party native banks; it did not use the supplied OODA implementation, outside solution recipes, or new geological-model fits. The earlier nested outcome was already known when this implementation ran. [Earlier complete-pipeline comparison](NESTED_FIELD_CALIBRATION.md) · [First-party rule](../AGENTS.md)
