@@ -238,3 +238,28 @@ That subgroup result motivated a fixed conditional readout using the 308-column 
 The raw serving replay covered every held-out development well from MD, XYZ, GR, visible TVT and the paired typewell. Separate per-fold packages supplied the original training donors, preprocessing and models. The replay matched all 112,352,128 original feature cells and the 4,554,816 added held-out donor-profile cells. Both the 308-column model and the two-sided support switch reproduced all 379,568 block predictions and flags and all 3,034,427 lifted original stations, preserving 1,047,316 visible heel values. The serial 308-column replay took 175.02 seconds and required zero fits. A raw-query mutation of hidden TVT and formation columns left the 296-column result unchanged. The fold packages and serving receipts remain local.
 
 A separate execution graph reran the original donor fit and score functions. The contract binds 14 source files, their Python ASTs and the frozen inputs. Eight bounded processes recorded 16 chained events. The three fitted models, feature digests, validation prediction archives, and group assignments matched the original. The raw-station audit recovered the same errors across all development wells. The local replay receipt root is `0d513b11edf6985017c3b2abf48b1c3ef8fc5e46f3befac82a9395d0ffb1c6fb`.
+
+### Nested transfer of donor-model error
+
+Errors in the frozen 308-feature model had correlation **0.255** between late-toe points registered less than 1,024 ft apart in the same held-out fold. This used 263 query wells. Whole-curve permutations within each fold gave a null median of −0.011 and one-sided p = 0.002. At distances beyond 3,072 ft the measured correlation was 0.003. These label-informed observations motivated a separate prediction test.
+
+Each outer training partition was split into three inner folds. Every fit regenerated the 34 supervised directional, Julia and donor-profile features from its inner training wells, retaining the fixed 274-feature observation matrix. The worker sealed its predicted TVT before reading the inner holdout's targets and then computed signed errors. The outer-held well geometry registered these training-only residual curves to the original 308-feature predictions. The primary rule required close donors on both sides, then applied the same heel ramp, clipping and shrinkage to the spatial, permuted-curve and mean-curve controls. [Nested role validation API](../src/rwt/crossfit_roles.py)
+
+| Final station readout | RMSE (ft) |
+| --- | ---: |
+| Frozen 308-feature prediction | **11.075788** |
+| Row-weighted two-sided residual transfer | 11.103838 |
+| Same geometry with permuted curves | 11.103358 |
+| Mean residual curve on the same support | 11.075702 |
+| Wider residual kernel | 11.078424 |
+| Equal-weight local curves on wider support | 11.078658 |
+| Permuted curves on wider support | 11.073518 |
+| Mean residual curve on wider support | 11.075374 |
+
+The two-sided residual transfer lost to the frozen model in all three folds. Its paired whole-well interval for the RMSE change was −0.010 to +0.067 ft. The wider rule used a compact distance kernel inside 3,072 ft and reduced one-sided weights. It reached 91.39% of block centers and lost to the unchanged model in two folds. Its paired interval was −0.007 to +0.012 ft. Both fixed rules failed their preregistered comparisons. The wider permutation result is a control outcome.
+
+The two-sided correction changed 789,692 original stations. Those rows carried **13.31%** of the baseline squared error. Substituting the observed truth on all changed rows would still leave **10.312234 ft RMSE**. Actual correction directions agreed with the signed error at 52.48% of those rows. A single multiplier optimized with the actual targets would reduce baseline RMSE by less than 0.001 ft. The observed transfer has limited reach and weak signed alignment, even though the same-model diagnostic detected spatial covariance.
+
+The training run bound source and AST identities, 14 subprocesses and 21 dependency edges. An independent check verified all nine fit partitions, 2,476 inner-fit target reads and 1,238 post-seal residual target reads. All nine frozen fits were preserved when the audit found that the first phase-bin implementation weighted block centers equally. The corrected replay weighted each center by the original rows it represents and used the exact same residual banks. Independent raw-station error replay verified both attempts on all 619 development wells and 3,034,427 toe stations. The row-weighted evidence root is `231fff1aff9d1fa9b1c15674a17f246f314d959d69360fc30d3b592619665d1f`. The 154 confirmation wells remain reserved.
+
+An internal test then restricted both ends of the relation to wells predicted by the exact same inner model. Each query's residual curve was withheld from its own correction. Across the nine inner holdouts, the spatial rule lowered row-weighted block-center RMSE from **12.322961 to 12.303129 ft**, compared with **12.326495 ft** for permuted donors. Seven of nine groups improved. Each development well appears in two inner training contexts, and the paired bootstrap resampled that well as a single unit. This test evaluates the inner residual banks and motivates testing the same-model rule on actual outer queries.
