@@ -121,8 +121,11 @@ python -m venv .venv && .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
 pip install -e .
 
+# installed-package smoke (synthetic data; writes to the current directory)
+rwt-smoke --out artifacts/smoke_synthetic.json
+
 # unit tests
-python -m unittest discover -s tests -v
+python -m pytest -q
 
 # full driver (downloads if credentials exist; else synthetic demo)
 python scripts/run_late_entry.py

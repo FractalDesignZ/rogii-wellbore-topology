@@ -1,12 +1,16 @@
 """Source and process evidence falsifiers; no private harness dependency."""
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from rwt.execution_graph import (  # noqa: E402
@@ -85,6 +89,56 @@ class TestExecutionGraph(unittest.TestCase):
             time.sleep(1.7)
             self.assertFalse((root / "child_survived").exists())
             self.assertTrue(verify_execution_trace(root / "trace.jsonl")["passed"])
+
+    def test_success_waits_for_child_after_leader_exits_and_seals_final_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            child = "import time; from pathlib import Path; time.sleep(.25); print('child done', flush=True); Path('child_done').write_text('yes')"
+            parent = "import subprocess,sys; subprocess.Popen([sys.executable,'-c'," + repr(child) + "])"
+            receipt = run_bounded([sys.executable, "-c", parent], cwd=root, trace_path=root / "trace.jsonl", node_id="measure", timeout_s=5)
+            self.assertEqual(receipt["status"], "SUCCEEDED")
+            self.assertTrue((root / "child_done").exists())
+            log = root / "measure.stdout.log"
+            self.assertIn(b"child done", log.read_bytes())
+            self.assertEqual(hashlib.sha256(log.read_bytes()).hexdigest(), receipt["stdout_sha256"])
+
+    def test_timeout_remains_active_after_leader_exits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            child = "import time; from pathlib import Path; time.sleep(1); print('late output', flush=True); Path('child_survived').write_text('bad')"
+            parent = "import subprocess,sys; from pathlib import Path; subprocess.Popen([sys.executable,'-c'," + repr(child) + "]); Path('leader_exited').write_text('yes')"
+            receipt = run_bounded([sys.executable, "-c", parent], cwd=root, trace_path=root / "trace.jsonl", node_id="measure", timeout_s=.5)
+            self.assertTrue((root / "leader_exited").exists())
+            self.assertEqual(receipt["status"], "TIMEOUT")
+            self.assertEqual(receipt["returncode"], 0)
+            self.assertTrue(receipt["tree_kill_attempted"])
+            time.sleep(.8)
+            self.assertFalse((root / "child_survived").exists())
+            self.assertEqual(hashlib.sha256((root / "measure.stdout.log").read_bytes()).hexdigest(), receipt["stdout_sha256"])
+            self.assertTrue(verify_execution_trace(root / "trace.jsonl")["passed"])
+
+    def test_tree_cleanup_leaves_unrelated_process_running(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            independent = "import time; from pathlib import Path; time.sleep(1); Path('unrelated_done').write_text('yes')"
+            unrelated = subprocess.Popen([sys.executable, "-c", independent], cwd=root,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                child = "import time; time.sleep(10)"
+                parent = "import subprocess,sys; subprocess.Popen([sys.executable,'-c'," + repr(child) + "])"
+                receipt = run_bounded([sys.executable, "-c", parent], cwd=root, trace_path=root / "trace.jsonl", node_id="measure", timeout_s=.5)
+                self.assertEqual(receipt["status"], "TIMEOUT")
+                self.assertEqual(unrelated.wait(timeout=5), 0)
+                self.assertTrue((root / "unrelated_done").exists())
+            finally:
+                if unrelated.poll() is None:
+                    unrelated.kill()
+                    unrelated.wait(timeout=5)
+
+    @unittest.skipIf(os.name == "nt", "POSIX process-table fallback")
+    def test_posix_fallback_tracks_child_after_leader_exit(self) -> None:
+        with patch("rwt.execution_graph.sys.platform", "darwin"):
+            self.test_success_waits_for_child_after_leader_exits_and_seals_final_log()
 
 
 if __name__ == "__main__":

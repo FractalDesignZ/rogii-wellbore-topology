@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import time
 from typing import Any
 
@@ -240,23 +241,158 @@ def _record(trace_path: Path, event: dict[str, Any]) -> None:
         os.fsync(handle.fileno())
 
 
-def _kill_tree(process: subprocess.Popen) -> dict[str, Any]:
-    result: dict[str, Any] = {"tree_kill_attempted": True, "pid": process.pid}
-    if os.name == "nt":
+class _PosixProcessGroup:
+    popen_options = {"start_new_session": True}
+
+    def attach(self, process: subprocess.Popen) -> None:
+        self.pid = process.pid
+
+    def active(self) -> bool:
+        # Do not poll/wait for the leader here. Keeping it unreaped reserves its
+        # PID and group ID until cleanup, even after its last child has exited.
+        if sys.platform.startswith("linux") and Path("/proc/self/stat").is_file():
+            for path in Path("/proc").glob("[0-9]*/stat"):
+                try:
+                    fields = path.read_text().rpartition(")")[2].split()
+                except (FileNotFoundError, ProcessLookupError, PermissionError):
+                    continue
+                if len(fields) >= 3 and int(fields[2]) == self.pid and fields[0] not in {"Z", "X"}:
+                    return True
+            return False
+        rows = subprocess.run(["ps", "-A", "-o", "pgid=", "-o", "stat="],
+                              check=True, capture_output=True, text=True, timeout=5).stdout
+        return any(int(group) == self.pid and state[0] not in {"Z", "X"}
+                   for group, state in (row.split() for row in rows.splitlines() if row.strip()))
+
+    def terminate(self) -> None:
         try:
-            stopped = subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], shell=False, capture_output=True, timeout=10)
-            result["tree_kill_returncode"] = stopped.returncode
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            result["tree_kill_error"] = type(exc).__name__
-    else:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(self.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    if process.poll() is None:
-        process.kill()
+
+    def close(self) -> None:
+        pass
+
+
+class _WindowsProcessJob:
+    """Own a job before the suspended leader is allowed to create children."""
+
+    popen_options = {"creationflags": 0x00000004 | 0x00000200}  # SUSPENDED | NEW_PROCESS_GROUP
+
+    def __init__(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        self.ctypes = ctypes
+        self.api = ctypes.WinDLL("kernel32", use_last_error=True)
+        signatures = {
+            "CreateJobObjectW": ([ctypes.c_void_p, wintypes.LPCWSTR], wintypes.HANDLE),
+            "SetInformationJobObject": ([wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD], wintypes.BOOL),
+            "QueryInformationJobObject": ([wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p], wintypes.BOOL),
+            "AssignProcessToJobObject": ([wintypes.HANDLE, wintypes.HANDLE], wintypes.BOOL),
+            "TerminateJobObject": ([wintypes.HANDLE, wintypes.UINT], wintypes.BOOL),
+            "OpenProcess": ([wintypes.DWORD, wintypes.BOOL, wintypes.DWORD], wintypes.HANDLE),
+            "CreateToolhelp32Snapshot": ([wintypes.DWORD, wintypes.DWORD], wintypes.HANDLE),
+            "Thread32First": ([wintypes.HANDLE, ctypes.c_void_p], wintypes.BOOL),
+            "Thread32Next": ([wintypes.HANDLE, ctypes.c_void_p], wintypes.BOOL),
+            "OpenThread": ([wintypes.DWORD, wintypes.BOOL, wintypes.DWORD], wintypes.HANDLE),
+            "ResumeThread": ([wintypes.HANDLE], wintypes.DWORD),
+            "CloseHandle": ([wintypes.HANDLE], wintypes.BOOL),
+        }
+        for name, (arguments, result) in signatures.items():
+            function = getattr(self.api, name)
+            function.argtypes, function.restype = arguments, result
+
+        class BasicLimits(ctypes.Structure):
+            _fields_ = [("process_time", ctypes.c_int64), ("job_time", ctypes.c_int64),
+                        ("flags", wintypes.DWORD), ("min_working_set", ctypes.c_size_t),
+                        ("max_working_set", ctypes.c_size_t), ("process_limit", wintypes.DWORD),
+                        ("affinity", ctypes.c_size_t), ("priority", wintypes.DWORD), ("scheduling", wintypes.DWORD)]
+
+        class ExtendedLimits(ctypes.Structure):
+            _fields_ = [("basic", BasicLimits), ("io_counters", ctypes.c_uint64 * 6),
+                        ("process_memory", ctypes.c_size_t), ("job_memory", ctypes.c_size_t),
+                        ("peak_process_memory", ctypes.c_size_t), ("peak_job_memory", ctypes.c_size_t)]
+
+        self.handle = self.api.CreateJobObjectW(None, None)
+        if not self.handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        limits = ExtendedLimits()
+        limits.basic.flags = 0x00002000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not self.api.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+            error = ctypes.WinError(ctypes.get_last_error())
+            self.close()
+            raise error
+
+    def attach(self, process: subprocess.Popen) -> None:
+        ctypes = self.ctypes
+        from ctypes import wintypes
+
+        class ThreadEntry(ctypes.Structure):
+            _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("thread_id", wintypes.DWORD),
+                        ("process_id", wintypes.DWORD), ("priority", wintypes.LONG),
+                        ("delta_priority", wintypes.LONG), ("flags", wintypes.DWORD)]
+
+        opened = snapshot = thread = None
+        try:
+            opened = self.api.OpenProcess(0x0101, False, process.pid)  # SET_QUOTA | TERMINATE
+            if not opened or not self.api.AssignProcessToJobObject(self.handle, opened):
+                raise ctypes.WinError(ctypes.get_last_error())
+            snapshot = self.api.CreateToolhelp32Snapshot(0x00000004, 0)  # SNAPTHREAD
+            if snapshot == ctypes.c_void_p(-1).value:
+                snapshot = None
+                raise ctypes.WinError(ctypes.get_last_error())
+            entry = ThreadEntry()
+            entry.size = ctypes.sizeof(entry)
+            found = self.api.Thread32First(snapshot, ctypes.byref(entry))
+            while found and entry.process_id != process.pid:
+                found = self.api.Thread32Next(snapshot, ctypes.byref(entry))
+            if not found:
+                raise OSError("suspended process has no primary thread")
+            thread = self.api.OpenThread(0x0002, False, entry.thread_id)  # SUSPEND_RESUME
+            if not thread or self.api.ResumeThread(thread) == 0xFFFFFFFF:
+                raise ctypes.WinError(ctypes.get_last_error())
+        except BaseException:
+            # Assignment can fail, so the job alone may not own the leader yet.
+            process.kill()
+            process.wait(timeout=10)
+            raise
+        finally:
+            for handle in (thread, snapshot, opened):
+                if handle:
+                    self.api.CloseHandle(handle)
+
+    def active(self) -> bool:
+        ctypes = self.ctypes
+
+        class Accounting(ctypes.Structure):
+            _fields_ = [("times", ctypes.c_int64 * 4), ("page_faults", ctypes.c_uint32),
+                        ("total", ctypes.c_uint32), ("active", ctypes.c_uint32), ("terminated", ctypes.c_uint32)]
+
+        info = Accounting()
+        if not self.api.QueryInformationJobObject(self.handle, 1, ctypes.byref(info), ctypes.sizeof(info), None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return bool(info.active)
+
+    def terminate(self) -> None:
+        if not self.api.TerminateJobObject(self.handle, 1):
+            raise self.ctypes.WinError(self.ctypes.get_last_error())
+
+    def close(self) -> None:
+        if self.handle:
+            self.api.CloseHandle(self.handle)
+            self.handle = None
+
+
+def _kill_tree(process: subprocess.Popen, tree) -> dict[str, Any]:
+    tree.terminate()
+    deadline = time.monotonic() + 10
+    while tree.active():
+        if time.monotonic() >= deadline:
+            raise RuntimeError("process tree did not stop; logs cannot be sealed")
+        time.sleep(0.01)
     process.wait(timeout=10)
-    return result
+    return {"tree_kill_attempted": True, "pid": process.pid}
 
 
 def run_bounded(
@@ -268,8 +404,11 @@ def run_bounded(
 
     Dependencies must have SUCCEEDED. An unresolved/blocked node does not launch.
     Logs are exclusively created per node in the trace directory. The time limit
-    is a wall bound, not a CPU/RSS sandbox. Trace mutation by the same OS user is
-    outside this evidence boundary; this function is not a concurrent scheduler.
+    covers the Windows job or POSIX process group, including children whose
+    leader exits first. POSIX children deliberately leaving that group are
+    outside this non-sandbox boundary. Logs are sealed after contained processes
+    stop. Trace mutation by the same OS user is outside this evidence boundary;
+    this function is not a concurrent scheduler or a CPU/RSS sandbox.
     """
     if not isinstance(command, list) or not command or any(not isinstance(part, str) or not part for part in command):
         raise ValueError("command must be an explicit nonempty string list")
@@ -297,25 +436,37 @@ def run_bounded(
     stdout_path, stderr_path = trace_path.parent / f"{node_id}.stdout.log", trace_path.parent / f"{node_id}.stderr.log"
     started = time.monotonic()
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-        options = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+        tree = None
         try:
-            process = subprocess.Popen(command, cwd=cwd, stdout=stdout, stderr=stderr, shell=False, **options)
+            tree = _WindowsProcessJob() if os.name == "nt" else _PosixProcessGroup()
+            process = subprocess.Popen(command, cwd=cwd, stdout=stdout, stderr=stderr, shell=False, **tree.popen_options)
+            tree.attach(process)
         except OSError as exc:
+            if tree is not None:
+                tree.close()
             receipt = {"node_id": node_id, "status": "FAILED", "returncode": None, "wall_seconds": time.monotonic() - started, "error": type(exc).__name__, "command": command}
             _record(trace_path, {"event": "process_failed_to_start", **receipt})
             return receipt
         try:
             _record(trace_path, {"event": "process_started", "node_id": node_id, "pid": process.pid, "command": command, "cwd": str(cwd), "dependencies": list(dependencies), "timeout_s": float(timeout_s)})
+            killed = {}
+            deadline = started + float(timeout_s)
+            try:
+                while tree.active():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout_s)
+                    time.sleep(min(0.01, remaining))
+                returncode = process.wait(timeout=max(0, deadline - time.monotonic()))
+                status = "SUCCEEDED" if returncode == 0 else "FAILED"
+            except subprocess.TimeoutExpired:
+                killed = _kill_tree(process, tree)
+                returncode, status = process.returncode, "TIMEOUT"
         except BaseException:
-            _kill_tree(process)
+            _kill_tree(process, tree)
             raise
-        killed = {}
-        try:
-            returncode = process.wait(timeout=float(timeout_s))
-            status = "SUCCEEDED" if returncode == 0 else "FAILED"
-        except subprocess.TimeoutExpired:
-            killed = _kill_tree(process)
-            returncode, status = process.returncode, "TIMEOUT"
+        finally:
+            tree.close()
     receipt = {
         "node_id": node_id, "pid": process.pid, "status": status, "returncode": returncode,
         "wall_seconds": time.monotonic() - started, "dependencies": list(dependencies),

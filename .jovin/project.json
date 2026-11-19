@@ -54,7 +54,7 @@
     {
       "id": "tests",
       "language": "python",
-      "paths": ["tests/test_ast_evidence.py", "tests/test_label_lineage.py", "tests/test_member_corrections.py", "tests/test_merit_weights.py", "tests/test_method_graph.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_observation_tensors.py", "tests/test_operator_selection.py", "tests/test_policy_refinement.py", "tests/test_relation_history.py", "tests/test_station_corrections.py"],
+      "paths": ["tests/test_execution_graph.py", "tests/test_ast_evidence.py", "tests/test_label_lineage.py", "tests/test_member_corrections.py", "tests/test_merit_weights.py", "tests/test_method_graph.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_observation_tensors.py", "tests/test_operator_selection.py", "tests/test_policy_refinement.py", "tests/test_relation_history.py", "tests/test_station_corrections.py"],
       "depends_on": ["launcher", "study", "path_verification"]
     }
   ],
