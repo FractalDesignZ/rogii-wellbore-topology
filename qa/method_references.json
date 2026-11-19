@@ -59,17 +59,33 @@
     },
     {
       "id": "persistent_relation_identity",
-      "claim": "Track components and cycles through relation revisions using shared simplex identities and intersection layers.",
-      "status": "hypothesis",
+      "claim": "Compute adjacent H0 component spans from shared vertex and edge identities across graph revisions.",
+      "status": "implemented",
       "citations": [{"reference": "persistence", "pages": [3, 4, 5, 6, 7]}],
+      "operators": [{"path": "src/rwt/relation_history.py", "symbol": "component_history"}],
+      "checks": [{"path": "tests/test_relation_history.py", "symbol": "test_component_maps_preserve_shared_vertices_when_members_change"}, {"path": "tests/test_relation_history.py", "symbol": "test_bridge_cut_and_restoration_are_a_split_then_merge"}, {"path": "tests/test_relation_history.py", "symbol": "test_intersection_removes_nonshared_edges_even_if_both_graphs_are_connected"}]
+    },
+    {
+      "id": "persistent_barcodes",
+      "claim": "Compute persistent barcode intervals and higher-dimensional cycles through general relation revisions.",
+      "status": "hypothesis",
+      "citations": [{"reference": "persistence", "pages": [4, 5, 6]}],
       "operators": [],
       "checks": []
     },
     {
       "id": "nested_operator_selection",
-      "claim": "Select an operator or the incumbent inside outer training roles, then measure its sealed action on held wells.",
-      "status": "hypothesis",
+      "claim": "Choose OFF or one of two operators using paired errors from an excluded training bank and explicit outer roles.",
+      "status": "implemented",
       "citations": [{"reference": "math", "pages": [46, 50, 51]}, {"reference": "ml", "pages": [17, 18]}, {"reference": "forest", "pages": [10]}],
+      "operators": [{"path": "src/rwt/operator_selection.py", "symbol": "select_supported_operator"}],
+      "checks": [{"path": "tests/test_operator_selection.py", "symbol": "test_comparison_requires_whole_bank_and_disjoint_roles"}, {"path": "tests/test_operator_selection.py", "symbol": "test_missing_evidence_weak_support_uncertainty_and_ties_choose_off"}]
+    },
+    {
+      "id": "general_model_operator_selection",
+      "claim": "Select among graph, tree, forest and neural models under one complete nested process and resource budget.",
+      "status": "hypothesis",
+      "citations": [{"reference": "math", "pages": [46, 50, 51]}, {"reference": "ml", "pages": [17, 18]}],
       "operators": [],
       "checks": []
     }
@@ -81,6 +97,8 @@
     {"source": "observed_execution", "target": "predictive_merit", "kind": "control"},
     {"source": "supported_revision", "target": "conditional_decisions", "kind": "data"},
     {"source": "persistent_relation_identity", "target": "supported_revision", "kind": "proposed"},
-    {"source": "nested_operator_selection", "target": "generalization_boundary", "kind": "proposed"}
+    {"source": "persistent_barcodes", "target": "persistent_relation_identity", "kind": "proposed"},
+    {"source": "nested_operator_selection", "target": "generalization_boundary", "kind": "control"},
+    {"source": "general_model_operator_selection", "target": "nested_operator_selection", "kind": "proposed"}
   ]
 }

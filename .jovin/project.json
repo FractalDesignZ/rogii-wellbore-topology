@@ -9,7 +9,7 @@
       "language": "python",
       "paths": [
         "src/rwt/__init__.py", "src/rwt/baselines.py", "src/rwt/block_model.py", "src/rwt/ensemble.py",
-        "src/rwt/gr_match.py", "src/rwt/load.py", "src/rwt/member_corrections.py", "src/rwt/middle_out.py", "src/rwt/observation_tensors.py",
+        "src/rwt/gr_match.py", "src/rwt/load.py", "src/rwt/member_corrections.py", "src/rwt/middle_out.py", "src/rwt/observation_tensors.py", "src/rwt/operator_selection.py", "src/rwt/relation_history.py",
         "src/rwt/offset_path.py", "src/rwt/priors.py", "src/rwt/registered_views.py",
         "src/rwt/simd.py", "src/rwt/station_corrections.py"
       ],
@@ -54,7 +54,7 @@
     {
       "id": "tests",
       "language": "python",
-      "paths": ["tests/test_ast_evidence.py", "tests/test_member_corrections.py", "tests/test_method_graph.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_observation_tensors.py", "tests/test_station_corrections.py"],
+      "paths": ["tests/test_ast_evidence.py", "tests/test_member_corrections.py", "tests/test_method_graph.py", "tests/test_native_path_vectors.py", "tests/test_nodal_bundle.py", "tests/test_nodal_harness.py", "tests/test_nodal_report.py", "tests/test_observation_tensors.py", "tests/test_operator_selection.py", "tests/test_relation_history.py", "tests/test_station_corrections.py"],
       "depends_on": ["launcher", "study", "path_verification"]
     }
   ],
