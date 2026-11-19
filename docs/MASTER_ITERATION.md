@@ -123,6 +123,8 @@ The query well supplies its own structural-height measurements before the hidden
 
 This addition reduced full-toe development RMSE from **11.581639 to 11.358078 ft**. All three folds improved, with 332 wells improving and 287 worsening. Across 3,034,427 original stations the squared-error reduction was 15,561,830.41 ft². The 619 visible heels supplied 1,047,316 finite TVT and coordinate measurements. Each fold retained the original 286 directional features and their training medians byte for byte. All three saved models reproduced their predictions. A fixed half-sequence, half-heel blend scored 12.077808 ft.
 
+A separate serving check rebuilt one validation query per fold from its allowed horizontal-well and typewell measurements. Each saved model used its original training donors and medians. All 612,890 feature cells and 14,672 toe-row predictions matched the development artifacts bit for bit, and all 5,137 observed heel rows retained their supplied depths. This checks the raw-input prediction path for those three wells. It uses the privately retained feature providers and donor support.
+
 ### Learned alignment over candidate depths
 
 A fixed two-dimensional convolution model used the measured-depth and candidate-TVT axes. It assigned mass over 41 offsets at 5 ft spacing, with explicit masks for unsupported gamma-ray costs. Each training fold used the preceding sequence model's preprocessing, an unclipped regression loss and a fixed 20th-epoch checkpoint. A separate CPU audit began after all three GPU folds saved predictions.
@@ -149,6 +151,8 @@ The conventional and Julia arms share the directional feature matrix, candidate 
 Against the matched graph, Julia evidence reduced pooled SSE by **9,625,306.27 ft²** and improved all three folds. Against the directional model, it reduced pooled SSE by **5,250,990.05 ft²**. Two folds improved and one regressed by 60,798.49 ft². All six saved models replayed, and a second calculation verified the exact original station keys and paired errors. The result supports this pair of penalties on development. Their individual contributions and the roles of other nonlinear scoring rules are open questions.
 
 A post-hoc paired bootstrap resampled complete development wells 5,000 times with fixed predictions and NumPy seed 20261119. The 95% interval for the Julia-minus-conventional RMSE difference was −0.231 to −0.044 ft. Against the directional reference it was −0.189 to +0.036 ft. These intervals describe sampling variation among these wells with the fitted models held fixed.
+
+A matched follow-up added each graph's ten summaries to the stronger 334-feature own-heel model. The underlying graphs kept the original directional centers, evidence and transitions. The conventional version scored **11.458987 ft** and the two-map version **11.424718 ft** on all 619 wells. The two maps reduced pooled squared error by 2,379,613.04 ft² against the conventional graph and improved two of three folds. The own-heel model alone retained the lowest error at **11.358078 ft**.
 
 We replayed the orbit penalties on an RTX 5070 using the exact edge inputs from 12 development wells. CPU and GPU agreed on every discrete outcome across 1,685,100 map positions, of which 1,582,681 had measurement support. The largest penalty difference was 2.22 × 10⁻¹⁶ in double precision. Median timings over three runs included transfers in both directions.
 

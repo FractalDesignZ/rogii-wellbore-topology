@@ -20,6 +20,12 @@ The example starts at 1,000 ft with two synthetic observations of depth change. 
 
 The script also prints the iteration at which each map accepted or rejected each transition. Iterations count applications of the map. Survey stations advance in measured-depth order.
 
+Add `--phase-stack` for a second constructed example with 30 possible depths. Three sensors report phase at periods of 2, 3 and 5 ft. Each phase constrains a different set of depths. Applying the three maps in order leaves 15, then five, then one candidate at **1,017 ft**. Repeating the first reading three times leaves 15. The measured periods and exact phases make this a controlled example of resolving aliases.
+
+With the separately installed Network Engine, add `--native-lift` to the command. The adapter passes the admitted nodes and integer edge endpoints to the native provider. Each level-one node represents an admitted transition. Two such nodes are adjacent if their transitions share an endpoint. The local receipt maps each edge back to its observation and binds the input topology to a SHA-256 digest. It preserves the search status and any native pair-cap cutoff. Shared endpoints describe incidence. The search retains the original directions and decides reachability.
+
+## Following a desired depth through the graph
+
 When an observation-based model supplies a desired depth at every station, `rwt.offset_path.select_offset_path` finds the reachable trajectory with the smallest weighted squared error to those depths. Each station has the same increasing list of offsets around its own center. A path may stay in the current bin or move one bin at each step. Run it once per well in measured-depth order.
 
 ```python
@@ -34,9 +40,36 @@ indices = select_offset_path(
 # indices [0, 1, 2] select depths [995, 1002, 1009].
 ```
 
-Add `--phase-stack` for a second constructed example with 30 possible depths. Three sensors report phase at periods of 2, 3 and 5 ft. Each phase constrains a different set of depths. Applying the three maps in order leaves 15, then five, then one candidate at **1,017 ft**. Repeating the first reading three times leaves 15. The measured periods and exact phases make this a controlled example of resolving aliases.
+### Weighting relationships inside the search
 
-With the separately installed Network Engine, add `--native-lift` to the command. The adapter passes the admitted nodes and integer edge endpoints to the native provider. Each level-one node represents an admitted transition. Two such nodes are adjacent if their transitions share an endpoint. The local receipt maps each edge back to its observation and binds the input topology to a SHA-256 digest. It preserves the search status and any native pair-cap cutoff. Shared endpoints describe incidence. The search retains the original directions and decides reachability.
+An edge can carry several measurements of the same proposed move. With evidence cost `e_m` for measurement `m` and local reliability `w_m`, its cost is `sum(w_m * e_m)`. A weight can change by station, source bin or destination bin. For example, agreement between a visible-heel gradient and nearby well gradients can increase the weight on geometry for that crossing. A missing reading contributes zero.
+
+```python
+import numpy as np
+from rwt.offset_path import minimum_cost_offset_path, relation_cost
+
+# Start in bin 0. The next station admits a stay or a move to bin 1.
+nodes = [[0, np.inf], [0, 0]]
+shape = (1, 3, 2)  # station transition, bin change (-1, 0, +1), destination
+geo, gamma = np.zeros(shape), np.zeros(shape)
+geo[0, 1, 0], gamma[0, 1, 0] = 0.15, 2.0  # Stay
+geo[0, 2, 1], gamma[0, 2, 1] = 2.0, 0.3   # Move
+
+def route(geometry_weight):
+    edges = relation_cost({"geo": geo, "gamma": gamma},
+                          {"geo": geometry_weight, "gamma": 1.0})
+    return minimum_cost_offset_path(nodes, edges).tolist()
+
+assert route(0.5) == [0, 1]
+assert route(3.0) == [0, 0]
+
+# Only the move has independent heel/donor agreement about its geometry.
+agreement = np.zeros(shape)
+agreement[0, 2, 1] = 1.0
+assert route(0.5 + 2.5 * agreement) == [0, 0]
+```
+
+This example changes the weight while holding observations and allowed transitions fixed. Learned weights can enter the same interface after fitting on training wells. Station costs and transition costs both contribute to the sum over the entire path.
 
 ## Read a search result
 
