@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
+from io import BytesIO
 import json
 from pathlib import Path
 import time
@@ -25,6 +27,19 @@ KEYS = ("well_index", "first_station", "row_count", "fold")
 
 def _json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@contextmanager
+def _artifact(path: Path, reads):
+    """Give a parser the same upstream artifact bytes identified by its read receipt."""
+    if reads is None:
+        with path.open("rb") as handle:
+            yield handle
+        return
+    snapshot = path.read_bytes()
+    with BytesIO(snapshot) as handle:
+        yield handle
+    reads.append({"artifact": path.name, "sha256": hashlib.sha256(snapshot).hexdigest()})
 
 
 def _write(path: Path, value):
@@ -156,13 +171,13 @@ def _train(arm, x, target, valid_x, seed):
     return prediction, epochs
 
 
-def predict_run(run: Path, arm: str):
+def predict_run(run: Path, arm: str, *, reads=None):
     if arm not in ARMS:
         raise ValueError("unregistered nodal method")
     started = time.perf_counter()
     contract = _json(run / "contract.json")
     history = []
-    with np.load(run / "bundle.npz", allow_pickle=False) as data:
+    with _artifact(run / "bundle.npz", reads) as stream, np.load(stream, allow_pickle=False) as data:
         keys = {key:data[key] for key in KEYS}
         if arm == "graph":
             augmented, plain = data["graph_prediction"], data["graph_control"]
@@ -189,20 +204,22 @@ def predict_run(run: Path, arm: str):
     if not np.isfinite(augmented).all() or not np.isfinite(plain).all():
         raise ValueError("nonfinite selected depth")
     _save(run / f"{arm}.npz", **keys, prediction=augmented, control_prediction=plain)
-    _write(run / f"{arm}.json", {"arm":arm, "bundle_sha256":_sha(run / "bundle.npz"), "fits":len(history),
+    bundle_digest = reads[-1]["sha256"] if reads is not None else _sha(run / "bundle.npz")
+    _write(run / f"{arm}.json", {"arm":arm, "bundle_sha256":bundle_digest, "fits":len(history),
                                   "fits_by_fold":history, "seconds":time.perf_counter()-started,
                                   "prediction_sha256":_sha(run / f"{arm}.npz")})
 
 
-def audit_run(run: Path) -> dict:
+def audit_run(run: Path, *, reads=None) -> dict:
     """Reopen the raw wells, prove exact toe coverage, then score sealed predictions."""
     contract = _json(run / "contract.json")
-    with np.load(run / "bundle.npz", allow_pickle=False) as data:
+    with _artifact(run / "bundle.npz", reads) as stream, np.load(stream, allow_pickle=False) as data:
         keys = {key:data[key] for key in KEYS}
         wells, ptr, last = data["well_ids"], data["block_ptr"], data["last_known"]
         lateral_ptr, reference_ptr = data["lateral_ptr"], data["typewell_ptr"]
         raw, reference = data["lateral_values"], data["typewell_values"]
         edge_from, edge_to = data["edge_source"], data["edge_target"]
+    bundle_digest = reads[-1]["sha256"] if reads is not None else _sha(run / "bundle.npz")
     if wells.tolist() != contract["wells"] or not np.array_equal(
             keys["well_index"], np.repeat(np.arange(len(wells)), np.diff(ptr))):
         raise ValueError("well identity or node ranges changed")
@@ -216,10 +233,11 @@ def audit_run(run: Path) -> dict:
         raise ValueError("fold assignment differs from independent grouped split")
     predictions = {"last_visible":last}
     for arm in ARMS:
-        receipt = _json(run / f"{arm}.json")
-        if receipt["bundle_sha256"] != _sha(run / "bundle.npz") or receipt["prediction_sha256"] != _sha(run / f"{arm}.npz"):
-            raise ValueError("arm consumed a different bundle or prediction artifact")
-        with np.load(run / f"{arm}.npz", allow_pickle=False) as file:
+        with _artifact(run / f"{arm}.json", reads) as stream:
+            receipt = json.load(stream)
+        if receipt["bundle_sha256"] != bundle_digest:
+            raise ValueError("arm consumed a different bundle")
+        with _artifact(run / f"{arm}.npz", reads) as stream, np.load(stream, allow_pickle=False) as file:
             if any(not np.array_equal(file[k], v) for k,v in keys.items()):
                 raise ValueError("arm prediction keys differ")
             for name, key in ((arm, "prediction"), (arm + "_control", "control_prediction")):
@@ -227,6 +245,9 @@ def audit_run(run: Path) -> dict:
                 if prediction.shape != last.shape or not np.isfinite(prediction).all():
                     raise ValueError("incomplete prediction vector")
                 predictions[name] = prediction
+        prediction_digest = reads[-1]["sha256"] if reads is not None else _sha(run / f"{arm}.npz")
+        if receipt["prediction_sha256"] != prediction_digest:
+            raise ValueError("arm consumed a different prediction artifact")
     by_well = {}
     by_fold = {str(i): {k:0. for k in predictions} for i in range(contract["folds"])}
     n_rows = 0

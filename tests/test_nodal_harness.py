@@ -13,12 +13,20 @@ import run_nodal_harness as harness
 
 
 WORKER = """
+import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 
 stage, out = sys.argv[1], Path(sys.argv[2])
 print(stage, flush=True)
+names = [] if stage == "prepare" else ["bundle.npz"]
+if stage == "audit":
+    names += [a + ext for a in ("graph", "tree", "forest", "neural") for ext in (".json", ".npz")]
+reads = [{"artifact": name, "sha256": hashlib.sha256((out/name).read_bytes()).hexdigest()} for name in names]
+(out / (stage + ".reads.json")).write_text(json.dumps({"schema":"rwt.worker-artifact-reads.v1",
+    "pid":os.getpid(), "parent_pid":os.getppid(), "stage":stage, "reads":reads}))
 if stage == "audit":
     (out / "metrics.json").write_text(json.dumps({"fixture": True}))
 else:
@@ -75,12 +83,26 @@ def test_fixture_dag_replay_detects_source_raw_artifacts_logs_and_trace(tmp_path
     with patch.object(harness, "replay_metrics", return_value={"fixture": True}):
         result = harness.execute(repo,cohort,data,run)
         assert result["integration_verified"]
+        graph = harness.read(run/"execution_evidence.json")["execution_graph_delta"]
+        assert ["prepare", "audit"] not in graph["scheduled_edges"]
+        assert len(graph["scheduled_edges"]) == 8 and len(graph["artifact_reads"]) == 13
+        assert {"producer":"prepare", "consumer":"audit", "artifact":"bundle.npz",
+                "sha256":harness.file_hash(run/"bundle.npz")} in graph["artifact_reads"]
+        assert all(edge["artifact"] != "bundle.json" for edge in graph["artifact_reads"])
         assert harness.read(run/"contract.json")["wells"] == ["C","A","B"]
         assert len(harness.read(run/"contract.json")["input_files"]) == 6
         stat = {p.name:p.stat().st_mtime_ns for p in run.iterdir()}
         assert harness.verify(run,repo) == result
         assert stat == {p.name:p.stat().st_mtime_ns for p in run.iterdir()}
         audit = harness.read(run/"audit.receipt.json")
+        report = run/"audit.reads.json"
+        def replace_digest(raw):
+            altered = json.loads(raw)
+            altered["reads"][0]["sha256"] = "0" * 64
+            return json.dumps(altered).encode()
+        with replace_bytes(report, replace_digest):
+            with pytest.raises(ValueError, match="worker read digest differs"):
+                harness.verify(run,repo)
         assert set(audit["inputs"]["upstream_receipts"]) == {"prepare", *harness.ARMS}
         assert set(audit["inputs"]["upstream_outputs"]) == {
             name for stage in audit["inputs"]["upstream_receipts"] for name in harness.OUTPUTS[stage]}
@@ -131,6 +153,33 @@ def test_worker_cannot_replace_a_sealed_upstream_artifact(tmp_path):
     assert not (run/"graph.receipt.json").exists()
     assert not (run/"tree.stdout.log").exists()
     assert not (run/"execution_evidence.json").exists()
+
+
+def test_successful_process_can_skip_a_required_read_but_cannot_complete_mission(tmp_path):
+    repo,cohort,data = fixture_inputs(tmp_path)
+    worker = repo / "scripts/nodal_worker.py"
+    worker.write_text(WORKER.replace('else ["bundle.npz"]', 'else ([] if stage == "graph" else ["bundle.npz"])'))
+    run = tmp_path / "skipped"
+    with pytest.raises(ValueError, match="graph missing required artifact reads"):
+        harness.execute(repo,cohort,data,run)
+    receipt = harness.read(run / "graph.receipt.json")
+    assert receipt["process"]["returncode"] == 0 and receipt["process"]["dependencies"] == ["prepare"]
+    assert receipt["artifact_read_evidence"]["reads"] == []
+    assert receipt["artifact_read_evidence"]["missing_required"] == ["bundle.npz"]
+    assert not (run/"execution_evidence.json").exists()
+
+
+def test_parse_observation_identifies_consumed_snapshot(tmp_path):
+    from rwt.nodal_study import _artifact
+
+    source = tmp_path / "graph.json"
+    source.write_bytes(b'{"value": 2}')
+    original = harness.file_hash(source)
+    reads = []
+    with _artifact(source, reads) as stream:
+        source.write_bytes(b'{"value": 3}')
+        assert json.load(stream) == {"value": 2}
+    assert reads == [{"artifact": "graph.json", "sha256": original}]
 
 
 def test_confirmation_role_rejected_before_opening_measurements(tmp_path):

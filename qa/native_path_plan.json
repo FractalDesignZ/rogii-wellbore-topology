@@ -1,7 +1,7 @@
 {
   "format": "jovin-harness.native-plan.v1",
   "objective": "Compare an independent CPU dynamic program and exhaustive path enumeration with frozen production Python outputs on synthetic minimum-cost depth lattices.",
-  "configure_args": ["-GNinja", "-DCMAKE_BUILD_TYPE=Release"],
+  "configure_args": ["-GNinja", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_CXX_STANDARD=20", "-DCMAKE_CXX_STANDARD_REQUIRED=ON", "-DCMAKE_CXX_EXTENSIONS=OFF"],
   "artifacts": ["build/rwt_path_verify"],
   "checks": [
     {"id": "path_parity", "argv": ["{project}/build/rwt_path_verify", "{project}/qa/path_vectors.txt"], "expected_exit": 0}

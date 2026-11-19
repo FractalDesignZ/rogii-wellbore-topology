@@ -24,6 +24,7 @@ table{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:t
 th,td{padding:.55rem .7rem;border-bottom:1px solid #cbd6cd}thead{background:#dde7dc}
 .scroll{overflow:auto}.number{text-align:right}.graph{width:100%;min-width:620px;height:auto}
 .graph rect{fill:#e3ede5;stroke:#608a78}.graph path{fill:none;stroke:#7a9085;stroke-width:1.6}
+.graph .scheduled{stroke-dasharray:5 4}.graph .artifact{stroke:#00675a;stroke-width:2.2}
 .graph text{fill:#16372e;text-anchor:middle;font-size:15px}.graph .small{font-size:12px}
 details{border-left:1px solid #bdcdc0;padding-left:.7rem;margin:.25rem 0}summary{cursor:pointer}
 .module{background:#fff;padding:.6rem .8rem;border:1px solid #cbd6cd;margin:.5rem 0}
@@ -33,20 +34,27 @@ details{border-left:1px solid #bdcdc0;padding-left:.7rem;margin:.25rem 0}summary
 
 
 def execution_svg(receipts, delta):
-    """Render only vertices and dependencies present in the checked process graph."""
+    """Draw scheduling and application-reported artifact reads as separate edge types."""
     positions = {"prepare": (90, 119), "audit": (570, 119),
                  **{arm: (330, 33 + 57 * i) for i, arm in enumerate(ARMS)}}
-    lines = ['<svg class="graph" viewBox="0 0 660 240" role="img" '
-             'aria-label="Prepare feeds four readouts, each feeding the audit">'
+    lines = ['<svg class="graph" viewBox="0 0 660 280" role="img" '
+             'aria-label="Worker processes, scheduling dependencies and recorded artifact reads">'
              '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" '
              'markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z"/>'
              '</marker></defs>']
-    for source, target in delta["executed_edges"]:
+    scheduled = delta.get("scheduled_edges", delta.get("executed_edges", []))
+    artifact_pairs = sorted({(r["producer"], r["consumer"]) for r in delta.get("artifact_reads", [])})
+    for source, target, kind in [(*edge, "scheduled") for edge in scheduled] + [(*edge, "artifact") for edge in artifact_pairs]:
         x1, y1 = positions[source]
         x2, y2 = positions[target]
         mid = (x1 + x2) // 2
-        lines.append(f'<path marker-end="url(#arrow)" d="M{x1 + 71} {y1} '
-                     f'C{mid} {y1} {mid} {y2} {x2 - 74} {y2}"/>')
+        if source == "prepare" and target == "audit":
+            path = f"M{x1} {y1+22} C{x1} 274 {x1} 262 {mid} 262 S{x2} 274 {x2} {y2+25}"
+        else:
+            gap = 5 if kind == "artifact" else -5
+            path = f"M{x1+71} {y1+gap} C{mid} {y1+gap} {mid} {y2+gap} {x2-74} {y2+gap}"
+        lines.append(f'<path class="{kind}" marker-end="url(#arrow)" d="{path}"><title>'
+                     f'{kind}: {escape(source)} → {escape(target)}</title></path>')
     for stage in delta["executed_nodes"]:
         proc = receipts[stage]["process"]
         x, y = positions[stage]
@@ -55,6 +63,20 @@ def execution_svg(receipts, delta):
                      f'<text x="{x}" y="{y-2}">{escape(stage)}</text><text class="small" '
                      f'x="{x}" y="{y+15}">PID {int(proc["pid"])} · {proc["wall_seconds"]:.2f} s</text></g>')
     return "".join(lines) + "</svg>"
+
+
+def artifact_read_section(delta):
+    if "artifact_reads" not in delta:
+        return "<p>This historical run recorded scheduling dependencies only.</p>"
+    rows = []
+    for edge in delta["artifact_reads"]:
+        rows.append(f'<tr><td>{escape(edge["producer"])}</td><td>{escape(edge["consumer"])}</td>'
+                    f'<td><code>{escape(edge["artifact"])}</code></td><td><code>{escape(edge["sha256"])}</code></td></tr>')
+    return ('<p>Dashed arrows show scheduling dependencies. Solid arrows show a worker parsing a file '
+            'whose SHA-256 matched a producer output. One arrow can represent multiple files.</p>'
+            '<details><summary>Worker artifact reads</summary><div class="scroll"><table><thead><tr>'
+            '<th>Producer</th><th>Consumer</th><th>File</th><th>SHA-256 of parsed input</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div></details>')
 
 
 def source_and_syntax(source, ast_graph):
@@ -161,8 +183,8 @@ def render(run):
 <nav><a href="#runtime">Execution graph</a><a href="#scores">Model comparison</a><a href="#observation">Trace a block</a>
 <a href="#source">Source and AST</a></nav></header>
 <section id="runtime"><h2>Observed execution graph</h2>
-<p>Each node shows its process ID and elapsed time. Arrows record dependencies. The controller dispatched one worker at a time.</p>
-<div class="scroll">{execution_svg(receipts, delta)}</div></section>
+<p>Each node shows its process ID and elapsed time. The controller dispatched one worker at a time.</p>
+<div class="scroll">{execution_svg(receipts, delta)}</div>{artifact_read_section(delta)}</section>
 <section id="scores"><h2>Model comparison</h2><p>Station-weighted RMSE in feet.
 Carrying forward the last visible TVT scored <strong>{errors['last_visible']:.4f} ft</strong>.
 A readout passes when its error is lower than both that baseline and its matched control.</p>

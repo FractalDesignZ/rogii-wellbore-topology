@@ -1,7 +1,7 @@
 {
   "format": "jovin-harness.project.v1",
   "project_id": "rogii-nodal-harness",
-  "objective": "Verify the nodal harness source snapshot and replay the offset-path solver's synthetic reference paths and costs with a supervised independent native checker.",
+  "objective": "Verify the nodal harness source snapshot and independently check offset-path parity, compiler structure and the native process lifecycle.",
   "exclude": [".jovin", ".git", ".venv", "venv", "private_research", "private_kernel", "artifacts", "data", "secrets", ".env", ".env.example", "submissions", "__pycache__"],
   "partitions": [
     {
@@ -48,7 +48,7 @@
     {
       "id": "path_verification",
       "language": "build",
-      "paths": ["CMakeLists.txt", "qa/native_path_plan.json", "qa/path_vectors.txt"],
+      "paths": ["CMakeLists.txt", "qa/native_path_plan.json", "qa/native_path_ast.json", "qa/native_path_trace.json", "qa/path_vectors.txt"],
       "depends_on": ["path_native", "core"]
     },
     {
@@ -58,5 +58,5 @@
       "depends_on": ["launcher", "study", "path_verification"]
     }
   ],
-  "required_gates": ["inventory", "python_ast", "native_cpu"]
+  "required_gates": ["inventory", "python_ast", "native_ast", "native_cpu", "process_trace", "network_trace"]
 }

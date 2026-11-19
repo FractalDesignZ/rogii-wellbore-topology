@@ -23,6 +23,8 @@ ARMS = ("graph", "tree", "forest", "neural")
 DAG = {"prepare": (), **{arm: ("prepare",) for arm in ARMS}, "audit": ARMS}
 OUTPUTS = {"prepare": ("bundle.npz", "bundle.json"),
            **{arm: (arm + ".npz", arm + ".json") for arm in ARMS}, "audit": ("metrics.json",)}
+REQUIRED_READS = {"prepare": (), **{arm: ("bundle.npz",) for arm in ARMS},
+                  "audit": ("bundle.npz", *(name for arm in ARMS for name in OUTPUTS[arm]))}
 SOURCES = ["scripts/nodal_worker.py", "scripts/run_nodal_harness.py", "src/rwt/ast_evidence.py"]
 TIMEOUT = 1800
 THREAD_VARS = ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
@@ -65,9 +67,13 @@ def write(path, data, *, compact=False):
         handle.write("\n")
 
 
-def stage_spec():
-    return [{"id": name, "dependencies": list(deps), "outputs": list(OUTPUTS[name])}
-            for name, deps in DAG.items()]
+def stage_spec(*, legacy=False):
+    stages = [{"id": name, "dependencies": list(deps), "outputs": list(OUTPUTS[name])}
+              for name, deps in DAG.items()]
+    if not legacy:
+        for stage in stages:
+            stage["required_artifact_reads"] = list(REQUIRED_READS[stage["id"]])
+    return stages
 
 
 def selected(manifest, mode):
@@ -101,7 +107,7 @@ def make_contract(repo, cohort, data_root, mode, source, ast_graph):
     wells = selected(manifest, mode)
     files = raw_files(data_root, wells, manifest)
     require(cohort_hash == file_hash(cohort), "cohort changed during planning")
-    return {"schema": "rwt.nodal-mission.v1", "mission": "Compare fixed nodal-tree readouts on held-out development wells.",
+    return {"schema": "rwt.nodal-mission.v2", "mission": "Compare fixed nodal-tree readouts on held-out development wells.",
             "controller_reference": REFERENCE, "source_graph_sha256": source["manifest_sha256"],
             "ast_graph_sha256": ast_graph["graph_sha256"],
             "repo_root": str(repo), "cohort_path": str(cohort), "cohort_sha256": cohort_hash,
@@ -117,9 +123,10 @@ def make_contract(repo, cohort, data_root, mode, source, ast_graph):
 
 
 def validate_freeze(run, repo, contract, source):
-    require(contract["schema"] == "rwt.nodal-mission.v1" and contract["repo_root"] == str(repo)
+    require(contract["schema"] in ("rwt.nodal-mission.v1", "rwt.nodal-mission.v2") and contract["repo_root"] == str(repo)
             and contract["folds"] == 3 and contract["seed"] == 42, "mission identity mismatch")
-    require(contract["stages"] == stage_spec() and source["entries"] == sorted(SOURCES), "mission DAG or entry points changed")
+    legacy = contract["schema"] == "rwt.nodal-mission.v1"
+    require(contract["stages"] == stage_spec(legacy=legacy) and source["entries"] == sorted(SOURCES), "mission DAG or entry points changed")
     require(contract["resources"] == {"concurrent_workers": 1, "worker_wall_timeout_s": TIMEOUT, "library_thread_env": 1},
             "mission execution bounds changed")
     require(source["manifest_sha256"] == contract["source_graph_sha256"], "source graph binding mismatch")
@@ -164,6 +171,31 @@ def stage_inputs(run, stage, frozen, records):
     return {"mission": frozen, "upstream_receipts": parents, "upstream_outputs": artifacts}
 
 
+def artifact_read_evidence(run, stage, pid, records):
+    path = run / f"{stage}.reads.json"
+    require(path.is_file() and not path.is_symlink(), f"missing or linked worker read report: {stage}")
+    snapshot = path.read_bytes()
+    report = json.loads(snapshot)
+    # A Windows venv launcher can spawn the Python interpreter as its direct child.
+    require(report.get("schema") == "rwt.worker-artifact-reads.v1" and report.get("stage") == stage
+            and type(report.get("pid")) is int and report["pid"] > 0 and type(report.get("parent_pid")) is int
+            and pid in (report["pid"], report["parent_pid"])
+            and isinstance(report.get("reads"), list), f"invalid worker read report: {stage}")
+    producers = {name: producer for producer in ancestors(stage) for name in OUTPUTS[producer]}
+    edges = []
+    for item in report["reads"]:
+        require(isinstance(item, dict) and isinstance(item.get("artifact"), str)
+                and item["artifact"] in producers, f"unbound worker artifact read: {stage}")
+        name = item["artifact"]
+        producer = producers[name]
+        expected = records[producer]["outputs"][name]
+        require(item.get("sha256") == expected, f"worker read digest differs from {producer} output: {name}")
+        edges.append({"producer": producer, "consumer": stage, "artifact": name, "sha256": expected})
+    missing = sorted(set(REQUIRED_READS[stage]) - {edge["artifact"] for edge in edges})
+    return {"report_sha256": hashlib.sha256(snapshot).hexdigest(), "worker_pid": report["pid"],
+            "reads": edges, "missing_required": missing}
+
+
 def command(repo, run, contract, stage):
     return [contract["python"], "-B", str(repo / SOURCES[0]), stage, str(run)]
 
@@ -202,7 +234,7 @@ def execute(repo, cohort, data_root, run, *, all_development=False):
         for stage, deps in DAG.items():
             require(boundary(run, repo, contract, source) == frozen, "mission inputs changed before execution")
             inputs = stage_inputs(run, stage, frozen, records)
-            require(all(not os.path.lexists(run / n) for n in OUTPUTS[stage]),
+            require(all(not os.path.lexists(run / n) for n in (*OUTPUTS[stage], f"{stage}.reads.json")),
                     f"{stage} outputs existed before dispatch")
             process = run_bounded(command(repo, run, contract, stage), cwd=repo, trace_path=run / "trace.jsonl",
                                   node_id=stage, timeout_s=TIMEOUT, dependencies=deps, statuses=statuses)
@@ -212,9 +244,12 @@ def execute(repo, cohort, data_root, run, *, all_development=False):
             require(boundary(run, repo, contract, source) == frozen, "mission inputs changed during execution")
             require(stage_inputs(run, stage, frozen, records) == inputs, f"{stage} dependency changed during execution")
             outputs = {key: file_hash(run / key) for key in OUTPUTS[stage]}
+            activity = artifact_read_evidence(run, stage, process["pid"], records)
             row = {"stage": stage, "process": process, "input_root_sha256": digest(inputs), "inputs": inputs,
+                   "artifact_read_evidence": activity,
                    "outputs": outputs, "output_root_sha256": digest(outputs)}
             write(run / f"{stage}.receipt.json", row)
+            require(not activity["missing_required"], f"{stage} missing required artifact reads: {activity['missing_required']}")
             records[stage], statuses[stage] = row, process["status"]
             print(f"{stage} completed in {process['wall_seconds']:.2f} s", flush=True)
     evidence = replay(run, repo)
@@ -236,6 +271,8 @@ def replay(run, repo):
     require(chain["passed"] and chain["events"] == 2*len(DAG), "incomplete or invalid execution trace")
     events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
     records, observed_nodes, observed_edges, stage_seals = {}, [], [], {}
+    legacy = contract["schema"] == "rwt.nodal-mission.v1"
+    artifact_reads = []
     for i, (stage, deps) in enumerate(DAG.items()):
         start, finish = events[2*i:2*i+2]
         require(start["event"] == "process_started" and finish["event"] == "process_finished"
@@ -258,6 +295,11 @@ def replay(run, repo):
         require(row["inputs"] == inputs and row["input_root_sha256"] == digest(inputs), f"{stage} input binding mismatch")
         outputs = {key: file_hash(run / key) for key in OUTPUTS[stage]}
         require(row["outputs"] == outputs and row["output_root_sha256"] == digest(outputs), f"{stage} outputs changed")
+        if not legacy:
+            activity = artifact_read_evidence(run, stage, process["pid"], records)
+            require(activity == row.get("artifact_read_evidence"), f"{stage} read report differs from receipt")
+            require(not activity["missing_required"], f"{stage} missing required artifact reads")
+            artifact_reads.extend(activity["reads"])
         observed_nodes.append(start["node_id"])
         observed_edges.extend([[dep, stage] for dep in start["dependencies"]])
         records[stage], stage_seals[stage] = row, file_hash(receipt_path)
@@ -273,6 +315,12 @@ def replay(run, repo):
             "stage_receipt_sha256": stage_seals, "execution_graph_delta": graph,
             "integration_completed": True, "merit_evidence": "metrics.json", "metric_replay": metrics,
             "interpretation": "Receipt replay checks the observed run. The worker audit is repeated and a separate verifier uses a within-block variance decomposition to recalculate raw station errors. The digest chain binds local evidence and provides no external signature."}
+    if not legacy:
+        body["schema"] = "rwt.nodal-execution.v2"
+        graph["scheduled_edges"] = graph.pop("executed_edges")
+        graph["missing_scheduled_edges"] = graph.pop("missing_edges")
+        graph["extra_scheduled_edges"] = graph.pop("extra_edges")
+        graph["artifact_reads"] = artifact_reads
     return {**body, "evidence_root_sha256": digest(body)}
 
 
