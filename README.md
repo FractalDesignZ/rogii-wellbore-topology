@@ -61,7 +61,7 @@ The public neighbor graph now reads observed `TVT_input` only by default. Full d
 
 ### Master iteration and image relationships
 
-The public relation search can overlay multiple maps on each observed transition and trace which candidate depths survive. Its runnable three-depth example and 12-well pilot show when two views resolve a depth and when they exhaust the graph. [Shared-graph search and measurements](docs/RELATION_SEARCH.md)
+The public relation search overlays multiple maps on each observed transition and traces which candidate depths survive. Run `python scripts/demo_relation_search.py --phase-stack` to see complementary periodic readings resolve one of 30 depths. With a local Network Engine installation, add `--native-lift` to turn admitted transitions into relation nodes. The 12-well pilot records which maps helped resolve a depth and which exhausted the available paths. [Shared-graph search and measurements](docs/RELATION_SEARCH.md)
 
 The next iteration uses two linked tracks: rapid model/alignment candidates and relational operator/image candidates, compared on the same fixed development cohort. The controller retains static AST/import evidence, a dependency graph, bounded subprocess receipts, exact selected OOF predictions, and a separate metric audit. Confirmation wells remain outside candidate selection. See [`docs/MASTER_ITERATION.md`](docs/MASTER_ITERATION.md).
 

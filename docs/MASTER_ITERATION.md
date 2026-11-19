@@ -90,7 +90,7 @@ An ordinary multiscale context control scores **14.674427 ft**, compared with th
 
 This similar ordinary-context gain makes a context-conditioned operator comparison necessary. A frozen 274-feature hybrid appends the same 20 graph descriptors to the context model, preserving both source feature views and their training-median slices bit-for-bit. It scores **14.534777 ft**, improving pooled SSE by 12,377,657.41 versus context alone. There are 327 well improvements and 292 regressions, with two folds improving and one regressing. This is incremental development evidence for those descriptors beyond the ordinary context control.
 
-The preregistered 50% sequence / 50% hybrid prediction scores **14.150791 ft**, versus the earlier fixed sequence/graph blend's **14.157296 ft**. This small pooled gain reduces SSE by 558,812.48; it improves 308 wells and worsens 311. Only fold 1 improves, while folds 0 and 2 regress. It is the lowest checked pooled score, with a less consistent fold pattern than the earlier blend. All 3,034,427 station keys and saved model predictions replay, no fallback occurs, and the six reference prediction hashes remain fixed. Six bounded hybrid test/build/fit/audit nodes totaled 142.67 seconds, with peak training RSS 1.72 GB. Confirmation and field-performance admission remain separate.
+The preregistered 50% sequence / 50% hybrid prediction scores **14.150791 ft**, versus the earlier fixed sequence/graph blend's **14.157296 ft**. This small pooled gain reduces SSE by 558,812.48 across 308 improved wells and 311 regressions. Only fold 1 improves. All 3,034,427 station keys and saved model predictions replay, no fallback occurs, and the six reference prediction hashes remain fixed. Six bounded hybrid test/build/fit/audit nodes totaled 142.67 seconds, with peak training RSS 1.72 GB. Confirmation and field-performance admission remain separate.
 
 The ordered-Julia experiment separately compares reset, carried-state and shuffled-order recurrence descriptors on the fixed context base. All three arms have 261 features, identical C3 prefixes and training-median prefixes, the same encoding, four seeds, 24 numerical iterations and radius 2. Carried state resets escaped seeds individually and resets all seeds at missing support; it never crosses wells. The shuffled control permutes supported runs and restores original station keys afterward. The underlying graph/context inputs are offline, so forward recurrence does not make the overall predictor causal.
 
@@ -112,6 +112,19 @@ The strongest checked development model scores **11.581639 ft**. It adds 12 dire
 For a training donor, let layer height be `S = TVT + Z`. Two positions along that well give a height change and a horizontal displacement. A constant vertical datum offset cancels in the difference. Nearby donor directions constrain a local horizontal gradient, which is projected along a query step and integrated from the query's visible heel. Nearly parallel donor paths give little evidence about the transverse gradient. The model receives the donor count, alignment and directional balance alongside the estimated change.
 
 Each outer fold rebuilds these features for fitting and validation using that fold's training donors. Every query excludes its own well. The grouped splits, model recipe, row weights and original station keys match the comparator. All three saved models reproduced their predictions. Five bounded test, fit and audit processes took 125.35 seconds in total. The 154 confirmation wells remain reserved.
+
+A follow-up used six named formation-top elevations from other training wells as additional supervision. It fitted local planes in XY and added each inferred surface's change from the query heel, alongside support measures. The original directional feature matrix and training medians replayed byte for byte. The candidate scored **11.597061 ft** against **11.581639 ft** for the directional reference. Two folds and 318 wells improved, but the remaining fold raised pooled squared error by enough to lose the primary comparison. Training-donor horizon values were excluded from their own well's query features.
+
+### Learned alignment over candidate depths
+
+A fixed two-dimensional convolution model used the measured-depth and candidate-TVT axes. It assigned mass over 41 offsets at 5 ft spacing, with explicit masks for unsupported gamma-ray costs. Each training fold used the preceding sequence model's preprocessing, an unclipped regression loss and a fixed 20th-epoch checkpoint. A separate CPU audit began after all three GPU folds saved predictions.
+
+| Full-toe comparison | RMSE (ft) | Frozen reference (ft) |
+| --- | ---: | ---: |
+| Learned alignment alone | 16.468145 | 15.428782 for the preceding sequence model |
+| Half learned alignment, half context and graph | 14.731799 | 14.150791 for the preceding sequence blend |
+
+Both comparisons lost all three folds. The auditor reproduced the station keys, labels, weights and grouped folds for all 3,034,427 toe rows. All predictions were finite, with zero fallbacks. The three GPU runs took 400.66 seconds in total. Peak field process memory was 2.20 GB and peak reserved CUDA memory was 407 MB.
 
 The first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. Fresh attempts retain the old runs unchanged and use stronger station-key/fold audits. The two selectors formerly scored 10.997149 ft with an incomplete path library; repaired path availability changes both to 11.030914 ft. This is an ingestion/library effect, not a native gain.
 

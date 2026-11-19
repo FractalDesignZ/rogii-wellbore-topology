@@ -20,6 +20,10 @@ The example starts at 1,000 ft with two synthetic observations of depth change. 
 
 The script also prints the iteration at which each map accepted or rejected each transition. Iterations count applications of the map. Survey stations advance in measured-depth order.
 
+Add `--phase-stack` for a second constructed example with 30 possible depths. Three sensors report phase at periods of 2, 3 and 5 ft. Each phase constrains a different set of depths. Applying the three maps in order leaves 15, then five, then one candidate at **1,017 ft**. Repeating the first reading three times leaves 15. The measured periods and exact phases make this a controlled example of resolving aliases.
+
+With the separately installed Network Engine, add `--native-lift` to the command. The adapter passes the admitted nodes and integer edge endpoints to the native provider. Each level-one node represents an admitted transition. Two such nodes are adjacent if their transitions share an endpoint. The local receipt maps each edge back to its observation and binds the input topology to a SHA-256 digest. It preserves the search status and any native pair-cap cutoff. Shared endpoints describe incidence. The search retains the original directions and decides reachability.
+
 ## Read a search result
 
 `search_relations` records the observed relations, proposed crossings, decisions and parents of admitted nodes. Exact equal endpoints merge. Multiple ways to reach one depth can establish a unique value while leaving its route ambiguous. The reported path count saturates at two. The search returns `found` for a completely checked unique depth, `ambiguous` for two or more accepted terminal depths, `exhausted` when a complete search finds none, and `inconclusive` when unresolved evidence or an execution limit prevents a conclusion. These conclusions apply to the supplied candidates and relations.
@@ -39,3 +43,7 @@ The pilot started at each well's last visible depth and traversed its first eigh
 | Two radius thresholds | 7 | 1 | 2 | 2 | 1.0830 |
 
 RMSE includes one terminal station per well, with last visible TVT as the prespecified fallback. The two depths resolved by the Julia overlay both equaled the heel depth. Its 135 checked transitions included 36 joint accepts, 97 vetoes and two unresolved outcomes. The radius control's gain came from one correct directional change. The pilot provides evidence for retaining the shared graph and per-map trace. The hard Julia veto showed no placement improvement in this experiment. Full-toe development scores use a different evaluation scope. [Full-toe comparisons](MASTER_ITERATION.md)
+
+Replaying both rules on **all 792 possible transitions**, including ones pruned early, located their difference. The geometry Julia map matched its radius control on all 792. The GR Julia map rejected 218 edges its radius control accepted, accepted 14 the control rejected and left one additional edge unresolved. This comparison holds the proposed transitions fixed across methods.
+
+All 60 retained search graphs also replayed through the native lift. On one well, the unfiltered search had 25 nodes and 66 edges. The next native level had 66 relation nodes and 300 shared-endpoint pairs. The joint Julia search on that well had nine nodes and eight edges in a single path. Its next level contained eight relation nodes with seven shared-endpoint pairs.
