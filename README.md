@@ -4,7 +4,7 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Validation status:** historical OOF scores below and in linked documents require remeasurement. Spatial donors previously preferred full training `TVT` before the well-group split. The corrected default uses observed `TVT_input` only and supports unseen target geometry. Historical scores do not validate the corrected pipeline or the new Network Engine diagnostics; no predictive gain is claimed for this integration.
 
-**Current development evidence.** Two Julia maps scoring the same candidate-depth transitions gave **11.506689 ft RMSE**. The conventional graph on the same states, transitions and learner scored **11.643708 ft**. The Julia overlay improved all three folds and 331 of 619 wells against that control. Against the **11.581639 ft** directional geology model, it improved two folds and 328 wells. These scores cover 3,034,427 development toe stations. The 154 confirmation wells remain reserved. [Measurements and controls](docs/MASTER_ITERATION.md)
+**Current development evidence.** Projecting structural height from each well's visible heel reduced TVT error from 11.581639 to **11.358078 ft RMSE**. In a separate matched comparison, two Julia maps scoring candidate-depth transitions gave **11.506689 ft** against **11.643708 ft** for the conventional graph. Both improvements held across all three folds. These scores cover 619 development wells and 3,034,427 toe stations. The 154 confirmation wells remain reserved. [Measurements and controls](docs/MASTER_ITERATION.md)
 
 | Abstraction mode | Role |
 |------------------|------|

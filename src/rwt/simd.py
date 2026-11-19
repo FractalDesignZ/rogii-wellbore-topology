@@ -2,8 +2,8 @@
 CPU instruction-set awareness + AVX-friendly array contracts.
 
 Python cannot emit raw AVX opcodes in pure Python, but our hot paths go through
-NumPy/OpenBLAS which already use DYNAMIC_ARCH kernels (this machine: OpenBLAS
-Haswell → AVX2). This module:
+NumPy and its configured BLAS backend, which select supported ISA kernels.
+This module:
 
   1. Reports available ISA flags (best-effort on Windows)
   2. Forces C-contiguous float64 views (SIMD-friendly strides)
@@ -16,8 +16,9 @@ from __future__ import annotations
 import os
 import platform
 import struct
-import sys
+from collections.abc import Mapping
 from functools import lru_cache
+from importlib import import_module
 from typing import Any
 
 import numpy as np
@@ -28,9 +29,52 @@ if "OMP_NUM_THREADS" not in os.environ:
     pass
 
 
+def _numpy_cpu_info() -> Any:
+    """Locate runtime dispatch metadata in NumPy 2.x or 1.x, respectively."""
+    for name in ("numpy._core._multiarray_umath", "numpy.core._multiarray_umath"):
+        try:
+            core = import_module(name)
+            if isinstance(getattr(core, "__cpu_features__", None), Mapping):
+                return core
+        except Exception:
+            continue
+    # Some alternate builds expose this metadata at the top level.
+    return np
+
+
+def _numpy_blas_backend() -> str:
+    """Read selected build dependencies, never infer a backend from importability."""
+    try:
+        cfg = import_module("numpy.__config__")
+        config = getattr(cfg, "CONFIG", {})
+        if isinstance(config, Mapping):
+            dependencies = config.get("Build Dependencies", {})
+            blas = dependencies.get("blas", {}) if isinstance(dependencies, Mapping) else {}
+            if isinstance(blas, Mapping) and blas.get("found", True):
+                name = blas.get("name")
+                if isinstance(name, str) and name.strip():
+                    return name.strip()
+        # NumPy 1.24 distutils builds expose selected BLAS libraries via get_info.
+        get_info = getattr(cfg, "get_info", None)
+        if callable(get_info):
+            for key in ("blas_ilp64_opt_info", "blas_opt_info"):
+                info = get_info(key)
+                if not isinstance(info, Mapping) or not info:
+                    continue
+                libraries = [str(value) for value in info.get("libraries", [])]
+                if any("openblas" in value.lower() for value in libraries):
+                    return "openblas"
+                if any("mkl" in value.lower() for value in libraries):
+                    return "mkl"
+                return ", ".join(libraries) or "unknown"
+    except Exception:
+        pass
+    return "unknown"
+
+
 @lru_cache(maxsize=1)
 def cpu_feature_report() -> dict[str, Any]:
-    """Best-effort CPU feature map (Windows-safe)."""
+    """Best-effort NumPy runtime CPU flags and configured BLAS (Windows-safe)."""
     machine = platform.machine().upper()
     report: dict[str, Any] = {
         "arch": platform.machine(),
@@ -39,19 +83,20 @@ def cpu_feature_report() -> dict[str, Any]:
         "numpy_version": np.__version__,
         "simd": {},
         "blas_hint": (
-            "NumPy ufuncs + OpenBLAS matmul use ISA kernels automatically "
-            "(x86: SSE/AVX/AVX2/AVX-512 via DYNAMIC_ARCH; ARM64: NEON/ASIMD)"
+            "NumPy ufuncs and the configured BLAS backend select supported ISA kernels; "
+            "build dispatch targets do not imply runtime CPU support"
         ),
     }
-    if "ARM" in machine or "AARCH" in machine:
-        report["simd"]["NEON_ASIMD"] = True  # universal on aarch64 userland
+    if machine in {"ARM", "ARM64", "AARCH64"} or machine.startswith("ARMV"):
         report["simd_family"] = "ARM"
-    else:
+    elif machine in {"X86", "X86_64", "AMD64", "I386", "I486", "I586", "I686"}:
         report["simd_family"] = "x86"
-    # NumPy 2.x exposes CPU features via __cpu_features__ / __cpu_baseline__
+    else:
+        report["simd_family"] = "unknown"
     try:
-        feats = getattr(np, "__cpu_features__", None) or {}
-        if isinstance(feats, dict) and feats:
+        core = _numpy_cpu_info()
+        feats = getattr(core, "__cpu_features__", None) or {}
+        if isinstance(feats, Mapping) and feats:
             keys = (
                 "SSE",
                 "SSE2",
@@ -75,8 +120,10 @@ def cpu_feature_report() -> dict[str, Any]:
             for k, v in feats.items():
                 if v and k not in report["simd"]:
                     report["simd"][k] = True
-        baseline = getattr(np, "__cpu_baseline__", None)
-        dispatch = getattr(np, "__cpu_dispatch__", None)
+            if report["simd_family"] == "ARM" and (feats.get("NEON") or feats.get("ASIMD")):
+                report["simd"]["NEON_ASIMD"] = True
+        baseline = getattr(core, "__cpu_baseline__", None)
+        dispatch = getattr(core, "__cpu_dispatch__", None)
         if baseline is not None:
             report["numpy_cpu_baseline"] = list(baseline) if baseline else []
         if dispatch is not None:
@@ -84,13 +131,8 @@ def cpu_feature_report() -> dict[str, Any]:
     except Exception as e:
         report["simd_error"] = str(e)[:200]
 
-    try:
-        import numpy.__config__ as cfg  # type: ignore
-
-        # string dump is heavy; keep a short flag
-        report["openblas"] = True
-    except Exception:
-        report["openblas"] = False
+    report["blas_backend"] = _numpy_blas_backend()
+    report["openblas"] = "openblas" in report["blas_backend"].lower()
 
     report["numba"] = False
     try:

@@ -20,6 +20,20 @@ The example starts at 1,000 ft with two synthetic observations of depth change. 
 
 The script also prints the iteration at which each map accepted or rejected each transition. Iterations count applications of the map. Survey stations advance in measured-depth order.
 
+When an observation-based model supplies a desired depth at every station, `rwt.offset_path.select_offset_path` finds the reachable trajectory with the smallest weighted squared error to those depths. Each station has the same increasing list of offsets around its own center. A path may stay in the current bin or move one bin at each step. Run it once per well in measured-depth order.
+
+```python
+from rwt.offset_path import select_offset_path
+
+indices = select_offset_path(
+    center_ft=[1000, 1002, 1004],
+    offsets_ft=[-5, 0, 5],
+    desired_ft=[995, 1007, 1009],
+    row_weights=[8, 8, 3],
+)
+# indices [0, 1, 2] select depths [995, 1002, 1009].
+```
+
 Add `--phase-stack` for a second constructed example with 30 possible depths. Three sensors report phase at periods of 2, 3 and 5 ft. Each phase constrains a different set of depths. Applying the three maps in order leaves 15, then five, then one candidate at **1,017 ft**. Repeating the first reading three times leaves 15. The measured periods and exact phases make this a controlled example of resolving aliases.
 
 With the separately installed Network Engine, add `--native-lift` to the command. The adapter passes the admitted nodes and integer edge endpoints to the native provider. Each level-one node represents an admitted transition. Two such nodes are adjacent if their transitions share an endpoint. The local receipt maps each edge back to its observation and binds the input topology to a SHA-256 digest. It preserves the search status and any native pair-cap cutoff. Shared endpoints describe incidence. The search retains the original directions and decides reachability.
