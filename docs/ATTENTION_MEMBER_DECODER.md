@@ -4,7 +4,7 @@ This first-party experiment tests the user's proposed meta → discrete → meta
 
 ## Representation and learned map
 
-Each original member/well case retains 32-MD-ft GR bins inside physical 512-MD-ft sections. Inputs include measured GR and differences, surveyed XYZ and MD, row ranges and valid counts, original member TVT, and candidate reference-GR charts, residuals and differences. Separate masks preserve missing measurements and references. The 334 existing section-context channels and heel-calibration givens accompany these local observations. TRAIN-only finite population moments scale the channels; standardized values are clipped at ±8. Raw originals and source identities remain in the local corpus.
+Each original member/well case retains 32-MD-ft GR bins inside physical 512-MD-ft sections. Inputs include measured GR and differences, surveyed XYZ and MD, row ranges and valid counts, original member TVT, and candidate reference-GR charts, residuals and differences. Separate masks preserve missing measurements and references. Section context comprises 274 first-party pooled channels, 32 recorded forward-survey channels and 28 original-member/trajectory channels, plus heel-calibration givens. TRAIN-only finite population moments scale the channels; standardized values are clipped at ±8. Raw originals and source identities remain in the local corpus.
 
 The 25 candidates are endpoint pairs `(u,v)` from `{−64,−32,0,32,64}²`, in actual feet. Four attention heads with 32 total dimensions let each candidate read its own physical-bin relationships. The reverse pass lets each bin read all 25 propagated candidate states. A second forward read and a chronological section GRU produce 25 logits. Their softmax barycenter returns two continuous endpoint shifts. A zero-initialized output head gives exactly zero displacement initially. An always-valid geometry token keeps fully missing GR sections finite.
 
@@ -60,7 +60,7 @@ Local identities:
 - All-arm query seal: `fa2b6b3930370cd99a2845b8948ebbb6c597e140c50a94e7e9bd575ddab9549d`.
 - Independent checkpoint audit: `83252ae9fc978e6d53491cfbe0fd0d8d4d77634a2a2d849c3c86fbe3129639a2`.
 
-## Native field outcome
+## Eight-pass native field outcome
 
 All 619 development wells and 3,034,427 native stations remain in every score. All six complete forecasts and five stages were sealed before the field evaluator opened targets. The fixed gate required the primary to beat the incumbent and each learned control, pooled and in at least two of three folds.
 
@@ -92,6 +92,54 @@ After neural output sealing, a separate calculation minimized each BANK case's n
 | Original uncorrected 308 members | 12.322270 |
 | Fitted two-way | 11.365080 |
 | Fitted one-way | 11.016476 |
+| Target-informed best of the 25 hard states | 7.453556 |
 | Target-informed bounded endpoint optimum | 4.868561 |
 
 The three fold bounds are 4.875, 4.654 and 5.068 ft. Only nine of 1,238 unconstrained optima exceeded the box; each constrained optimum lay on one edge. Amplitude bounds therefore explain little of the BANK gap. Identifying the shifts from transferable observations, network capacity and optimization remain joint possibilities. The calculation cannot attribute that gap solely to epochs. These BANK scores cover 6,068,854 repeated-role station appearances and do not share the final field forecast definition or establish an external rank. Local diagnostic root `9fcc1dcdbec4d837a1a942e9d91b00a35b9d75e9c5bbb4deffcfc2ec8d1e34c5`.
+
+A separate exact lattice check found that choosing the best of the 25 actual states with each case's targets captures 75.14% of the continuous box's possible SSE reduction. Its fold scores were 7.502320, 7.266446 and 7.588197 ft. Zero was the best hard state in 756/1,238 cases. Choosing the Euclidean-nearest endpoint state instead scored 7.865637 ft and differed from the native-SSE optimum in 170 cases: endpoint distance alone does not preserve the survey-weighted objective. The network's continuous barycenter is not restricted to a hard state, so 7.453556 ft is not its error floor. This calculation does not establish whether more densely sampled GR charts would improve prediction. Local lattice root `923246317beb3508beb91401e3020d49195ad802ec3c6696d7167e08db7f546d`.
+
+## Fixed continuation to 64 passes
+
+The eight-pass development result and BANK representation gap motivated one longer-budget follow-up. Each exact eight-pass model and its AdamW state continued for 56 complete additional passes, with no reset: 2,912 new updates and 3,328 cumulative per model. All arms, roles, input scalers, loss, architecture, seed/shuffle sequence and optimizer settings remained fixed. Every loaded parameter and optimizer moment matched its authenticated parent; the original fixed BANK loss replayed exactly. Continuing the original sampler preserved the complete treatment order. This is a checkpoint continuation, with no claim about independently refitting the same GPU trajectory.
+
+All twelve final fits were sealed before any new numerical query inference. Checkpoints at 16 and 32 passes supplied TRAIN diagnostics only; the fixed 64-pass checkpoint alone entered the final query comparison. The study deliberately reused development wells and outcomes to choose this follow-up. It supplies no independent validation claim.
+
+| BANK arm | 8 passes | 16 passes | 32 passes | 64 passes |
+| --- | ---: | ---: | ---: | ---: |
+| Two-way | 11.365080 | 10.281940 | 7.582410 | 5.456911 |
+| One-way | 11.016476 | 9.665998 | 6.879111 | 5.477721 |
+| Misregistered GR | 11.518103 | 10.515160 | 7.793385 | 5.663449 |
+| Context only | 12.074779 | 10.878718 | 9.251067 | 6.617853 |
+
+These are fixed-checkpoint native RMSEs in feet, pooled by original station counts over the same 6,068,854 BANK appearances. The zero and target-informed continuous-box references remain 12.322270 and 4.868561 ft. More optimization materially changed fitting error; these numbers alone do not establish transferred predictive merit.
+
+The twelve continuations performed 34,944 additional updates in 523.98 seconds of measured fit/evaluation work. All 17 bounded workers, including final seal and query replay, totalled 615.16 seconds. Peak PyTorch allocation was 257.36 MiB. Independent GPU evaluation reproduced all 48 original/intermediate/final BANK endpoint hashes and losses, plus all 7,428 final query endpoint pairs exactly. The optimizer audit checked all 4,896 step/moment tensors for the 48 retained states. The public forecasting source remains unchanged.
+
+- Continuation contract: `46d4711a4566fb424bd890e05f43ea02e885fda06d0967e3a961270f65104531`.
+- Training root: `256f6f0a89477ac7b44975c822eddb0a8ddaf2db9790c5aeff88a5b43de3d205`.
+- Final-only query seal: `3f356f02044dcc16857162d80507ddd6cac4c64aa23493438e81c37c7acc4f93`.
+- Independent training audit: `71a57a76cd5f24713f97afdae3160a83f64169f84a3b38a2fdcdbac5ce8211f3`.
+
+### Continued model's native field outcome
+
+| Readout | Fixed blend | Registered | Ordinal | Added self-GR | Final TRAIN-conditioned |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Incumbent coherent decoder | 10.477118 | 10.234576 | 9.997405 | 9.994968 | **9.988991** |
+| Zero member correction | 10.648607 | 10.433145 | 10.214733 | 10.212335 | 10.207287 |
+| Two-way primary, 64 passes | 10.736870 | 10.223702 | 10.010565 | 10.006977 | 10.003207 |
+| One-way comparator, 64 passes | 10.707272 | 10.206084 | 10.025890 | 10.022935 | 10.016448 |
+| Misregistered GR, 64 passes | 10.931993 | 10.416102 | 10.210515 | 10.208444 | 10.201727 |
+| Context only, 64 passes | 10.982850 | 10.451833 | 10.262600 | 10.260618 | 10.256320 |
+
+Two-way's final error was **+0.014216 ft** against the incumbent, paired 95% interval **−0.199266 to +0.247846 ft**. It won two folds, but pooled error was worse, so the fixed admission gate failed. Its final fold scores were 9.476920, 9.713291 and 10.771775 ft, versus incumbent 9.253748, 9.747948 and 10.894236 ft.
+
+Two-way beat one-way by 0.013240 ft pooled and in two folds, with interval −0.216913 to +0.179569 ft. It beat misregistered GR and context-only in all three folds, by 0.198520 and 0.253113 ft pooled. Those intervals were −0.379816 to −0.008578 ft and −0.484126 to −0.009584 ft. This reverses the eight-pass architecture ordering within this fixed experiment, while the broad intervals limit the conclusion. The additional passes' same-arm final change was −0.055958 ft for two-way, interval −0.271867 to +0.180703 ft; one-way, misregistered GR and context-only worsened by 0.049646, 0.082692 and 0.079598 ft respectively. These are descriptive budget comparisons, without selecting an epoch from held outcomes.
+
+On the original 416-well support stratum, two-way scored 10.016544 ft versus incumbent 9.853287 ft. On the other 203 wells it scored 9.975522 versus 10.264410 ft. This motivates a separate calibration problem; using those held results to assemble a hybrid would not pass this protocol. The largest absolute query endpoint coordinate was 59.057578 ft across all 14,856 coordinates, leaving 4.942422 ft to the ±64-ft boundary. No endpoint-limit relaxation or intermediate-checkpoint substitution followed the score.
+
+Independent audits recovered all native errors, fold/stratum groupings and 4,000-draw whole-well bootstrap intervals. They rehashed 1,272 unique ancestors, including the 915-leaf continued-training provenance link. Final field worker time totalled 106.94 seconds, separate from neural continuation time. The retained route remains **9.988991 ft**, and all 154 confirmation wells remain sealed. These results demonstrate fitting and predictive behavior of this architecture at two declared budgets; they establish no universal result about transformers or the user's broader Network Engine construction.
+
+- Reviewed native seal: `46176c078353f468342899bd23e8f1845e1ca43aa665f3bc199d756d3d95b015`.
+- Final field verification: `c5d91cfd3f33600592467ed3ae8632b9fc7f1ca578e26811a2fd5f80c78aa1dd`.
+- Independent native score audit: `b3f3ceda05645c8d68426d51f5871ca35816e2911da7daf0038dabc46e60c07f`.

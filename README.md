@@ -18,7 +18,7 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Broader model checks.** Seven further comparisons tested learner capacity/family, continuous leaves, physical target coordinates, donor innovations, GR calibration and decoder execution. None passed its complete final-error gate. [Matched results and scopes](docs/LEARNER_AND_RELATION_CHECKS.md)
 
-**Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay. Two-way attention beat GR-map ablations but failed its final error gate; the current 9.988991-ft development route remains retained. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
+**Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay at eight passes and after fixed continuation to 64. The continued two-way model beat all learned controls but missed the incumbent pooled score; the current 9.988991-ft development route remains retained. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
 
 | Abstraction mode | Role |
 |------------------|------|
