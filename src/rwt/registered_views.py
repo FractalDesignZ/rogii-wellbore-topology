@@ -164,6 +164,79 @@ def extract_color_trace(
     return {"candidate_pixels": pixels, "image_dimensions_xy": [width, height], "roi_xyxy": list(roi), "color_rgb": list(color), "color_tolerance": int(tolerance), "image_sha256": hashlib.sha256(image_bytes).hexdigest(), "candidate_order": "unordered raster support; no station correspondence claimed"}
 
 
+def compare_registered_path(
+    projected_xy: np.ndarray,
+    candidate_pixels: np.ndarray,
+    roi: tuple[int, int, int, int],
+    *,
+    radius_px: float,
+    exclude_rois: tuple[tuple[int, int, int, int], ...] = (),
+) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    """Measure spatial agreement in both directions, keeping every station row.
+
+    The indices refer to the original station and pixel array rows. Several
+    observations can share a nearest neighbour. Distances describe the raster
+    rendering at its original resolution.
+    """
+    from scipy.spatial import cKDTree
+
+    station = np.asarray(projected_xy, dtype=float)
+    pixel = np.asarray(candidate_pixels)
+    if station.ndim != 2 or station.shape[1] != 2 or not len(station):
+        raise ValueError("Projected stations must be a nonempty N by 2 array")
+    if pixel.ndim != 2 or pixel.shape[1] != 2 or not np.issubdtype(pixel.dtype, np.integer):
+        raise ValueError("Candidate pixels must be an integer N by 2 array")
+    if not np.isfinite(radius_px) or radius_px <= 0:
+        raise ValueError("Path agreement radius must be finite and positive")
+
+    def in_box(xy, box):
+        x0, y0, x1, y1 = box
+        return ((x0 <= xy[:, 0]) & (xy[:, 0] < x1)
+                & (y0 <= xy[:, 1]) & (xy[:, 1] < y1))
+
+    x0, y0, x1, y1 = roi
+    if x0 >= x1 or y0 >= y1 or not in_box(pixel, roi).all():
+        raise ValueError("Candidate pixels must lie inside the declared path ROI")
+    retained = np.ones(len(pixel), dtype=bool)
+    for box in exclude_rois:
+        a, b, c, d = box
+        if not (x0 <= a < c <= x1 and y0 <= b < d <= y1):
+            raise ValueError("Excluded rectangles must be contained in the declared path ROI")
+        retained &= ~in_box(pixel, box)
+
+    stations = np.flatnonzero(np.isfinite(station).all(axis=1))
+    pixels = np.flatnonzero(retained)
+    station_dist = np.full(len(station), np.nan)
+    pixel_dist = np.full(len(pixel), np.nan)
+    nearest_pixel = np.full(len(station), -1, dtype=np.int64)
+    nearest_station = np.full(len(pixel), -1, dtype=np.int64)
+    if len(stations) and len(pixels):
+        distances, indices = cKDTree(pixel[pixels]).query(station[stations])
+        station_dist[stations], nearest_pixel[stations] = distances, pixels[indices]
+        distances, indices = cKDTree(station[stations]).query(pixel[pixels])
+        pixel_dist[pixels], nearest_station[pixels] = distances, stations[indices]
+
+    def summary(distances):
+        finite = distances[np.isfinite(distances)]
+        return {
+            "total": len(distances), "measured": len(finite),
+            "fraction_within_radius": float(np.sum(finite <= radius_px) / len(distances)) if len(distances) else None,
+            "median_measured_px": float(np.median(finite)) if len(finite) else None,
+            "p95_measured_px": float(np.percentile(finite, 95)) if len(finite) else None,
+        }
+
+    arrays = {"station_to_pixel_distance_px": station_dist, "nearest_candidate_row": nearest_pixel,
+              "pixel_to_station_distance_px": pixel_dist, "nearest_station_row": nearest_station,
+              "retained_candidate_mask": retained}
+    report = {
+        "radius_px": float(radius_px), "excluded_rois_xyxy": [list(box) for box in exclude_rois],
+        "excluded_pixel_count": int((~retained).sum()), "stations_with_finite_projection": len(stations),
+        "projected_stations_inside_path_roi": int(in_box(station, roi).sum()),
+        "stations_to_retained_pixels": summary(station_dist), "retained_pixels_to_stations": summary(pixel_dist[pixels]),
+    }
+    return arrays, report
+
+
 def allowed_measurements(lateral: Any) -> dict[str, np.ndarray]:
     """Select allowed channels, decoding GR nulls and preserving finite XYZ/MD.
 

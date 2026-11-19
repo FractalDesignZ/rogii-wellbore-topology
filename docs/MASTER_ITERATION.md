@@ -105,6 +105,14 @@ The frozen primary gate required carried state to reduce pooled SSE versus **bot
 
 The label-blind transform took 19.08 seconds; nine fits totaled 343.37 seconds and the separate audit took 25.36 seconds. Maximum measured fit RSS was 1.65 GB; audit RSS was not instrumented. Neither the hybrid nor the recurrence experiment chose its base or settings from its later score. The initial context controller failed on an import path before label parsing or fitting; a corrected fresh attempt retained identical feature bytes and preserved the failure.
 
+### Transporting local layer changes between wells
+
+The strongest checked development model scores **11.581639 ft**. It adds 12 directional geology features to the 14.534777 ft context and graph model. All three folds improve on the same 3,034,427 stations, with 438 well improvements and 181 regressions. The pooled reduction in squared error is 234,031,299.66 ft². The fixed half-sequence blend scores 12.126157 ft, up from the directional model's error and down from the previous blend's 14.150791 ft.
+
+For a training donor, let layer height be `S = TVT + Z`. Two positions along that well give a height change and a horizontal displacement. A constant vertical datum offset cancels in the difference. Nearby donor directions constrain a local horizontal gradient, which is projected along a query step and integrated from the query's visible heel. Nearly parallel donor paths give little evidence about the transverse gradient. The model receives the donor count, alignment and directional balance alongside the estimated change.
+
+Each outer fold rebuilds these features for fitting and validation using that fold's training donors. Every query excludes its own well. The grouped splits, model recipe, row weights and original station keys match the comparator. All three saved models reproduced their predictions. Five bounded test, fit and audit processes took 125.35 seconds in total. The 154 confirmation wells remain reserved.
+
 The first pilot runs used the earlier coordinate-null convention. Intake review then found a valid smooth Z crossing through `-9999.25` that had been mistaken for a LAS null. The corrected reader preserves finite coordinates unless their source declares a null code. Fresh attempts retain the old runs unchanged and use stronger station-key/fold audits. The two selectors formerly scored 10.997149 ft with an incomplete path library; repaired path availability changes both to 11.030914 ft. This is an ingestion/library effect, not a native gain.
 
 ## Image-to-table relationships

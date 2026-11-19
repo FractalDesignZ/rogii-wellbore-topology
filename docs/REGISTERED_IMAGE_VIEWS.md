@@ -34,6 +34,10 @@ One supplied development figure was calibrated using 42 axis-grid/tick controls,
 
 The primary path score retains all stations. The red marker occludes 199 stations and explains the largest distance tail. A separate diagnostic excluding colored overlays retains 6,710 stations, all within 0.704 pixels. The legend's 1,034 blue pixels were excluded from path extraction.
 
+To replay the distance measurement, run `scripts/inspect_registered_views.py` with a control file containing `world` and `pixels` arrays. Add `--check-path-radius-px 5` and an `--exclude-path-roi X0 Y0 X1 Y1` for each legend or annotation to mask. The command saves the distance and original nearest-neighbour index in each direction. The station denominator includes missing projections and stations outside the crop. The reverse denominator counts pixels retained after the declared exclusions.
+
+For the development rendering above, 97.45% of 6,972 stations lie within five pixels of the blue trace. In the reverse direction, 84.29% of the 34,329 retained blue pixels lie within five pixels of a projected station. These are different questions. Line thickness and additional ink affect pixel coverage even when the trajectory follows the line.
+
 This validates registration between the table and its supplied rendering. It does not establish an independent sensor measurement, image-only 3D recovery, or an improvement in TVT prediction. Controls, hashes, arrays and the full local report remain in ignored experiment artifacts.
 
 ## Observation boundaries

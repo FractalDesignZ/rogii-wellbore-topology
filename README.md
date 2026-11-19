@@ -4,7 +4,7 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Validation status:** historical OOF scores below and in linked documents require remeasurement. Spatial donors previously preferred full training `TVT` before the well-group split. The corrected default uses observed `TVT_input` only and supports unseen target geometry. Historical scores do not validate the corrected pipeline or the new Network Engine diagnostics; no predictive gain is claimed for this integration.
 
-**Current development evidence:** a new standard 92-feature baseline scores **14.812938 ft**, versus last-known **15.993630 ft**, on all 3,034,427 toe rows of 619 development wells. A matched context-plus-graph model scores **14.534777 ft**. Its fixed 50/50 sequence blend reaches **14.150791 ft**; the tiny gain over the prior **14.157296 ft** blend occurs in one fold, with two folds regressing. These are grouped-OOF research results, with 154 confirmation wells still reserved. See the [master iteration](docs/MASTER_ITERATION.md) for matched controls, negative Julia results and scope.
+**Current development evidence.** Transferring local layer-height changes from training wells brings the context and graph model from **14.534777 ft** to **11.581639 ft RMSE**. All three folds improve, and 438 of 619 development wells improve. The comparison covers all 3,034,427 toe stations. The 154 confirmation wells remain reserved. [Measurements and controls](docs/MASTER_ITERATION.md)
 
 | Abstraction mode | Role |
 |------------------|------|

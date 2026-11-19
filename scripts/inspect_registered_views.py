@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rwt.provenance import write_sealed_json  # noqa: E402
 from rwt.registered_views import (  # noqa: E402
-    allowed_measurements, endpoint_azimuth, extract_color_trace, fit_affine,
+    allowed_measurements, compare_registered_path, endpoint_azimuth, extract_color_trace, fit_affine,
     project_trajectory, region_metadata,
 )
 
@@ -31,8 +31,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--color-tolerance", type=int, default=40)
     parser.add_argument("--control-points", type=Path, help="JSON object with world:[[u,Z],...] and pixels:[[x,y],...]")
     parser.add_argument("--max-control-residual-px", type=float)
+    parser.add_argument("--check-path-radius-px", type=float, help="Measure path and pixel coverage within this radius after registration")
+    parser.add_argument("--exclude-path-roi", type=int, nargs=4, action="append", default=[],
+                        metavar=("X0", "Y0", "X1", "Y1"), help="Exclude a legend or other off-path pixels from the distance check")
     parser.add_argument("--out", type=Path, required=True, help="fresh artifact directory")
     args = parser.parse_args(argv)
+    if args.check_path_radius_px is not None and args.control_points is None:
+        parser.error("--check-path-radius-px requires --control-points")
+    if args.exclude_path_roi and args.check_path_radius_px is None:
+        parser.error("--exclude-path-roi requires --check-path-radius-px")
     if args.out.exists():
         raise FileExistsError(args.out)
     frame = pd.read_csv(args.lateral, usecols=lambda column: column in {"MD", "X", "Y", "Z", "GR"})
@@ -76,6 +83,12 @@ def main(argv: list[str] | None = None) -> int:
         "control_points_sha256": control_hash,
         "note": "Candidate pixel support has no station ordering or inferred target TVT; paired truth panels are not conditioning inputs.",
     }
+    if args.check_path_radius_px is not None:
+        distances, evidence["path_agreement"] = compare_registered_path(
+            numerical["projected_station_pixels"], numerical["candidate_pixels"], tuple(args.path_roi),
+            radius_px=args.check_path_radius_px, exclude_rois=tuple(map(tuple, args.exclude_path_roi)),
+        )
+        numerical.update(distances)
     args.out.mkdir(parents=True, exist_ok=False)
     array_path = args.out / "registered_view_arrays.npz"
     np.savez_compressed(array_path, **numerical)
