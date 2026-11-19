@@ -45,12 +45,14 @@ The charts illustrate constructions in another domain. Their plotted returns and
 
 ## The six supplied method references
 
+The process and control cross-reference now binds these concepts to actual Python definitions and checks. It also identifies the proposed persistent-identity and nested-selector components. A verifier resolves the links to source hashes and AST node IDs. [Process graph and verifiable cross-reference](METHOD_REFERENCE_GRAPH.md)
+
 Page numbers below count PDF pages starting at one. These references supply vocabulary, assumptions and evaluation questions. Candidate designs and implementations follow the [first-party design rule](../AGENTS.md).
 
 | Supplied reference | Connection and limit |
 | --- | --- |
 | Alex L. Zhang, Tim Kraska and Omar Khattab, *Recursive Language Models*, pp. 2, 4–8 | Its Figure 2 separates the addressable source from the working context. It evaluates the cost of accessing and subdividing large prompts, including subcalls. For a well, the comparable quantities are the windows read, revisits, work per crossing and total latency. The paper studies language-model inference. |
-| soulmachine, *Machine Learning Cheat Sheet*, pp. 17–18, 57–60, 71–74 | Separates representation, evaluation and optimization. A tree, a regression model and a graph can receive data with the same observation roles and be scored on identical rows. Conditional dependence matters when two representations share a measurement. |
+| soulmachine, *Machine Learning Cheat Sheet*, pp. 17–18, 57–59, 71–73 | Separates representation, evaluation and optimization. A tree, a regression model and a graph can receive data with the same observation roles and be scored on identical rows. Conditional dependence matters when two representations share a measurement. |
 | Yuri Gardinazzi and colleagues, *Persistent Topological Features in Large Language Models*, pp. 3–7 | Connects the same sample identities across model layers. Intersections of neighboring complexes allow births and deaths of components and cycles to be tracked in both directions. A surviving route, a single triangle discrepancy and a topological persistence interval are three different observables. The paper measures language-model representations. |
 | Muhammad Bilal Alam, *Classifier Series – Decision Trees*, pp. 1, 6–9 | A split routes a sample to a leaf and can expose an interpretable conditional decision. Feature importance ranks contributions in a fitted classifier. It supplies neither a physical boundary nor the TVT regression metric. The two evaluation summaries on pp. 8 and 9 give different numerical results for the example. |
 | Philipp Christian Petersen, *Mathematics of Machine Learning*, pp. 46–55, 75–89, 94–116 | Model selection, regression loss, regularization, kernels, neighbors, neural networks, boosting and graph diffusion offer distinct ways of representing or fitting relationships. On a depth graph, the measurement metric, edge admissibility and predictive loss must each be specified. A well-level split tests transfer to different wells. |

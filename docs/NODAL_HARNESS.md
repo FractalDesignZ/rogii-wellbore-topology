@@ -104,6 +104,8 @@ Process wall times were 63.66 seconds for shared preparation, 2.58 for graph exp
 
 ## What each record establishes
 
+The six supplied mathematical and ML references have a separate concept-to-source graph. Its verifier resolves cited concepts to operator definitions and checks against the current source and AST. This records reference use alongside the execution and numerical evidence below. [Process and control cross-reference](METHOD_REFERENCE_GRAPH.md)
+
 The controller follows the user-designated Mission Lab pattern of a structured specification, operator dependencies, bounded workers, receipts, verification and a separate merit decision. The public RWT implementation uses its own scientific operators and process launcher. [Mission Lab design reference at `dfdf8b7`](https://github.com/ZuluYokohama/mission-lab/tree/dfdf8b7dded59f06d0fc2bc581a9292de305e977)
 
 ```mermaid

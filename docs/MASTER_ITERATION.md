@@ -440,3 +440,21 @@ The sequence test retained each section's native ID and the distribution losses 
 Evidence order met its separately frozen pooled-error and fold gate. It improved all three folds against physical order, with a paired 95% interval of −0.0075 to −0.0004 ft. It improved two folds against the additive baseline, with a paired interval of −0.0125 to +0.0048 ft. The physical-order primary missed its gate. The evidence order moved 3,501 section positions within the observed runs. The independent audit reproduced all five results on 619 development wells and all 3,034,427 original toe stations. Local metrics SHA-256 `d36fad0674f484ddfe743e5ac9b6556f28385ddb0467191fc02fc50f5ea9d2d9`.
 
 A bounded inference replay bound the source graph and AST, re-read the 1,238 authorized lateral and reference files, and reproduced every ordered section list and native forecast hash. It selected lateral MD, GR and `TVT_input` and paired typewell TVT and GR, with zero held lateral target reads. Local replay evidence root `fee098c4a10036a62d0de7c52a6cd6b282890f48cafdf58a651a97f3a5b7f32e`.
+
+### Training the strength and schedule of evidence
+
+Three further frozen comparisons covered the same 619 wells and 3,034,427 original toe stations.
+
+| Candidate | RMSE (ft) | Matched finding |
+| --- | ---: | --- |
+| Four-knot path with adaptive evidence traversal | 10.072117 | Its four-knot additive control scored 10.071660. The prior merit path scored 10.027222. |
+| Signed visible-heel activity calibration | 10.034288 | Shuffling the calibration signs scored 10.032844. The additive incumbent scored 10.030446. |
+| Phase-specific member gains learned inside training folds | 10.025714 | One fold improved against fixed gains at 10.030446. The shuffled-target gain control scored 10.239519. |
+
+All three candidates missed their prespecified gates. The adaptive traversal changed 3,248 section positions relative to measured depth. Expanding the path to four independently varying knots also worsened its additive control. The visible-heel calibration improved a reserved artificial-shift sign assay on 174 wells from 62.64% to 66.09% accuracy. The ordered-only control had the best sign assay and the worst real-toe error at 10.057990 ft. This test exposed a transfer gap between recovering imposed heel errors and predicting hidden geology.
+
+The gain study generated a second level of well-disjoint decoder predictions within each original member's held training bank. Those predictions calibrated early/late coherent and local gains before refitting on the outer training bank. Its paired 95% interval against the fixed affine model was −0.077 to +0.053 ft. The full decoder refits reproduced their original model and median files byte-for-byte. A score adapter initially addressed the wrong stored comparator column and stopped before scoring. A separate no-refit closure authenticated the original sealed forecasts and corrected the column mapping. Local closure evidence root `d856fd1317e017346dd165939e7565c93d3a7049fb4cd7b8c87bc7b9b8bc5a53`.
+
+The signed calibration run retained source, AST, process and original-row audit evidence at root `ff769aaa0c884a26306bc152ea9cd1efa1c6193031b2ad3f907177f864e5c45c`. The four-knot metrics have SHA-256 `f65087f44253884757226ae1ed0afb126a1d755eda496d64b841ca59a53731c4`. The 154 confirmation wells remain sealed.
+
+The supplied mathematics and ML references now have a process/control cross-reference with six authenticated document identities, eight concepts and 47 links to source, AST definitions and checks. It identifies persistent component tracking and a general nested operator selector as proposed components. [Reference graph and next discriminating checks](METHOD_REFERENCE_GRAPH.md)

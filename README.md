@@ -10,6 +10,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Run the shared nodal comparison.** Follow a reading from its original CSV row through a revised edge weight to four predictions on the same stations. The controller records the Python AST, source dependencies, worker runs and artifact reads, then recomputes each model's error from the raw depth labels. [Run and verify](docs/NODAL_HARNESS.md) · [Typed observations and neighbor axes](docs/NODAL_HARNESS.md#typed-observations-and-neighbor-axes) · [Relational methods](docs/RELATIONAL_METHODS.md) · [Jovin source and native checks](docs/JOVIN_ENROLLMENT.md)
 
+**Reference-to-source graph.** The six supplied mathematical and ML PDFs are cross-referenced to process decisions, Python definitions and checks. The verifier binds source and AST identities and keeps the proposed persistence tracker and nested selector explicit. [Process and control graph](docs/METHOD_REFERENCE_GRAPH.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |
