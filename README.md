@@ -20,6 +20,8 @@ An open-core research harness for [ROGII Wellbore Geology Prediction](https://ww
 
 **Attention on measured relationships.** Twelve source-addressed attention decoders passed checkpoint and native-station replay at eight passes and after fixed continuation to 64. The continued two-way model beat all learned controls but missed the incumbent pooled score; the current 9.988991-ft development route remains retained. [Architecture, stages and controls](docs/ATTENTION_MEMBER_DECODER.md)
 
+**Held neural merit.** Ninety fresh fits in separate FIT/CAL/TEST roles tested whether calibration earns a neural deployment weight. The selector mostly retained OFF and failed its gate against fixed half strength. [Role boundaries, adaptive amplitude and native audit](docs/NEURAL_MERIT_CALIBRATION.md)
+
 | Abstraction mode | Role |
 |------------------|------|
 | **M0 RESTRICT** | TVT RMSE · GroupKFold-by-well · no production OPEN |

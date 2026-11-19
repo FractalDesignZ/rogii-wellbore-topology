@@ -47,7 +47,7 @@ Deployment adds `Φu` to each original member on every native station, then uses
 
 ## Replay, compute and scope
 
-All twelve saved model and optimizer states passed independent reload checks. Independently rebuilt controls and collation reproduced all 7,428 member/arm/query endpoint pairs with maximum discrepancy **0 ft**. Every optimizer tensor reached step 416. All six materialized inputs and three scalers were independently reconstructed; finite counts matched, and population moments agreed within 1.37×10⁻¹². The first field preflight recovered all 1,857 native member hashes and every incumbent station and stage byte-for-byte.
+All twelve saved model and optimizer states passed independent reload checks. Independently rebuilt controls and collation reproduced all 7,428 member/arm/query endpoint pairs with maximum discrepancy **0 ft**. Every optimizer parameter state recorded step 416. All six materialized inputs and three scalers were independently reconstructed; finite counts matched, and population moments agreed within 1.37×10⁻¹². The first field preflight recovered all 1,857 native member hashes and every incumbent station and stage byte-for-byte.
 
 Measured fit/evaluation portions totalled 100.33 seconds on the RTX 5070; summed bounded worker wall times including preparation and replay were 226.54 seconds. Peak PyTorch allocation was 252.35 MiB, distinct from total process or device memory. These times cover the fixed study, rather than a convergence guarantee.
 
